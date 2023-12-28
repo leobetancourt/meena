@@ -70,6 +70,8 @@ class PLM_Solver():
         self.dx = dx
         self.res = res
         self.theta = 1.5
+        
+        self.hll = HLL_Solver(gamma, dx, res)
 
     def minmod(self, x, y, z):
         return 0.25 * abs(np.sign(x) + np.sign(y)) * (np.sign(x) + np.sign(z)) * min(abs(x), abs(y), abs(z))
@@ -117,18 +119,18 @@ class PLM_Solver():
             U_R_L = self.C_to_U(np.array([self.c_L(C, i, j) for j in range(3)]))
             U_R_R = self.C_to_U(np.array([self.c_R(C, i, j) for j in range(3)]))
             
-            F_L = self.F_HLL(F[i-1 if i > 0 else 0], F[i], 
+            F_L = self.hll.F_HLL(F[i-1 if i > 0 else 0], F[i], 
                         U_L_L, U_L_R)
-            F_R = self.F_HLL(F[i], F[i + 1 if i < len(U) - 1 else len(U) - 1], 
+            F_R = self.hll.F_HLL(F[i], F[i + 1 if i < len(U) - 1 else len(U) - 1], 
                         U_R_L, U_R_R)
             
             # compute semi discrete L
-            L_[i] = self.L(F_L, F_R)
+            L_[i] = self.hll.L(F_L, F_R)
 
         return L_
 
 class Simulation_1D():
-    def __init__(self, gamma=1.4, resolution=100, dt=0.001, method="HLL"):
+    def __init__(self, gamma=1.4, resolution=100, dt=0.001, method="HLL", order="first"):
         self.gamma = gamma
         self.res = resolution
         self.x = np.linspace(0, 1, num=resolution, endpoint=False)
@@ -147,6 +149,11 @@ class Simulation_1D():
         else:    
             print("Invalid method provided: Must be HLL or PLM.")
             return
+        
+        if order != "first" or order != "high":
+            print("Invalid order provided: Must be 'first' or 'high'")
+        
+        self.order = order
 
     # call in a loop to print dynamic progress bar
     def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
@@ -157,6 +164,21 @@ class Simulation_1D():
         # print new line on complete
         if iteration == total: 
             print()
+
+    def plot(self, xlabel="x", var="density"):
+        rho, v, p, E = self.get_vars()
+
+        if var == "density":
+            plt.plot(self.x, rho, label=r"$\rho$")
+        elif var == "pressure":
+            plt.plot(self.x, p, label=r"$P$")
+        elif var == "velocity":
+            plt.plot(self.x, v, label=r"$v$")
+        else:
+            print("Invalid variable")
+            return None
+        plt.xlabel(r"$" + xlabel + r"$")
+        plt.legend()
 
     # returns rho, v, p, E
     def get_vars(self):
@@ -170,7 +192,7 @@ class Simulation_1D():
 
     def first_order_step(self):
         L = self.solver.solve(self.U, self.F)
-        return np.add(self.U, L * self.dt)
+        self.U = np.add(self.U, L * self.dt)
    
     def high_order_step(self):
         """
@@ -183,4 +205,50 @@ class Simulation_1D():
         U_2 = np.add(np.add((3/4) * self.U, (1/4) * U_1), (1/4) * self.dt * L_1)
 
         L_2 = self.solver.solve(U_2, self.F)
-        return np.add(np.add((1/3) * self.U, (2/3) * U_2), (2/3) * self.dt * L_2) 
+        self.U = np.add(np.add((1/3) * self.U, (2/3) * U_2), (2/3) * self.dt * L_2)
+ 
+    def run_simulation(self, T, xlabel="x", var="density", filename=None):
+        t = 0
+        self.plot(self.U, xlabel=xlabel, var=var)
+        plt.show()
+        fig = plt.figure()
+        
+        dur = 8 # duration of video
+        if filename:
+            # output video writer
+            clear_frames = True
+            fps = 24
+            FFMpegWriter = animation.writers['ffmpeg']
+            metadata = dict(title=filename, comment='')
+            writer = FFMpegWriter(fps=fps, metadata=metadata)
+            PATH = f"./{filename}"
+            if not os.path.exists(PATH):
+                os.makedirs(PATH)
+            cm = writer.saving(fig, f"./{filename}/{var}.mp4", 100)
+
+            iters = T / self.dt
+            n = math.floor(iters / (dur * fps))
+        else:
+            cm = nullcontext()
+
+        with cm:
+            self.printProgressBar(0, T / self.dt, prefix = "Progress:", suffix = "Complete", length=50)
+            while t < T:
+                self.compute_flux()
+                if self.order == "first":
+                    self.first_order_step()
+                elif self.order == "high":
+                    self.high_order_step()
+
+                if filename and (t // self.dt) % n == 0:
+                    if clear_frames:
+                        fig.clear()
+                    self.plot(xlabel=xlabel, var=var)
+                    writer.grab_frame()
+
+                t += self.dt
+                self.printProgressBar(t / self.dt, T / self.dt, prefix = "Progress:", suffix = "Complete", length=50)
+
+        fig.clear()
+        self.plot(xlabel=xlabel, var=var)
+        plt.show()

@@ -7,12 +7,44 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 plt.rcParams['animation.ffmpeg_path'] = '/usr/local/bin/ffmpeg'
 
+class HLL_solver():
+	def __init__(self, gamma):
+		pass
+
 class Simulation_1D():
-	def __init__(self, gamma=1.4, num_cells=100, dt=0.001):
+	def __init__(self, gamma=1.4, num_cells=100, dt=0.001, method="HLL"):
 		self.gamma = gamma
+		if method == "HLL" or method == "PLM":
+			self.method = method
+		else:
+			print("Invalid method provided: must be HLL or PLM.")
+			return
+		
 		self.num_cells = num_cells
-		self.dt = dt
+		self.x = np.linspace(0, 1, num=num_cells, endpoint=False)
 		self.dx = 1 / num_cells
+		self.dt = dt
+
+		# conservative variable
+		self.U = np.array(np.zeros(3) for _ in self.x)
+		# flux
+		self.F = np.array(np.zeros(3) for _ in self.x)
+
+	# call in a loop to print dynamic progress bar
+	def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
+		percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+		filledLength = int(length * iteration // total)
+		bar = fill * filledLength + '-' * (length - filledLength)
+		print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
+		# print new line on complete
+		if iteration == total: 
+			print()
+
+	# returns rho, v, p, E
+	def get_vars(self):
+		rho, v, E = self.U[:, 0], self.U[:, 1] / self.U[:, 0], self.U[:, 2]
+		p = self.P(rho, v, E)	
+		return rho, v, p, E	
 
 	# variable conversion methods
 	# energy
@@ -22,7 +54,7 @@ class Simulation_1D():
 	# pressure
 	def P(self, rho, v, E):
 		return (self.gamma - 1) * (E - (0.5 * rho * (v ** 2)))
-	
+
 	# speed of sound
 	def c_s(self, P, rho):
 		return np.sqrt(self.gamma * P / rho)
@@ -51,18 +83,25 @@ class Simulation_1D():
 	def L(self, F_L, F_R):
 		return - (F_R - F_L) / self.dx
 
-	def HLL(self, U, F):
-		L_ = np.array([np.zeros(3) for _ in range(len(U))])
+	def HLL(self):
+		L_ = np.array([np.zeros(3) for _ in range(len(self.U))])
 		
 		# compute HLL flux at each interface
-		for i in range(len(U)):
-			F_L = self.F_HLL(F[i-1 if i > 0 else 0], F[i], 
-						U[i - 1 if i > 0 else 0], U[i])
-			F_R = self.F_HLL(F[i], F[i + 1 if i < len(U) - 1 else len(U) - 1], 
-						U[i], U[i + 1 if i < len(U) - 1 else len(U) - 1] )
+		for i in range(len(self.U)):
+			F_L = self.F_HLL(self.F[i-1 if i > 0 else 0], self.F[i], 
+						self.U[i - 1 if i > 0 else 0], self.U[i])
+			F_R = self.F_HLL(self.F[i], self.F[i + 1 if i < self.res - 1 else self.res - 1], 
+						self.U[i], self.U[i + 1 if i < self.res else self.res - 1] )
 			
 			# compute semi discrete L
 			L_[i] = self.L(F_L, F_R)
 
 		return L_
-		
+
+	def compute_flux(self):
+		rho, v, p, E = self.get_vars()
+		self.F = np.array([rho * v, rho * (v ** 2) + p, (E + p) * v]).T
+
+	def first_order_step(self):
+		L = self.HLL() if self.method == "HLL" else self.PLM()
+		return np.add(self.U, L * self.dt)

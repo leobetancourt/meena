@@ -19,7 +19,7 @@ def P(gamma, rho, v, E):
 def c_s(gamma, P, rho):
     return np.sqrt(gamma * P / rho)
 
-class HLL_Solver():
+class HLL_Solver:
     def __init__(self, gamma, dx, res):
         self.gamma = gamma
         self.dx = dx
@@ -57,14 +57,14 @@ class HLL_Solver():
             F_L = self.F_HLL(F[i-1 if i > 0 else 0], F[i], 
                         U[i - 1 if i > 0 else 0], U[i])
             F_R = self.F_HLL(F[i], F[i + 1 if i < self.res - 1 else self.res - 1], 
-                        U[i], U[i + 1 if i < self.res else self.res - 1] )
+                        U[i], U[i + 1 if i < self.res - 1 else self.res - 1] )
             
             # compute semi discrete L
             L_[i] = self.L(F_L, F_R)
 
         return L_
 
-class PLM_Solver():
+class PLM_Solver:
     def __init__(self, gamma, dx, res):
         self.gamma = gamma
         self.dx = dx
@@ -129,7 +129,7 @@ class PLM_Solver():
 
         return L_
 
-class Simulation_1D():
+class Simulation_1D:
     def __init__(self, gamma=1.4, resolution=100, dt=0.001, method="HLL", order="first"):
         self.gamma = gamma
         self.res = resolution
@@ -138,9 +138,9 @@ class Simulation_1D():
         self.dt = dt
 
         # conservative variable
-        self.U = np.array(np.zeros(3) for _ in self.x)
+        self.U = np.array([np.ones(3) for _ in self.x])
         # flux
-        self.F = np.array(np.zeros(3) for _ in self.x)
+        self.F = np.array([np.ones(3) for _ in self.x])
        
         if method == "HLL":
             self.solver = HLL_Solver(gamma, self.dx, self.res)
@@ -150,13 +150,13 @@ class Simulation_1D():
             print("Invalid method provided: Must be HLL or PLM.")
             return
         
-        if order != "first" or order != "high":
+        if order != "first" and order != "high":
             print("Invalid order provided: Must be 'first' or 'high'")
         
         self.order = order
 
     # call in a loop to print dynamic progress bar
-    def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
+    def print_progress_bar(self, iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
         percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
         filledLength = int(length * iteration // total)
         bar = fill * filledLength + '-' * (length - filledLength)
@@ -206,11 +206,14 @@ class Simulation_1D():
 
         L_2 = self.solver.solve(U_2, self.F)
         self.U = np.add(np.add((1/3) * self.U, (2/3) * U_2), (2/3) * self.dt * L_2)
- 
+    
+    def initialize(self, U):
+        self.U = U
+    
     def run_simulation(self, T, xlabel="x", var="density", filename=None):
         t = 0
-        self.plot(self.U, xlabel=xlabel, var=var)
-        plt.show()
+        self.plot(xlabel=xlabel, var=var)
+        # plt.show()
         fig = plt.figure()
         
         dur = 8 # duration of video
@@ -232,7 +235,7 @@ class Simulation_1D():
             cm = nullcontext()
 
         with cm:
-            self.printProgressBar(0, T / self.dt, prefix = "Progress:", suffix = "Complete", length=50)
+            self.print_progress_bar(0, T / self.dt, prefix = "Progress:", suffix = "Complete", length=50)
             while t < T:
                 self.compute_flux()
                 if self.order == "first":
@@ -247,8 +250,15 @@ class Simulation_1D():
                     writer.grab_frame()
 
                 t += self.dt
-                self.printProgressBar(t / self.dt, T / self.dt, prefix = "Progress:", suffix = "Complete", length=50)
+                self.print_progress_bar(t / self.dt, T / self.dt, prefix = "Progress:", suffix = "Complete", length=50)
 
         fig.clear()
         self.plot(xlabel=xlabel, var=var)
         plt.show()
+        
+    def sod_shock_tube(self):
+        rho_L, p_L, v_L = 1, 1, 0
+        rho_R, p_R, v_R = 0.125, 0.1, 0
+        U_L = np.array([rho_L, rho_L * v_L, E(self.gamma, rho_L, p_L, v_L)])
+        U_R = np.array([rho_R, rho_R * v_R, E(self.gamma, rho_R, p_R, v_R)])
+        self.U = np.array([U_L if x < 0.5 else U_R for x in self.x])

@@ -24,6 +24,7 @@ class HLL_Solver:
         self.gamma = gamma
         self.dx = dx
         self.res = res
+        self.dt = dx # timestep according to CFL condition
 
     # returns (lambda_plus, lambda_minus)
     def lambdas(self, U):
@@ -44,14 +45,19 @@ class HLL_Solver:
     # HLL flux
     def F_HLL(self, F_L, F_R, U_L, U_R):
         a_p, a_m = self.alphas(U_L, U_R)
+        # update max dt according to CFL condition
+        cond = self.dx / max(a_p, a_m) 
+        if self.dt > cond:
+            self.dt = cond
         return (a_p * F_L + a_m * F_R - (a_p * a_m * (U_R - U_L))) / (a_p + a_m)
 
     def L(self, F_L, F_R):
         return - (F_R - F_L) / self.dx
 
     def solve(self, U, F):
+        self.dt = self.dx
         L_ = np.array([np.zeros(3) for _ in range(len(U))])
-        
+
         # compute HLL flux at each interface
         for i in range(len(U)):
             F_L = self.F_HLL(F[i-1 if i > 0 else 0], F[i], 
@@ -70,6 +76,7 @@ class PLM_Solver:
         self.dx = dx
         self.res = res
         self.theta = 1.5
+        self.dt = self.dx
         
         self.hll = HLL_Solver(gamma, dx, res)
 
@@ -103,7 +110,8 @@ class PLM_Solver:
     # piecewise linear method
     def solve(self, U, F):
         L_ = np.array([np.zeros(3) for _ in range(len(U))])
-
+        self.hll.dt = self.dx
+        
         # pressure, density, velocity
         C = np.array([np.zeros(3) for _ in range(len(U))])
         for i in range(len(U)):
@@ -124,18 +132,20 @@ class PLM_Solver:
             F_R = self.hll.F_HLL(F[i], F[i + 1 if i < len(U) - 1 else len(U) - 1], 
                         U_R_L, U_R_R)
             
+            self.dt = self.hll.dt
+            
             # compute semi discrete L
             L_[i] = self.hll.L(F_L, F_R)
 
         return L_
 
-class Simulation_1D:
-    def __init__(self, gamma=1.4, resolution=100, dt=0.001, method="HLL", order="first"):
+class Sim_1D:
+    def __init__(self, gamma=1.4, resolution=100, method="HLL", order="first"):
         self.gamma = gamma
         self.res = resolution
         self.x = np.linspace(0, 1, num=resolution, endpoint=False)
         self.dx = 1 / resolution
-        self.dt = dt
+        self.dt = self.dx
 
         # conservative variable
         self.U = np.array([np.ones(3) for _ in self.x])
@@ -189,21 +199,23 @@ class Simulation_1D:
     def compute_flux(self):
         rho, v, p, E = self.get_vars()
         self.F = np.array([rho * v, rho * (v ** 2) + p, (E + p) * v]).T
-
+    
     def first_order_step(self):
         L = self.solver.solve(self.U, self.F)
-        self.U = np.add(self.U, L * self.dt)
+        self.dt = self.solver.dt
+        self.U = np.add(self.U, L * self.solver.dt)
    
     def high_order_step(self):
         """
         Third-order Runge-Kutta method
         """
         L_ = self.solver.solve(self.U, self.F)
+        self.dt = self.solver.dt / 2 # needs fixing
         U_1 = np.add(self.U, L_ * self.dt)
         
         L_1 = self.solver.solve(U_1, self.F)
         U_2 = np.add(np.add((3/4) * self.U, (1/4) * U_1), (1/4) * self.dt * L_1)
-
+        
         L_2 = self.solver.solve(U_2, self.F)
         self.U = np.add(np.add((1/3) * self.U, (2/3) * U_2), (2/3) * self.dt * L_2)
     
@@ -227,7 +239,7 @@ class Simulation_1D:
             PATH = f"./{filename}"
             if not os.path.exists(PATH):
                 os.makedirs(PATH)
-            cm = writer.saving(fig, f"./{filename}/{var}.mp4", 100)
+            cm = writer.saving(fig, f"./videos/{filename}/{var}.mp4", 100)
 
             iters = T / self.dt
             n = math.floor(iters / (dur * fps))
@@ -235,7 +247,6 @@ class Simulation_1D:
             cm = nullcontext()
 
         with cm:
-            self.print_progress_bar(0, T / self.dt, prefix = "Progress:", suffix = "Complete", length=50)
             while t < T:
                 self.compute_flux()
                 if self.order == "first":
@@ -250,15 +261,23 @@ class Simulation_1D:
                     writer.grab_frame()
 
                 t += self.dt
-                self.print_progress_bar(t / self.dt, T / self.dt, prefix = "Progress:", suffix = "Complete", length=50)
+                self.print_progress_bar(t, T, prefix = "Progress:", suffix = "Complete", length=50)
 
         fig.clear()
         self.plot(xlabel=xlabel, var=var)
         plt.show()
-        
-    def sod_shock_tube(self):
-        rho_L, p_L, v_L = 1, 1, 0
-        rho_R, p_R, v_R = 0.125, 0.1, 0
+
+    def initialize_U(self, U):
+        self.U = U
+    
+    # initialize U with primitive variables
+    def initialize_prim(self, prim_L, prim_R):
+        rho_L, p_L, v_L = prim_L 
+        rho_R, p_R, v_R = prim_R
+         
         U_L = np.array([rho_L, rho_L * v_L, E(self.gamma, rho_L, p_L, v_L)])
         U_R = np.array([rho_R, rho_R * v_R, E(self.gamma, rho_R, p_R, v_R)])
         self.U = np.array([U_L if x < 0.5 else U_R for x in self.x])
+
+    def sod_shock_tube(self):
+        self.initialize_prim((1, 1, 0), (0.125, 0.1, 0))

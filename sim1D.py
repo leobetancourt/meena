@@ -131,8 +131,9 @@ class PLM_Solver:
                         U_L_L, U_L_R)
             F_R = self.hll.F_HLL(F[i], F[i + 1 if i < len(U) - 1 else len(U) - 1], 
                         U_R_L, U_R_R)
-            
-            self.dt = self.hll.dt
+           
+            if self.hll.dt < self.dt:
+                self.dt = self.hll.dt 
             
             # compute semi discrete L
             L_[i] = self.hll.L(F_L, F_R)
@@ -202,15 +203,15 @@ class Sim_1D:
     
     def first_order_step(self):
         L = self.solver.solve(self.U, self.F)
-        self.dt = self.solver.dt
-        self.U = np.add(self.U, L * self.solver.dt)
+        self.dt = self.solver.dt / 2 # needs fixing (CFL at boundary)
+        self.U = np.add(self.U, L * self.dt)
    
     def high_order_step(self):
         """
         Third-order Runge-Kutta method
         """
         L_ = self.solver.solve(self.U, self.F)
-        self.dt = self.solver.dt / 2 # needs fixing
+        self.dt = self.solver.dt / 2
         U_1 = np.add(self.U, L_ * self.dt)
         
         L_1 = self.solver.solve(U_1, self.F)
@@ -260,7 +261,7 @@ class Sim_1D:
                     self.plot(xlabel=xlabel, var=var)
                     writer.grab_frame()
 
-                t += self.dt
+                t = t + self.dt if (t + self.dt <= T) else T 
                 self.print_progress_bar(t, T, prefix = "Progress:", suffix = "Complete", length=50)
 
         fig.clear()

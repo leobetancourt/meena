@@ -17,7 +17,7 @@ def P(gamma, rho, v, E):
 
 # speed of sound
 def c_s(gamma, P, rho):
-    return np.sqrt(gamma * P / rho)
+    return np.sqrt(gamma * P / rho) if rho else 0
 
 class HLL_Solver:
     def __init__(self, gamma, x, dx, res, polar=False):
@@ -30,7 +30,7 @@ class HLL_Solver:
 
     # returns (lambda_plus, lambda_minus)
     def lambdas(self, U):
-        v = U[1] / U[0]
+        v = U[1] / U[0] if U[0] else 0
         rho, E = U[0], U[2]
         cs = c_s(self.gamma, P(self.gamma, rho, v, E), rho)
         return (v + cs, v - cs)
@@ -63,8 +63,8 @@ class HLL_Solver:
 
         # compute HLL flux at each interface
         for i in range(len(U)):
-            F_L = self.F_HLL(F[i-1 if i > 0 else 0], F[i], 
-                        U[i - 1 if i > 0 else 0], U[i])
+            F_L = self.F_HLL((F[i - 1 if i > 0 else 0]), F[i], 
+                        (U[i - 1 if i > 0 else 0]), U[i])
             F_R = self.F_HLL(F[i], F[i + 1 if i < self.res - 1 else self.res - 1], 
                         U[i], U[i + 1 if i < self.res - 1 else self.res - 1] )
             
@@ -158,9 +158,9 @@ class Sim_1D:
         self.dt = self.dx
 
         # conservative variable
-        self.U = np.array([np.ones(3) for _ in self.x])
+        self.U = np.array([np.zeros(3) for _ in self.x])
         # flux
-        self.F = np.array([np.ones(3) for _ in self.x])
+        self.F = np.array([np.zeros(3) for _ in self.x])
        
         if method == "HLL":
             self.solver = HLL_Solver(gamma, self.x, self.dx, self.res, polar=polar)
@@ -212,7 +212,7 @@ class Sim_1D:
     
     def first_order_step(self):
         L = self.solver.solve(self.U, self.F)
-        self.dt = self.solver.dt / 2 # needs fixing (CFL at boundary)
+        self.dt = self.solver.dt / 1.5 # needs fixing (CFL at boundary)
         self.U = np.add(self.U, L * self.dt)
    
     def high_order_step(self):

@@ -17,18 +17,20 @@ def P(gamma, rho, v, E):
 
 # speed of sound
 def c_s(gamma, P, rho):
-    return np.sqrt(gamma * P / rho)
+    return np.sqrt(gamma * P / rho) if rho else 0
 
 class HLL_Solver:
-    def __init__(self, gamma, dx, res):
+    def __init__(self, gamma, x, dx, res, polar=False):
         self.gamma = gamma
+        self.x = x
         self.dx = dx
         self.res = res
         self.dt = dx # timestep according to CFL condition
+        self.polar = polar
 
     # returns (lambda_plus, lambda_minus)
     def lambdas(self, U):
-        v = U[1] / U[0]
+        v = U[1] / U[0] if U[0] else 0
         rho, E = U[0], U[2]
         cs = c_s(self.gamma, P(self.gamma, rho, v, E), rho)
         return (v + cs, v - cs)
@@ -46,7 +48,8 @@ class HLL_Solver:
     def F_HLL(self, F_L, F_R, U_L, U_R):
         a_p, a_m = self.alphas(U_L, U_R)
         # update max dt according to CFL condition
-        cond = self.dx / max(a_p, a_m) 
+        max_alpha = max(a_p, a_m)
+        cond = self.dx / max_alpha if max_alpha else self.dx
         if self.dt > cond:
             self.dt = cond
         return (a_p * F_L + a_m * F_R - (a_p * a_m * (U_R - U_L))) / (a_p + a_m)
@@ -60,25 +63,29 @@ class HLL_Solver:
 
         # compute HLL flux at each interface
         for i in range(len(U)):
-            F_L = self.F_HLL(F[i-1 if i > 0 else 0], F[i], 
-                        U[i - 1 if i > 0 else 0], U[i])
+            F_L = self.F_HLL((F[i - 1 if i > 0 else 0]), F[i], 
+                        (U[i - 1 if i > 0 else 0]), U[i])
             F_R = self.F_HLL(F[i], F[i + 1 if i < self.res - 1 else self.res - 1], 
                         U[i], U[i + 1 if i < self.res - 1 else self.res - 1] )
             
             # compute semi discrete L
             L_[i] = self.L(F_L, F_R)
+            if self.polar:
+                L_[i] -= (F[i] / self.x[i])
 
         return L_
 
 class PLM_Solver:
-    def __init__(self, gamma, dx, res):
+    def __init__(self, gamma, x, dx, res, polar=False):
         self.gamma = gamma
+        self.x = x
         self.dx = dx
         self.res = res
         self.theta = 1.5
         self.dt = self.dx
+        self.polar = polar
         
-        self.hll = HLL_Solver(gamma, dx, res)
+        self.hll = HLL_Solver(gamma, dx, res, polar=polar)
 
     def minmod(self, x, y, z):
         return 0.25 * abs(np.sign(x) + np.sign(y)) * (np.sign(x) + np.sign(z)) * min(abs(x), abs(y), abs(z))
@@ -137,26 +144,28 @@ class PLM_Solver:
             
             # compute semi discrete L
             L_[i] = self.hll.L(F_L, F_R)
+            if self.polar:
+                L_[i] -= (F[i] / self.x[i])
 
         return L_
 
 class Sim_1D:
-    def __init__(self, gamma=1.4, resolution=100, method="HLL", order="first"):
+    def __init__(self, gamma=1.4, resolution=100, polar=False, method="HLL", order="first"):
         self.gamma = gamma
         self.res = resolution
-        self.x = np.linspace(0, 1, num=resolution, endpoint=False)
         self.dx = 1 / resolution
+        self.x = np.linspace(0, 1, num=resolution, endpoint=False) + (self.dx / 2)
         self.dt = self.dx
 
         # conservative variable
-        self.U = np.array([np.ones(3) for _ in self.x])
+        self.U = np.array([np.zeros(3) for _ in self.x])
         # flux
-        self.F = np.array([np.ones(3) for _ in self.x])
+        self.F = np.array([np.zeros(3) for _ in self.x])
        
         if method == "HLL":
-            self.solver = HLL_Solver(gamma, self.dx, self.res)
+            self.solver = HLL_Solver(gamma, self.x, self.dx, self.res, polar=polar)
         elif method == "PLM":
-            self.solver = PLM_Solver(gamma, self.dx, self.res) 
+            self.solver = PLM_Solver(gamma, self.x, self.dx, self.res, polar=polar) 
         else:    
             print("Invalid method provided: Must be HLL or PLM.")
             return
@@ -203,7 +212,7 @@ class Sim_1D:
     
     def first_order_step(self):
         L = self.solver.solve(self.U, self.F)
-        self.dt = self.solver.dt / 2 # needs fixing (CFL at boundary)
+        self.dt = self.solver.dt / 1.5 # needs fixing (CFL at boundary)
         self.U = np.add(self.U, L * self.dt)
    
     def high_order_step(self):
@@ -226,7 +235,6 @@ class Sim_1D:
     def run_simulation(self, T, xlabel="x", var="density", filename=None):
         t = 0
         self.plot(xlabel=xlabel, var=var)
-        # plt.show()
         fig = plt.figure()
         
         dur = 8 # duration of video
@@ -237,7 +245,7 @@ class Sim_1D:
             FFMpegWriter = animation.writers['ffmpeg']
             metadata = dict(title=filename, comment='')
             writer = FFMpegWriter(fps=fps, metadata=metadata)
-            PATH = f"./{filename}"
+            PATH = f"./videos/{filename}"
             if not os.path.exists(PATH):
                 os.makedirs(PATH)
             cm = writer.saving(fig, f"./videos/{filename}/{var}.mp4", 100)
@@ -272,13 +280,17 @@ class Sim_1D:
         self.U = U
     
     # initialize U with primitive variables
-    def initialize_prim(self, prim_L, prim_R):
+    def initialize_prim(self, prim_L, prim_R, boundary=0.5):
         rho_L, p_L, v_L = prim_L 
         rho_R, p_R, v_R = prim_R
          
         U_L = np.array([rho_L, rho_L * v_L, E(self.gamma, rho_L, p_L, v_L)])
         U_R = np.array([rho_R, rho_R * v_R, E(self.gamma, rho_R, p_R, v_R)])
-        self.U = np.array([U_L if x < 0.5 else U_R for x in self.x])
+        self.U = np.array([U_L if x < boundary else U_R for x in self.x])
 
     def sod_shock_tube(self):
         self.initialize_prim((1, 1, 0), (0.125, 0.1, 0))
+    
+    def sedov_blast(self):
+        E_blast = 10
+        self.initialize_prim((1, P(self.gamma, 1, 0, E_blast), 0), (1, 1e-4, 0), boundary=0.1)

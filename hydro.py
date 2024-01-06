@@ -3,6 +3,6 @@ import matplotlib.pyplot as plt
 from sim1D import Sim_1D
 
 if __name__ == "__main__":
-    sim = Sim_1D(gamma=1.4, resolution=200, method="PLM", order="high")
-    sim.sod_shock_tube()
-    sim.run_simulation(T=0.2, xlabel="x", var="density")
+    sim = Sim_1D(gamma=1.4, resolution=200, polar=True, method="HLL", order="first")
+    sim.sedov_blast()
+    sim.run_simulation(T=0.179, xlabel="r", var="density")

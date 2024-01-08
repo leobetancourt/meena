@@ -120,7 +120,7 @@ class Sim_2D:
             [np.array([[_x, _y] for _y in self.y]) for _x in self.x])
         self.dx, self.dy = (self.xmax - self.xmin) / \
             self.res_x, (self.ymax - self.ymin) / self.res_y
-
+            
         self.dt = self.dx
         self.solver = HLL_Solver(
             gamma, resolution, self.x, self.y, self.dx, self.dy)
@@ -131,6 +131,9 @@ class Sim_2D:
         self.F = np.zeros((self.res_x, self.res_y, 4))
         # flux in y: G = (rho * v, rho * u * v, rho * v^2 + P, (E + P) * v)
         self.G = np.zeros((self.res_x, self.res_y, 4))
+        
+        # source term (function of U)
+        self.S = None
 
         if order != "first" and order != "high":
             print("Invalid order provided: Must be 'first' or 'high'")
@@ -188,7 +191,7 @@ class Sim_2D:
         ]).transpose((1, 2, 0))
 
     def first_order_step(self):
-        L = self.solver.solve(self.U, self.F, self.G)
+        L = self.solver.solve(self.U, self.F, self.G, self.S)
         self.dt = self.solver.dt / 2  # needs fixing (CFL at boundary)
         self.U = np.add(self.U, L * self.dt)
 
@@ -210,6 +213,9 @@ class Sim_2D:
 
     def initialize(self, U):
         self.U = U
+        
+    def add_source(self, source):
+        self.S = source
 
     def run_simulation(self, T, var="density", filename=None):
         t = 0
@@ -260,8 +266,42 @@ class Sim_2D:
         r, _ = cartesian_to_polar(self.grid[:, :, 0], self.grid[:, :, 1])
         self.U[r < 0.1] = np.array([1, 0, 0, 10])
         self.U[r >= 0.1] = np.array([1, 0, 0, E(self.gamma, 1, 1e-4, 0, 0)])
-        
+
     def implosion(self):
         r, _ = cartesian_to_polar(self.grid[:, :, 0], self.grid[:, :, 1])
         self.U[r < 0.2] = np.array([0.125, 0, 0, E(0.125, 0.14, 0, 0)])
         self.U[r >= 0.2] = np.array([1, 0, 0, E(1, 1, 0, 0)])
+
+    # case 3 in Liska Wendroff
+    def quadrants(self):
+        x, y = self.grid[:, :, 0], self.grid[:, :, 1]
+        rho_1, u_1, v_1, p_1 = 0.5323, 1.206, 0, 0.3
+        rho_2, u_2, v_2, p_2 = 1.5, 0, 0, 1.5
+        rho_3, u_3, v_3, p_3 = 0.138, 1.206, 1.206, 0.029
+        rho_4, u_4, v_4, p_4 = 0.5323, 0, 1.206, 0.3
+        self.U[(x < 0) & (y >= 0)] = np.array(
+            [rho_1, rho_1 * u_1, rho_1 * v_1, E(rho_1, p_1, u_1, v_1)])
+        self.U[(x >= 0) & (y >= 0)] = np.array(
+            [rho_2, rho_2 * u_2, rho_2 * v_2, E(rho_2, p_2, u_2, v_2)])
+        self.U[(x < 0) & (y < 0)] = np.array(
+            [rho_3, rho_3 * u_3, rho_3 * v_3, E(rho_3, p_3, u_3, v_3)])
+        self.U[(x >= 0) & (y < 0)] = np.array(
+            [rho_4, rho_4 * u_4, rho_4 * v_4, E(rho_4, p_4, u_4, v_4)])
+
+    def rayleigh_taylor(self):
+        self.U = np.zeros((self.res_x, self.res_y, 4))
+        g = -1
+        def y_pert(x):
+            return (0.5 - 0.02 * np.cos(4 * np.pi * x))
+        
+        for i in range(len(self.grid)):
+            for j in range(len(self.grid[i])):
+                x = self.grid[i][j][0]
+                y = self.grid[i][j][1]
+
+                if y >= y_pert(x):
+                    p = 2.5 + g * 2 * (y - 0.5)
+                    self.U[i][j] = np.array([2, 0, 0, E(self.gamma, 2, p, 0, 0)])
+                else:
+                    p = 2.5 + g * 1 * (y - 0.5)
+                    self.U[i][j] = np.array([1, 0, 0, E(self.gamma, 1, p, 0, 0)])

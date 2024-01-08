@@ -227,10 +227,7 @@ class Sim_2D:
             PATH = f"./videos/{filename}"
             if not os.path.exists(PATH):
                 os.makedirs(PATH)
-            cm = writer.saving(fig, f"./videos/{filename}/{var}.mp4", 100)
-
-            iters = T / self.dt
-            n = math.floor(iters / (dur * fps))
+            cm = writer.saving(fig, f"{PATH}/{var}.mp4", 100)
         else:
             cm = nullcontext()
 
@@ -242,7 +239,7 @@ class Sim_2D:
                 elif self.order == "high":
                     self.high_order_step()
 
-                if filename and (t // self.dt) % n == 0:
+                if filename:
                     if clear_frames:
                         fig.clear()
                     self.plot(var)
@@ -263,3 +260,8 @@ class Sim_2D:
         r, _ = cartesian_to_polar(self.grid[:, :, 0], self.grid[:, :, 1])
         self.U[r < 0.1] = np.array([1, 0, 0, 10])
         self.U[r >= 0.1] = np.array([1, 0, 0, E(self.gamma, 1, 1e-4, 0, 0)])
+        
+    def implosion(self):
+        r, _ = cartesian_to_polar(self.grid[:, :, 0], self.grid[:, :, 1])
+        self.U[r < 0.2] = np.array([0.125, 0, 0, E(0.125, 0.14, 0, 0)])
+        self.U[r >= 0.2] = np.array([1, 0, 0, E(1, 1, 0, 0)])

@@ -127,8 +127,9 @@ class Sim_2D:
 
         # conservative variable
         self.U = np.zeros((self.res_x, self.res_y, 4))
-        # flux
+        # flux in x: F = (rho * u, rho * u^2 + P, rho * u * v, (E + P) * u)
         self.F = np.zeros((self.res_x, self.res_y, 4))
+        # flux in y: G = (rho * v, rho * u * v, rho * v^2 + P, (E + P) * v)
         self.G = np.zeros((self.res_x, self.res_y, 4))
 
         if order != "first" and order != "high":
@@ -171,14 +172,24 @@ class Sim_2D:
 
     def compute_flux(self):
         rho, u, v, p, E = self.get_vars()
-        self.F = np.array([rho * u, rho * (u ** 2) + p,
-                          rho * u * v, (E + p) * u]).T
-        self.G = np.array([rho * v, rho * u * v, rho *
-                          (v ** 2) + p, (E + p) * v]).T
+
+        self.F = np.array([
+            rho * u,
+            rho * (u ** 2) + p,
+            rho * u * v,
+            (E + p) * u
+        ]).transpose((1, 2, 0))  # transpose to match original shape (self.res_x, self.res_y, 4)
+
+        self.G = np.array([
+            rho * v,
+            rho * u * v,
+            rho * (v ** 2) + p,
+            (E + p) * v
+        ]).transpose((1, 2, 0))
 
     def first_order_step(self):
         L = self.solver.solve(self.U, self.F, self.G)
-        self.dt = self.solver.dt / 2 # needs fixing (CFL at boundary)
+        self.dt = self.solver.dt / 2  # needs fixing (CFL at boundary)
         self.U = np.add(self.U, L * self.dt)
 
     def high_order_step(self):

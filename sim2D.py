@@ -160,6 +160,9 @@ class Sim_2D:
         elif var == "pressure":
             c = plt.imshow(np.transpose(p), cmap="plasma", interpolation='nearest',
                            origin='lower', extent=[self.xmin, self.xmax, self.ymin, self.ymax])
+        elif var == "energy":
+            c = plt.imshow(np.transpose(E), cmap="plasma", interpolation='nearest',
+                            origin='lower', extent=[self.xmin, self.xmax, self.ymin, self.ymax])
 
         plt.colorbar(c)
         plt.xlabel("x")

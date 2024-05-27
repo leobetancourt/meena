@@ -1,7 +1,6 @@
 from contextlib import nullcontext
 import os
 
-import math
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
@@ -14,6 +13,10 @@ def E(gamma, rho, p, u, v):
 
 def P(gamma, rho, u, v, E):
     return (gamma - 1) * (E - (0.5 * rho * (u ** 2 + v ** 2)))
+
+
+def enthalpy(rho, p, E):
+    return (E + p) / rho
 
 
 def cartesian_to_polar(x, y):
@@ -36,7 +39,12 @@ class HLL_Solver:
         self.x, self.y = x, y
         self.dx, self.dy = dx, dy
         self.res_x, self.res_y = res
-        self.dt = dx  # timestep according to CFL condition
+
+    def get_vars(self, U):
+        rho = U[0]
+        u, v, E = U[1] / rho, U[2] / rho, U[3]
+        p = P(self.gamma, rho, u, v, E)
+        return rho, u, v, p, E
 
     # returns (lambda_plus, lambda_minus)
     def lambdas(self, U, x=True):
@@ -56,52 +64,86 @@ class HLL_Solver:
 
         return (alpha_p, alpha_m)
 
-    def update_CFL(self, condition):
-        if self.dt > condition:
-            self.dt = condition
-
     # HLL flux
     def F_HLL(self, F_L, F_R, U_L, U_R):
         a_p, a_m = self.alphas(U_L, U_R, x=True)
-        if max(a_p, a_m) > 0:
-            self.update_CFL(self.dx / max(a_p, a_m))
 
         return (a_p * F_L + a_m * F_R - (a_p * a_m * (U_R - U_L))) / (a_p + a_m)
 
     def G_HLL(self, G_L, G_R, U_L, U_R):
         a_p, a_m = self.alphas(U_L, U_R, x=False)
-        if max(a_p, a_m) > 0:
-            self.update_CFL(self.dy / max(a_p, a_m))
-
+        
         return (a_p * G_L + a_m * G_R - (a_p * a_m * (U_R - U_L))) / (a_p + a_m)
+
+    # HLLC algorithm adapted from Robert Caddy
+    # https://robertcaddy.com/posts/HLLC-Algorithm/
+    def F_HLLC(self, F_L, F_R, U_L, U_R, x=True):
+        rho_L, vx_L, vy_L, p_L, E_L = self.get_vars(U_L)
+        rho_R, vx_R, vy_R, p_R, E_R = self.get_vars(U_R)
+        v_L = vx_L if x else vy_L
+        v_R = vx_R if x else vy_R
+
+        R_rho = np.sqrt(rho_R / rho_L)
+        H_L = enthalpy(rho_L, p_L, E_L)
+        H_R = enthalpy(rho_R, p_R, E_R)
+        H_t = (H_L + (H_R * R_rho)) / (1 + R_rho)  # H tilde
+        v_t = (v_L + (v_R * R_rho)) / (1 + R_rho)
+        c_t = np.sqrt((self.gamma - 1) * (H_t + (0.5 * v_t ** 2)))
+        c_L, c_R = c_s(self.gamma, p_L, rho_L), c_s(self.gamma, p_R, rho_R)
+
+        S_L = min(v_L - c_L, v_t - c_t)
+        S_R = max(v_R + c_R, v_t + c_t)
+        S_M = (rho_R * v_R * (S_R - v_R) - rho_L * v_L * (S_L - v_L) + p_L - p_R) \
+            / (rho_R * (S_R - v_R) - rho_L * (S_L - v_L))
+
+        def F_star(F_k, S_k, U_k):
+            rho_k, vx_k, vy_k, p_k, E_k = self.get_vars(U_k)
+            v_k = vx_k if x else vy_k
+
+            rho_star = rho_k * (S_k - v_k) / (S_k - S_M)
+            p_star = p_L + rho_L * (v_L - S_L) * (v_L - S_M)
+            rhov_star = (rho_k * v_k * (S_k - v_k) +
+                         p_star - p_k) / (S_k - S_M)
+            E_star = (E_k * (S_k - v_k) - p_k *
+                      v_k + p_star * S_M) / (S_k - S_M)
+
+            U_star = np.array([rho_star, rhov_star, rho_star * vy_k, E_star]) if x else np.array(
+                [rho_star, rho_star * vx_k, rhov_star, E_star])
+
+            return F_k + np.multiply(S_k, U_star - U_k)
+
+        if S_L > 0:
+            return F_L
+        elif S_L <= 0 and S_M >= 0:
+            return F_star(F_L, S_L, U_L)
+        if S_M <= 0 and S_R >= 0:
+            return F_star(F_R, S_R, U_R)
+        else:
+            return F_R
 
     def L(self, F_L, F_R, G_L, G_R):
         return - ((F_R - F_L) / self.dx) - ((G_R - G_L) / self.dy)
 
-    def solve(self, U, F, G, S=None):
-        self.dt = self.dx
-        L_ = np.zeros((self.res_x, self.res_y, 4))
-
+    def solve(self, U, F, G):
+        L_ = np.zeros_like(U)
+        
         # compute HLL flux at each interface
-        for i in range(len(U)):
-            for j in range(len(U[i])):
-                F_L = self.F_HLL(F[i - 1 if i > 0 else 0][j], F[i][j],
-                                 U[i - 1 if i > 0 else 0][j], U[i][j])
-                F_R = self.F_HLL(F[i][j], F[i + 1 if i < len(U) - 1 else len(U) - 1][j],
-                                 U[i][j], U[i + 1 if i < len(U) - 1 else len(U) - 1][j])
+        for i in range(1, len(U) - 1):
+            for j in range(1, len(U[i]) - 1):
+                F_L = self.F_HLLC(F[i - 1][j], F[i][j],
+                                  U[i - 1][j], U[i][j])
+                F_R = self.F_HLLC(F[i][j], F[i + 1][j],
+                                  U[i][j], U[i + 1][j])
 
-                G_L = self.G_HLL(G[i][j - 1 if j > 0 else 0], G[i][j],
-                                 U[i][j - 1 if j > 0 else 0], U[i][j])
-                G_R = self.G_HLL(G[i][j], G[i][j + 1 if j < len(U[i]) - 1 else len(U[i]) - 1],
-                                 U[i][j], U[i][j + 1 if j < len(U[i]) - 1 else len(U[i]) - 1])
+                G_L = self.F_HLLC(G[i][j - 1], G[i][j],
+                                  U[i][j - 1], U[i][j], x=False)
+                G_R = self.F_HLLC(G[i][j], G[i][j + 1],
+                                  U[i][j], U[i][j + 1], x=False)
 
                 # compute semi discrete L (including source term)
                 L_[i][j] = self.L(F_L, F_R, G_L, G_R)
 
-        if S is not None:
-            return np.add(L_, S(U))
-        else:
-            return L_
+        return L_
 
 
 class Sim_2D:
@@ -120,10 +162,6 @@ class Sim_2D:
             [np.array([[_x, _y] for _y in self.y]) for _x in self.x])
         self.dx, self.dy = (self.xmax - self.xmin) / \
             self.res_x, (self.ymax - self.ymin) / self.res_y
-            
-        self.dt = self.dx
-        self.solver = HLL_Solver(
-            gamma, resolution, self.x, self.y, self.dx, self.dy)
 
         # conservative variable
         self.U = np.zeros((self.res_x, self.res_y, 4))
@@ -131,9 +169,14 @@ class Sim_2D:
         self.F = np.zeros((self.res_x, self.res_y, 4))
         # flux in y: G = (rho * v, rho * u * v, rho * v^2 + P, (E + P) * v)
         self.G = np.zeros((self.res_x, self.res_y, 4))
-        
+
         # source term (function of U)
         self.S = None
+        
+        self.dt = self.dx
+        self.cfl = 0.4
+        self.solver = HLL_Solver(
+        gamma, resolution, self.x, self.y, self.dx, self.dy)
 
         if order != "first" and order != "high":
             print("Invalid order provided: Must be 'first' or 'high'")
@@ -151,30 +194,50 @@ class Sim_2D:
         if iteration == total:
             print()
 
-    def plot(self, var="density"):
-        rho, u, v, p, E = self.get_vars()
-
-        if var == "density":
-            c = plt.imshow(np.transpose(rho), cmap="plasma", interpolation='nearest',
-                           origin='lower', extent=[self.xmin, self.xmax, self.ymin, self.ymax])
-        elif var == "pressure":
-            c = plt.imshow(np.transpose(p), cmap="plasma", interpolation='nearest',
-                           origin='lower', extent=[self.xmin, self.xmax, self.ymin, self.ymax])
-        elif var == "energy":
-            c = plt.imshow(np.transpose(E), cmap="plasma", interpolation='nearest',
-                            origin='lower', extent=[self.xmin, self.xmax, self.ymin, self.ymax])
-
-        plt.colorbar(c)
-        plt.xlabel("x")
-        plt.ylabel("y")
-        plt.title(var)
-
-    # returns rho, u, v, p, E
     def get_vars(self):
         rho = self.U[:, :, 0]
         u, v, E = self.U[:, :, 1] / rho, self.U[:, :, 2] / rho, self.U[:, :, 3]
         p = P(self.gamma, rho, u, v, E)
         return rho, u, v, p, E
+
+    def plot(self, var="density"):
+        rho, u, v, p, E = self.get_vars()
+
+        plt.cla()
+        if var == "density":
+            # plot density matrix (excluding ghost cells)
+            c = plt.imshow(np.transpose(rho[1:-1, 1:-1]), cmap="plasma", interpolation='nearest',
+                           origin='lower', extent=[self.xmin, self.xmax, self.ymin, self.ymax])
+        elif var == "pressure":
+            c = plt.imshow(np.transpose(p[1:-1, 1:-1]), cmap="plasma", interpolation='nearest',
+                           origin='lower', extent=[self.xmin, self.xmax, self.ymin, self.ymax])
+        elif var == "energy":
+            c = plt.imshow(np.transpose(E[1:-1, 1:-1]), cmap="plasma", interpolation='nearest',
+                           origin='lower', extent=[self.xmin, self.xmax, self.ymin, self.ymax])
+
+        plt.colorbar(c)
+        plt.xlabel("x")
+        plt.ylabel("y")
+        plt.title(var)
+        plt.pause(0.001)
+        
+    def add_ghost_cells(self):
+        # add ghost cells to the top and bottom boundaries
+        self.U = np.hstack((self.U[:, 0:1, :], self.U, self.U[:, -1:, :]))
+        
+        # add ghost cells to the left and right boundaries
+        self.U = np.vstack((self.U[0:1, :, :], self.U, self.U[-1:, :, :]))
+        
+    def set_bcs(self):
+        # reflective on top and bottom
+        self.U[:, 0, :] = self.U[:, 1, :]
+        self.U[:, 0, 2] = -1 * self.U[:, 1, 2]
+        self.U[:, -1, :] = self.U[:, -2, :]
+        self.U[:, -1, 2] = -1 * self.U[:, -2, 2]
+        
+        # periodic on left and right
+        self.U[0, :, :] = self.U[-2, :, :]
+        self.U[-1, :, :] = self.U[1, :, :]
 
     def compute_flux(self):
         rho, u, v, p, E = self.get_vars()
@@ -192,40 +255,44 @@ class Sim_2D:
             rho * (v ** 2) + p,
             (E + p) * v
         ]).transpose((1, 2, 0))
+        
+    def compute_timestep(self):
+        rho, u, v, p, E = self.get_vars()
+        return self.cfl * \
+            np.min(self.dx / (np.sqrt(self.gamma * p / rho) + np.sqrt(u**2 + v**2)))
 
     def first_order_step(self):
-        L = self.solver.solve(self.U, self.F, self.G, self.S)
-        self.dt = self.solver.dt / 2  # needs fixing (CFL at boundary)
+        self.dt = self.compute_timestep()
+        
+        if self.S: 
+            self.U = np.add(self.U, self.S(self.U) * (self.dt / 2))
+        L = self.solver.solve(self.U, self.F, self.G)
         self.U = np.add(self.U, L * self.dt)
+        if self.S:
+            self.U = np.add(self.U, self.S(self.U) * (self.dt / 2))
 
     def high_order_step(self):
         """
         Third-order Runge-Kutta method
         """
+        self.dt = self.compute_timestep()
         L = self.solver.solve(self.U, self.F, self.G)
-        self.dt = self.solver.dt / 2
         U_1 = np.add(self.U, L * self.dt)
 
-        L_1 = self.solver.solve(U_1, self.F)
+        L_1 = self.solver.solve(U_1, self.F, self.G)
         U_2 = np.add(np.add((3/4) * self.U, (1/4) * U_1),
                      (1/4) * self.dt * L_1)
 
-        L_2 = self.solver.solve(U_2, self.F)
+        L_2 = self.solver.solve(U_2, self.F, self.G)
         self.U = np.add(np.add((1/3) * self.U, (2/3) * U_2),
                         (2/3) * self.dt * L_2)
 
-    def initialize(self, U):
-        self.U = U
-        
-    def add_source(self, source):
-        self.S = source
-
     def run_simulation(self, T, var="density", filename=None):
         t = 0
-        self.plot(var)
         fig = plt.figure()
+        
+        self.add_ghost_cells()
 
-        dur = 8  # duration of video
         if filename:
             # output video writer
             clear_frames = True
@@ -242,7 +309,9 @@ class Sim_2D:
 
         with cm:
             while t < T:
+                self.set_bcs()
                 self.compute_flux()
+                
                 if self.order == "first":
                     self.first_order_step()
                 elif self.order == "high":
@@ -256,19 +325,22 @@ class Sim_2D:
 
                 t = t + self.dt if (t + self.dt <= T) else T
                 self.print_progress_bar(
-                    t, T, prefix="Progress:", suffix="Complete", length=50)
+                    t, T, suffix="complete", length=50)
 
         fig.clear()
         self.plot(var)
         plt.show()
 
-    def initialize_U(self, U):
+    def initialize(self, U):
         self.U = U
 
-    def sedov_blast(self):
+    def add_source(self, source):
+        self.S = source
+
+    def sedov_blast(self, radius=0.1):
         r, _ = cartesian_to_polar(self.grid[:, :, 0], self.grid[:, :, 1])
-        self.U[r < 0.1] = np.array([1, 0, 0, 10])
-        self.U[r >= 0.1] = np.array([1, 0, 0, E(self.gamma, 1, 1e-4, 0, 0)])
+        self.U[r < radius] = np.array([1, 0, 0, 10])
+        self.U[r >= radius] = np.array([1, 0, 0, E(self.gamma, 1, 1e-4, 0, 0)])
 
     def implosion(self):
         r, _ = cartesian_to_polar(self.grid[:, :, 0], self.grid[:, :, 1])
@@ -291,20 +363,24 @@ class Sim_2D:
         self.U[(x >= 0) & (y < 0)] = np.array(
             [rho_4, rho_4 * u_4, rho_4 * v_4, E(rho_4, p_4, u_4, v_4)])
 
+    # initial conditions from Deng, Boivin, Xiao
+    # https://hal.science/hal-02100764/document
     def rayleigh_taylor(self):
         self.U = np.zeros((self.res_x, self.res_y, 4))
-        g = -1
-        def y_pert(x):
-            return (0.5 - 0.02 * np.cos(4 * np.pi * x))
-        
+        g = -0.1
+
         for i in range(len(self.grid)):
             for j in range(len(self.grid[i])):
                 x = self.grid[i][j][0]
                 y = self.grid[i][j][1]
+                v = 0.0025 * (1-np.cos(4 * np.pi * x)) * \
+                    (1-np.cos(4 * np.pi * y / 3))
 
-                if y >= y_pert(x):
-                    p = 2.5 + g * 2 * (y - 0.5)
-                    self.U[i][j] = np.array([2, 0, 0, E(self.gamma, 2, p, 0, 0)])
+                if y >= 0.75:
+                    p = 2.5 + g * 2 * (y - 0.75)
+                    self.U[i][j] = np.array(
+                        [2, 0, 2 * v, E(self.gamma, 2, p, 0, v)])
                 else:
-                    p = 2.5 + g * 1 * (y - 0.5)
-                    self.U[i][j] = np.array([1, 0, 0, E(self.gamma, 1, p, 0, 0)])
+                    p = 2.5 + g * 1 * (y - 0.75)
+                    self.U[i][j] = np.array(
+                        [1, 0, 1 * v, E(self.gamma, 1, p, 0, v)])

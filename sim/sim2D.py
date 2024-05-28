@@ -1,6 +1,7 @@
 from contextlib import nullcontext
 import os
 
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
@@ -65,15 +66,10 @@ class HLL_Solver:
         return (alpha_p, alpha_m)
 
     # HLL flux
-    def F_HLL(self, F_L, F_R, U_L, U_R):
-        a_p, a_m = self.alphas(U_L, U_R, x=True)
+    def F_HLL(self, F_L, F_R, U_L, U_R, x=True):
+        a_p, a_m = self.alphas(U_L, U_R, x=x)
 
         return (a_p * F_L + a_m * F_R - (a_p * a_m * (U_R - U_L))) / (a_p + a_m)
-
-    def G_HLL(self, G_L, G_R, U_L, U_R):
-        a_p, a_m = self.alphas(U_L, U_R, x=False)
-        
-        return (a_p * G_L + a_m * G_R - (a_p * a_m * (U_R - U_L))) / (a_p + a_m)
 
     # HLLC algorithm adapted from Robert Caddy
     # https://robertcaddy.com/posts/HLLC-Algorithm/
@@ -126,7 +122,7 @@ class HLL_Solver:
 
     def solve(self, U, F, G):
         L_ = np.zeros_like(U)
-        
+
         # compute HLL flux at each interface
         for i in range(1, len(U) - 1):
             for j in range(1, len(U[i]) - 1):
@@ -146,6 +142,12 @@ class HLL_Solver:
         return L_
 
 
+class Boundary:
+    OUTFLOW = "outflow"
+    REFLECTIVE = "reflective"
+    PERIODIC = "periodic"
+
+
 class Sim_2D:
     def __init__(self, gamma=1.4, resolution=(100, 100),
                  xrange=(-1, 1), yrange=(-1, 1), order="first"):
@@ -163,6 +165,8 @@ class Sim_2D:
         self.dx, self.dy = (self.xmax - self.xmin) / \
             self.res_x, (self.ymax - self.ymin) / self.res_y
 
+        self.set_bcs()
+
         # conservative variable
         self.U = np.zeros((self.res_x, self.res_y, 4))
         # flux in x: F = (rho * u, rho * u^2 + P, rho * u * v, (E + P) * u)
@@ -172,27 +176,15 @@ class Sim_2D:
 
         # source term (function of U)
         self.S = None
-        
-        self.dt = self.dx
-        self.cfl = 0.4
-        self.solver = HLL_Solver(
-        gamma, resolution, self.x, self.y, self.dx, self.dy)
 
         if order != "first" and order != "high":
             print("Invalid order provided: Must be 'first' or 'high'")
 
         self.order = order
-
-    # call in a loop to print dynamic progress bar
-    def print_progress_bar(self, iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█', printEnd="\r"):
-        percent = ("{0:." + str(decimals) + "f}").format(100 *
-                                                         (iteration / float(total)))
-        filledLength = int(length * iteration // total)
-        bar = fill * filledLength + '-' * (length - filledLength)
-        print(f'\r{prefix} |{bar}| {percent}% {suffix}', end=printEnd)
-        # print new line on complete
-        if iteration == total:
-            print()
+        self.dt = self.dx
+        self.cfl = 0.4
+        self.solver = HLL_Solver(
+            gamma, resolution, self.x, self.y, self.dx, self.dy)
 
     def get_vars(self):
         rho = self.U[:, :, 0]
@@ -200,44 +192,54 @@ class Sim_2D:
         p = P(self.gamma, rho, u, v, E)
         return rho, u, v, p, E
 
-    def plot(self, var="density"):
-        rho, u, v, p, E = self.get_vars()
-
-        plt.cla()
-        if var == "density":
-            # plot density matrix (excluding ghost cells)
-            c = plt.imshow(np.transpose(rho[1:-1, 1:-1]), cmap="plasma", interpolation='nearest',
-                           origin='lower', extent=[self.xmin, self.xmax, self.ymin, self.ymax])
-        elif var == "pressure":
-            c = plt.imshow(np.transpose(p[1:-1, 1:-1]), cmap="plasma", interpolation='nearest',
-                           origin='lower', extent=[self.xmin, self.xmax, self.ymin, self.ymax])
-        elif var == "energy":
-            c = plt.imshow(np.transpose(E[1:-1, 1:-1]), cmap="plasma", interpolation='nearest',
-                           origin='lower', extent=[self.xmin, self.xmax, self.ymin, self.ymax])
-
-        plt.colorbar(c)
-        plt.xlabel("x")
-        plt.ylabel("y")
-        plt.title(var)
-        plt.pause(0.001)
-        
     def add_ghost_cells(self):
         # add ghost cells to the top and bottom boundaries
         self.U = np.hstack((self.U[:, 0:1, :], self.U, self.U[:, -1:, :]))
-        
+
         # add ghost cells to the left and right boundaries
         self.U = np.vstack((self.U[0:1, :, :], self.U, self.U[-1:, :, :]))
-        
-    def set_bcs(self):
-        # reflective on top and bottom
-        self.U[:, 0, :] = self.U[:, 1, :]
-        self.U[:, 0, 2] = -1 * self.U[:, 1, 2]
-        self.U[:, -1, :] = self.U[:, -2, :]
-        self.U[:, -1, 2] = -1 * self.U[:, -2, 2]
-        
-        # periodic on left and right
-        self.U[0, :, :] = self.U[-2, :, :]
-        self.U[-1, :, :] = self.U[1, :, :]
+
+    # bc_x = (left, right), bc_y = (bottom, top)
+    def set_bcs(self, bc_x=(Boundary.OUTFLOW, Boundary.OUTFLOW), bc_y=(Boundary.OUTFLOW, Boundary.OUTFLOW)):
+        self.bc_x = bc_x
+        self.bc_y = bc_y
+
+    def apply_bcs(self):
+        # left
+        if self.bc_x[0] == Boundary.OUTFLOW:
+            self.U[0, :, :] = self.U[1, :, :]
+        elif self.bc_x[0] == Boundary.REFLECTIVE:
+            self.U[0, :, :] = self.U[1, :, :]
+            self.U[0, :, 1] = -self.U[1, :, 1]  # invert x momentum
+        elif self.bc_x[0] == Boundary.PERIODIC:
+            self.U[0, :, :] = self.U[-2, :, :]
+
+        # right
+        if self.bc_x[1] == Boundary.OUTFLOW:
+            self.U[-1, :, :] = self.U[-2, :, :]
+        elif self.bc_x[1] == Boundary.REFLECTIVE:
+            self.U[-1, :, :] = self.U[-2, :, :]
+            self.U[-1, :, 1] = -self.U[-2, :, 1]  # invert x momentum
+        elif self.bc_x[1] == Boundary.PERIODIC:
+            self.U[-1, :, :] = self.U[1, :, :]
+
+        # bottom
+        if self.bc_y[0] == Boundary.OUTFLOW:
+            self.U[:, 0, :] = self.U[:, 1, :]
+        elif self.bc_y[0] == Boundary.REFLECTIVE:
+            self.U[:, 0, :] = self.U[:, 1, :]
+            self.U[:, 0, 2] = -self.U[:, 1, 2]  # invert y momentum
+        elif self.bc_y[0] == Boundary.PERIODIC:
+            self.U[:, 0, :] = self.U[:, -2, :]
+
+        # top
+        if self.bc_y[1] == Boundary.OUTFLOW:
+            self.U[:, -1, :] = self.U[:, -2, :]
+        elif self.bc_y[1] == Boundary.REFLECTIVE:
+            self.U[:, -1, :] = self.U[:, -2, :]
+            self.U[:, -1, 2] = -self.U[:, -2, 2]  # invert y momentum
+        elif self.bc_y[1] == Boundary.PERIODIC:
+            self.U[:, -1, :] = self.U[:, 1, :]
 
     def compute_flux(self):
         rho, u, v, p, E = self.get_vars()
@@ -255,7 +257,7 @@ class Sim_2D:
             rho * (v ** 2) + p,
             (E + p) * v
         ]).transpose((1, 2, 0))
-        
+
     def compute_timestep(self):
         rho, u, v, p, E = self.get_vars()
         return self.cfl * \
@@ -263,8 +265,8 @@ class Sim_2D:
 
     def first_order_step(self):
         self.dt = self.compute_timestep()
-        
-        if self.S: 
+
+        if self.S:
             self.U = np.add(self.U, self.S(self.U) * (self.dt / 2))
         L = self.solver.solve(self.U, self.F, self.G)
         self.U = np.add(self.U, L * self.dt)
@@ -287,10 +289,10 @@ class Sim_2D:
         self.U = np.add(np.add((1/3) * self.U, (2/3) * U_2),
                         (2/3) * self.dt * L_2)
 
-    def run_simulation(self, T, var="density", filename=None):
+    def run(self, T, var="density", filename=None):
         t = 0
         fig = plt.figure()
-        
+
         self.add_ghost_cells()
 
         if filename:
@@ -309,9 +311,9 @@ class Sim_2D:
 
         with cm:
             while t < T:
-                self.set_bcs()
+                self.apply_bcs()
                 self.compute_flux()
-                
+
                 if self.order == "first":
                     self.first_order_step()
                 elif self.order == "high":
@@ -350,18 +352,19 @@ class Sim_2D:
     # case 3 in Liska Wendroff
     def quadrants(self):
         x, y = self.grid[:, :, 0], self.grid[:, :, 1]
+        mid = (self.xmax - self.xmin) / 2
         rho_1, u_1, v_1, p_1 = 0.5323, 1.206, 0, 0.3
         rho_2, u_2, v_2, p_2 = 1.5, 0, 0, 1.5
         rho_3, u_3, v_3, p_3 = 0.138, 1.206, 1.206, 0.029
         rho_4, u_4, v_4, p_4 = 0.5323, 0, 1.206, 0.3
-        self.U[(x < 0) & (y >= 0)] = np.array(
-            [rho_1, rho_1 * u_1, rho_1 * v_1, E(rho_1, p_1, u_1, v_1)])
-        self.U[(x >= 0) & (y >= 0)] = np.array(
-            [rho_2, rho_2 * u_2, rho_2 * v_2, E(rho_2, p_2, u_2, v_2)])
-        self.U[(x < 0) & (y < 0)] = np.array(
-            [rho_3, rho_3 * u_3, rho_3 * v_3, E(rho_3, p_3, u_3, v_3)])
-        self.U[(x >= 0) & (y < 0)] = np.array(
-            [rho_4, rho_4 * u_4, rho_4 * v_4, E(rho_4, p_4, u_4, v_4)])
+        self.U[(x < mid) & (y >= mid)] = np.array(
+            [rho_1, rho_1 * u_1, rho_1 * v_1, E(self.gamma, rho_1, p_1, u_1, v_1)])
+        self.U[(x >= mid) & (y >= mid)] = np.array(
+            [rho_2, rho_2 * u_2, rho_2 * v_2, E(self.gamma, rho_2, p_2, u_2, v_2)])
+        self.U[(x < mid) & (y < mid)] = np.array(
+            [rho_3, rho_3 * u_3, rho_3 * v_3, E(self.gamma, rho_3, p_3, u_3, v_3)])
+        self.U[(x >= mid) & (y < mid)] = np.array(
+            [rho_4, rho_4 * u_4, rho_4 * v_4, E(self.gamma, rho_4, p_4, u_4, v_4)])
 
     # initial conditions from Deng, Boivin, Xiao
     # https://hal.science/hal-02100764/document
@@ -384,3 +387,59 @@ class Sim_2D:
                     p = 2.5 + g * 1 * (y - 0.75)
                     self.U[i][j] = np.array(
                         [1, 0, 1 * v, E(self.gamma, 1, p, 0, v)])
+
+    def kelvin_helmholtz(self):
+        self.U = np.zeros((self.res_x, self.res_y, 4))
+        w0 = 0.1
+        sigma = 0.05 / np.sqrt(2)
+        for i in range(len(self.grid)):
+            for j in range(len(self.grid[i])):
+                x = self.grid[i][j][0]
+                y = self.grid[i][j][1]
+
+                if y > 0.75 or y < 0.25:
+                    rho, u = 1, -0.5
+                    v = w0*np.sin(4*np.pi*x) * (np.exp(-(y-0.25)**2 /
+                                                       (2 * sigma**2)) + np.exp(-(y-0.75)**2/(2*sigma**2)))
+                    p = 2.5
+                    self.U[i][j] = np.array(
+                        [1, -0.5, 0, E(self.gamma, rho, p, u, v)])
+                else:
+                    rho, u = 2, 0.5
+                    v = w0*np.sin(4*np.pi*x) * (np.exp(-(y-0.25)**2 /
+                                                       (2 * sigma**2)) + np.exp(-(y-0.75)**2/(2*sigma**2)))
+                    p = 2.5
+                    self.U[i][j] = np.array(
+                        [rho, u, v, E(self.gamma, rho, p, u, v)])
+
+    # call in a loop to print dynamic progress bar
+    def print_progress_bar(self, iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█', printEnd="\r"):
+        percent = ("{0:." + str(decimals) + "f}").format(100 *
+                                                         (iteration / float(total)))
+        filledLength = int(length * iteration // total)
+        bar = fill * filledLength + '-' * (length - filledLength)
+        print(f'\r{prefix} |{bar}| {percent}% {suffix}', end=printEnd)
+        # print new line on complete
+        if iteration == total:
+            print()
+
+    def plot(self, var="density"):
+        rho, u, v, p, E = self.get_vars()
+
+        plt.cla()
+        if var == "density":
+            # plot density matrix (excluding ghost cells)
+            c = plt.imshow(np.transpose(rho[1:-1, 1:-1]), cmap="plasma", interpolation='nearest',
+                           origin='lower', extent=[self.xmin, self.xmax, self.ymin, self.ymax])
+        elif var == "pressure":
+            c = plt.imshow(np.transpose(p[1:-1, 1:-1]), cmap="plasma", interpolation='nearest',
+                           origin='lower', extent=[self.xmin, self.xmax, self.ymin, self.ymax])
+        elif var == "energy":
+            c = plt.imshow(np.transpose(E[1:-1, 1:-1]), cmap="plasma", interpolation='nearest',
+                           origin='lower', extent=[self.xmin, self.xmax, self.ymin, self.ymax])
+
+        plt.colorbar(c)
+        plt.xlabel("x")
+        plt.ylabel("y")
+        plt.title(var)
+        plt.pause(0.001)

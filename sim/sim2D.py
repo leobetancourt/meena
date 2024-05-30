@@ -1,12 +1,9 @@
-from sim.helpers import E, P, enthalpy, cartesian_to_polar, polar_to_cartesian, c_s
+from sim.helpers import E, P, cartesian_to_polar
 from sim.solvers import HLL, HLLC
-from contextlib import nullcontext
-import os
 
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-plt.rcParams['animation.ffmpeg_path'] = '/usr/local/bin/ffmpeg'
+import h5py
 
 
 class Boundary:
@@ -113,6 +110,12 @@ class Sim_2D:
         elif self.bc_y[1] == Boundary.PERIODIC:
             self.U[:, -1, :] = self.U[:, 1, :]
 
+    def initialize(self, U):
+        self.U = U
+
+    def add_source(self, source):
+        self.S = source
+
     def compute_flux(self):
         rho, u, v, p, E = self.get_vars()
 
@@ -161,55 +164,68 @@ class Sim_2D:
         self.U = np.add(np.add((1/3) * self.U, (2/3) * U_2),
                         (2/3) * self.dt * L_2)
 
-    def run(self, T, var="density", filename=None):
+    def run(self, T, plot=None, filename="out"):
         t = 0
         fig = plt.figure()
-
+        history = []
+        PATH = f"./output/{filename}"
         self.add_ghost_cells()
 
-        if filename:
-            # output video writer
-            clear_frames = True
-            fps = 24
-            FFMpegWriter = animation.writers['ffmpeg']
-            metadata = dict(title=filename, comment='')
-            writer = FFMpegWriter(fps=fps, metadata=metadata)
-            PATH = f"./videos/{filename}"
-            if not os.path.exists(PATH):
-                os.makedirs(PATH)
-            cm = writer.saving(fig, f"{PATH}/{var}.mp4", 100)
-        else:
-            cm = nullcontext()
+        while t < T:
+            self.apply_bcs()
+            self.compute_flux()
 
-        with cm:
-            while t < T:
-                self.apply_bcs()
-                self.compute_flux()
+            if self.order == "first":
+                self.first_order_step()
+            elif self.order == "high":
+                self.high_order_step()
 
-                if self.order == "first":
-                    self.first_order_step()
-                elif self.order == "high":
-                    self.high_order_step()
+            """ checkpoint logic """
+            history.append(self.U)
 
-                if filename:
-                    if clear_frames:
-                        fig.clear()
-                    self.plot(var)
-                    writer.grab_frame()
+            t = t + self.dt if (t + self.dt <= T) else T
+            self.print_progress_bar(
+                t, T, suffix="complete", length=50)
 
-                t = t + self.dt if (t + self.dt <= T) else T
-                self.print_progress_bar(
-                    t, T, suffix="complete", length=50)
+            if plot:
+                fig.clear()
+                self.plot(plot)
 
-        fig.clear()
-        self.plot(var)
-        plt.show()
+        # save to hdf5 instead so you can include metadata like grid bounds
+        np.save(PATH, np.array(history))
 
-    def initialize(self, U):
-        self.U = U
+    # call in a loop to print dynamic progress bar
 
-    def add_source(self, source):
-        self.S = source
+    def print_progress_bar(self, iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█', printEnd="\r"):
+        percent = ("{0:." + str(decimals) + "f}").format(100 *
+                                                         (iteration / float(total)))
+        filledLength = int(length * iteration // total)
+        bar = fill * filledLength + '-' * (length - filledLength)
+        print(f'\r{prefix} |{bar}| {percent}% {suffix}', end=printEnd)
+        # print new line on complete
+        if iteration == total:
+            print()
+
+    def plot(self, var="density"):
+        rho, u, v, p, E = self.get_vars()
+
+        plt.cla()
+        if var == "density":
+            # plot density matrix (excluding ghost cells)
+            c = plt.imshow(np.transpose(rho[1:-1, 1:-1]), cmap="plasma", interpolation='nearest',
+                           origin='lower', extent=[self.xmin, self.xmax, self.ymin, self.ymax])
+        elif var == "pressure":
+            c = plt.imshow(np.transpose(p[1:-1, 1:-1]), cmap="plasma", interpolation='nearest',
+                           origin='lower', extent=[self.xmin, self.xmax, self.ymin, self.ymax])
+        elif var == "energy":
+            c = plt.imshow(np.transpose(E[1:-1, 1:-1]), cmap="plasma", interpolation='nearest',
+                           origin='lower', extent=[self.xmin, self.xmax, self.ymin, self.ymax])
+
+        plt.colorbar(c)
+        plt.xlabel("x")
+        plt.ylabel("y")
+        plt.title(var)
+        plt.pause(0.001)
 
     def sedov_blast(self, radius=0.1):
         r, _ = cartesian_to_polar(self.grid[:, :, 0], self.grid[:, :, 1])
@@ -283,35 +299,3 @@ class Sim_2D:
                     p = 2.5
                     self.U[i][j] = np.array(
                         [rho, u, v, E(self.gamma, rho, p, u, v)])
-
-    # call in a loop to print dynamic progress bar
-    def print_progress_bar(self, iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█', printEnd="\r"):
-        percent = ("{0:." + str(decimals) + "f}").format(100 *
-                                                         (iteration / float(total)))
-        filledLength = int(length * iteration // total)
-        bar = fill * filledLength + '-' * (length - filledLength)
-        print(f'\r{prefix} |{bar}| {percent}% {suffix}', end=printEnd)
-        # print new line on complete
-        if iteration == total:
-            print()
-
-    def plot(self, var="density"):
-        rho, u, v, p, E = self.get_vars()
-
-        plt.cla()
-        if var == "density":
-            # plot density matrix (excluding ghost cells)
-            c = plt.imshow(np.transpose(rho[1:-1, 1:-1]), cmap="plasma", interpolation='nearest',
-                           origin='lower', extent=[self.xmin, self.xmax, self.ymin, self.ymax])
-        elif var == "pressure":
-            c = plt.imshow(np.transpose(p[1:-1, 1:-1]), cmap="plasma", interpolation='nearest',
-                           origin='lower', extent=[self.xmin, self.xmax, self.ymin, self.ymax])
-        elif var == "energy":
-            c = plt.imshow(np.transpose(E[1:-1, 1:-1]), cmap="plasma", interpolation='nearest',
-                           origin='lower', extent=[self.xmin, self.xmax, self.ymin, self.ymax])
-
-        plt.colorbar(c)
-        plt.xlabel("x")
-        plt.ylabel("y")
-        plt.title(var)
-        plt.pause(0.001)

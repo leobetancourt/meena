@@ -1,9 +1,7 @@
-from sim.helpers import E, P, enthalpy, cartesian_to_polar, polar_to_cartesian, c_s
+from sim.helpers import P, enthalpy, c_s
 
 from abc import ABC, abstractmethod
 import numpy as np
-
-# abstract base class
 
 
 class Solver(ABC):
@@ -32,14 +30,14 @@ class Solver(ABC):
         for i in range(1, len(U) - 1):
             for j in range(1, len(U[i]) - 1):
                 F_L = self.flux(F[i - 1][j], F[i][j],
-                                  U[i - 1][j], U[i][j])
+                                U[i - 1][j], U[i][j])
                 F_R = self.flux(F[i][j], F[i + 1][j],
-                                  U[i][j], U[i + 1][j])
+                                U[i][j], U[i + 1][j])
 
                 G_L = self.flux(G[i][j - 1], G[i][j],
-                                  U[i][j - 1], U[i][j], x=False)
+                                U[i][j - 1], U[i][j], x=False)
                 G_R = self.flux(G[i][j], G[i][j + 1],
-                                  U[i][j], U[i][j + 1], x=False)
+                                U[i][j], U[i][j + 1], x=False)
 
                 # compute semi discrete L (including source term)
                 L_[i][j] = self.L(F_L, F_R, G_L, G_R)
@@ -65,9 +63,11 @@ class HLLC(Solver):
 
         return F_k + np.multiply(S_k, U_star - U_k)
 
-    # HLLC algorithm adapted from Robert Caddy
-    # https://robertcaddy.com/posts/HLLC-Algorithm/
     def flux(self, F_L, F_R, U_L, U_R, x=True):
+        """
+            HLLC algorithm adapted from Robert Caddy
+            https://robertcaddy.com/posts/HLLC-Algorithm/
+        """
         rho_L, vx_L, vy_L, p_L, E_L = self.get_vars(U_L)
         rho_R, vx_R, vy_R, p_R, E_R = self.get_vars(U_R)
         v_L = vx_L if x else vy_L
@@ -116,7 +116,6 @@ class HLL(Solver):
 
         return (alpha_p, alpha_m)
 
-    # HLL flux
     def flux(self, F_L, F_R, U_L, U_R, x=True):
         a_p, a_m = self.alphas(U_L, U_R, x=x)
 

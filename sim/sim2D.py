@@ -1,4 +1,4 @@
-from sim.helpers import E, P, cartesian_to_polar
+from sim.helpers import E, P, cartesian_to_polar, plot_grid
 from sim.solvers import HLL, HLLC
 
 import numpy as np
@@ -53,7 +53,7 @@ class Sim_2D:
             self.solver = HLLC(
                 gamma, resolution, self.x, self.y, self.dx, self.dy)
         else:
-            raise Exception("Invlaid solver: must be 'hll' or 'hllc'")
+            raise Exception("Invalid solver: must be 'hll' or 'hllc'")
 
     def get_vars(self):
         rho = self.U[:, :, 0]
@@ -164,35 +164,49 @@ class Sim_2D:
         self.U = np.add(np.add((1/3) * self.U, (2/3) * U_2),
                         (2/3) * self.dt * L_2)
 
-    def run(self, T, plot=None, filename="out"):
+    def run(self, T, plot=None, filename="out", save_interval=0.01):
         t = 0
         fig = plt.figure()
         history = []
-        PATH = f"./output/{filename}"
+        PATH = f"./output/{filename}.hdf"
         self.add_ghost_cells()
 
-        while t < T:
-            self.apply_bcs()
-            self.compute_flux()
+        next_checkpoint = save_interval
 
-            if self.order == "first":
-                self.first_order_step()
-            elif self.order == "high":
-                self.high_order_step()
+        # open HDF5 file to save U state at each checkpoint
+        with h5py.File(PATH, "w") as outfile:
+            # Create an extendable dataset
+            max_shape = (None, self.res_x, self.res_y, 4)  # None allows unlimited growth in the first dimension
+            dataset = outfile.create_dataset("data", shape=(0, self.res_x, self.res_y, 4), maxshape=max_shape, chunks=True)
+            
+            # metadata
+            dataset.attrs["gamma"] = self.gamma
+            dataset.attrs["xrange"] = (self.xmin, self.xmax)
+            dataset.attrs["yrange"] = (self.ymin, self.ymax)
+            
+            while t < T:
+                self.apply_bcs()
+                self.compute_flux()
 
-            """ checkpoint logic """
-            history.append(self.U)
+                if self.order == "first":
+                    self.first_order_step()
+                elif self.order == "high":
+                    self.high_order_step()
 
-            t = t + self.dt if (t + self.dt <= T) else T
-            self.print_progress_bar(
-                t, T, suffix="complete", length=50)
+                # at each checkpoint, save the current state excluding the ghost cells
+                if t >= next_checkpoint:
+                    dataset.resize(dataset.shape[0] + 1, axis=0)
+                    dataset[-1] = self.U[1:-1, 1:-1]
+                    next_checkpoint += save_interval
 
-            if plot:
-                fig.clear()
-                self.plot(plot)
+                t = t + self.dt if (t + self.dt <= T) else T
+                self.print_progress_bar(t, T, suffix="complete", length=50)
 
-        # save to hdf5 instead so you can include metadata like grid bounds
-        np.save(PATH, np.array(history))
+                if plot:
+                    fig.clear()
+                    plot_grid(self.gamma, self.U[1:-1, 1:-1], plot,
+                            extent=[self.xmin, self.xmax, self.ymin, self.ymax])
+                    plt.pause(0.001)
 
     # call in a loop to print dynamic progress bar
 
@@ -205,27 +219,6 @@ class Sim_2D:
         # print new line on complete
         if iteration == total:
             print()
-
-    def plot(self, var="density"):
-        rho, u, v, p, E = self.get_vars()
-
-        plt.cla()
-        if var == "density":
-            # plot density matrix (excluding ghost cells)
-            c = plt.imshow(np.transpose(rho[1:-1, 1:-1]), cmap="plasma", interpolation='nearest',
-                           origin='lower', extent=[self.xmin, self.xmax, self.ymin, self.ymax])
-        elif var == "pressure":
-            c = plt.imshow(np.transpose(p[1:-1, 1:-1]), cmap="plasma", interpolation='nearest',
-                           origin='lower', extent=[self.xmin, self.xmax, self.ymin, self.ymax])
-        elif var == "energy":
-            c = plt.imshow(np.transpose(E[1:-1, 1:-1]), cmap="plasma", interpolation='nearest',
-                           origin='lower', extent=[self.xmin, self.xmax, self.ymin, self.ymax])
-
-        plt.colorbar(c)
-        plt.xlabel("x")
-        plt.ylabel("y")
-        plt.title(var)
-        plt.pause(0.001)
 
     def sedov_blast(self, radius=0.1):
         r, _ = cartesian_to_polar(self.grid[:, :, 0], self.grid[:, :, 1])

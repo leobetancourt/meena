@@ -26,3 +26,25 @@ def polar_to_cartesian(r, theta):
 
 def c_s(gamma, P, rho):
     return np.sqrt(gamma * P / rho)
+
+def plot_grid(gamma, U, plot="density", extent=[0, 1, 0, 1]):
+    rho = U[:, :, 0]
+    u, v, E = U[:, :, 1] / rho, U[:, :, 2] / rho, U[:, :, 3]
+    p = P(gamma, rho, u, v, E)
+
+    plt.cla()
+    if plot == "density":
+        # plot density matrix (excluding ghost cells)
+        c = plt.imshow(np.transpose(rho[1:-1, 1:-1]), cmap="plasma", interpolation='nearest',
+                        origin='lower', extent=extent)
+    elif plot == "pressure":
+        c = plt.imshow(np.transpose(p[1:-1, 1:-1]), cmap="plasma", interpolation='nearest',
+                        origin='lower', extent=extent)
+    elif plot == "energy":
+        c = plt.imshow(np.transpose(E[1:-1, 1:-1]), cmap="plasma", interpolation='nearest',
+                        origin='lower', extent=extent)
+
+    plt.colorbar(c)
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.title(plot)

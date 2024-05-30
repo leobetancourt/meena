@@ -35,4 +35,4 @@ if __name__ == "__main__":
 
     sim.add_source(gravity)
     sim.rayleigh_taylor()
-    sim.run(T=0.1, plot="density", filename="RT")
+    sim.run(T=0.5, plot="density", filename="RT", save_interval=0.01)

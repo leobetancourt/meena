@@ -1,3 +1,6 @@
+from sim.helpers import plot_grid
+import h5py
+import os
 from argparse import ArgumentParser
 import numpy as np
 import matplotlib.pyplot as plt
@@ -5,42 +8,46 @@ import matplotlib.animation as animation
 plt.rcParams['animation.ffmpeg_path'] = '/usr/local/bin/ffmpeg'
 
 
-parser = ArgumentParser(description="Create a movie from a .npy file.")
+parser = ArgumentParser(description="Create a movie from a .hdf file.")
 
 parser.add_argument('-f', '--file', type=str, required=True,
-                    help='The path to the .npy file (required)')
+                    help='The path to the .hdf file (required)')
 
 parser.add_argument('-o', '--output', type=str, required=True,
-                    choices=['density', 'vx', 'vy', 'pressure'],
-                    help='The variable to plot: density, vx, vy, or pressure (required)')
+                    choices=['density', 'u', 'v', 'pressure'],
+                    help='The variable to plot: density, u, v, or pressure (required)')
 
 args = parser.parse_args()
 
 # validate the file argument
-if not args.file.endswith('.npy'):
-    parser.error("The file name must end with '.npy'")
+if not args.file.endswith('.hdf'):
+    parser.error("The file name must end with '.hdf'")
 
-file_path = args.file
+PATH = args.file
 var = args.output
 
-hist = np.load(file_path)
-print(hist)
-# fig = plt.figure()
-# # output video writer
-# clear_frames = True
-# fps = 24
-# FFMpegWriter = animation.writers['ffmpeg']
+with h5py.File(PATH, "r") as infile:
+    dataset = infile["data"]
+    history = dataset[...]
+    gamma = dataset.attrs["gamma"]
+    xmin, xmax = dataset.attrs["xrange"]
+    ymin, ymax = dataset.attrs["yrange"]
 
-# metadata = dict(title=file, comment='')
-# writer = FFMpegWriter(fps=fps, metadata=metadata)
-# PATH = f"./videos/{filename}"
-# if not os.path.exists(PATH):
-#     os.makedirs(PATH)
-# cm = writer.saving(fig, f"{PATH}/{plot}.mp4", 100)
+fig = plt.figure()
+fps = 12
+FFMpegWriter = animation.writers['ffmpeg']
+file = os.path.splitext(os.path.basename(PATH))[0]
+metadata = dict(title=file, comment='')
+writer = FFMpegWriter(fps=fps, metadata=metadata)
+PATH = f"./videos/{file}"
+if not os.path.exists(PATH):
+    os.makedirs(PATH)
+cm = writer.saving(fig, f"{PATH}/{var}.mp4", 100)
 
-# for frame in hist:
+with cm:
+    for U in history:
+        fig.clear()
+        plot_grid(gamma, U, plot=var, extent=[xmin, xmax, ymin, ymax])
+        writer.grab_frame()
 
-#     if clear_frames:
-#         fig.clear()
-#     self.plot(plot)
-#     writer.grab_frame()
+print("Movie saved to", PATH)

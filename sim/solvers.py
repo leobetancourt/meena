@@ -1,12 +1,13 @@
-from sim.helpers import P, enthalpy, c_s
+from sim.helpers import P, E, enthalpy, c_s, get_prims
 
 from abc import ABC, abstractmethod
 import numpy as np
 
 
 class Solver(ABC):
-    def __init__(self, gamma, res, x, y, dx, dy):
+    def __init__(self, gamma, res, num_g, x, y, dx, dy):
         self.gamma = gamma
+        self.num_g = num_g
         self.x, self.y = x, y
         self.dx, self.dy = dx, dy
         self.res_x, self.res_y = res
@@ -21,26 +22,44 @@ class Solver(ABC):
     def flux(self, F_L, F_R, U_L, U_R, x=True):
         pass
 
-    def L(self, F_L, F_R, G_L, G_R):
-        return - ((F_R - F_L) / self.dx) - ((G_R - G_L) / self.dy)
+    def L(self, F_l, F_r, G_l, G_r):
+        return - ((F_r - F_l) / self.dx) - ((G_r - G_l) / self.dy)
+
+    def minmod(self, x, y, z):
+        return 0.25 * abs(np.sign(x) + np.sign(y)) * (np.sign(x) + np.sign(z)) * min(abs(x), abs(y), abs(z))
+
+    def PLM(self):
+        pass
 
     def solve(self, U, F, G):
-        L_ = np.zeros_like(U)
+        g = self.num_g
+        
+        # there must be a more readable way to do ghost indexing
+        F_L = F[(g-1):-(g+1), g:-g, :]
+        F_R = F[(g+1):-(g-1), g:-g, :]
+        G_L = G[g:-g, (g-1):-(g+1), :]
+        G_R = G[g:-g, (g+1):-(g-1), :]
+        
+        F_C = F[g:-g, g:-g, :]
+        G_C = G[g:-g, g:-g, :]
 
-        for i in range(1, len(U) - 1):
-            for j in range(1, len(U[i]) - 1):
-                F_L = self.flux(F[i - 1][j], F[i][j],
-                                U[i - 1][j], U[i][j])
-                F_R = self.flux(F[i][j], F[i + 1][j],
-                                U[i][j], U[i + 1][j])
+        U_L = U[1:-(g+1), g:-g, :]
+        U_R = U[(g+1):-(g-1), g:-g, :]
+        U_C = U[g:-g, g:-g, :]
+        # F_(i-1/2)
+        F_l = self.flux(F_L, F_C, U_L, U_C)
+        # F_(i+1/2)
+        F_r = self.flux(F_C, F_R, U_C, U_R)
+        
+        U_L = U[g:-g, (g-1):-(g+1), :]
+        U_R = U[g:-g, (g+1):-(g-1), :]
+        # G_(i-1/2)
+        G_l = self.flux(G_L, G_C, U_L, U_C, x=False)
+        # G_(i+1/2)
+        G_r = self.flux(G_C, G_R, U_C, U_R, x=False)
+        
 
-                G_L = self.flux(G[i][j - 1], G[i][j],
-                                U[i][j - 1], U[i][j], x=False)
-                G_R = self.flux(G[i][j], G[i][j + 1],
-                                U[i][j], U[i][j + 1], x=False)
-
-                # compute semi discrete L (including source term)
-                L_[i][j] = self.L(F_L, F_R, G_L, G_R)
+        L_ = self.L(F_l, F_r, G_l, G_r)
 
         return L_
 
@@ -48,7 +67,8 @@ class Solver(ABC):
 class HLLC(Solver):
 
     def F_star(self, F_k, S_k, S_M, U_k, x=True):
-        rho_k, vx_k, vy_k, p_k, E_k = self.get_vars(U_k)
+        rho_k, vx_k, vy_k, p_k = get_prims(self.gamma, U_k)
+        E_k = E(self.gamma, rho_k, p_k, vx_k, vy_k)
         v_k = vx_k if x else vy_k
 
         rho_star = rho_k * (S_k - v_k) / (S_k - S_M)
@@ -60,16 +80,18 @@ class HLLC(Solver):
 
         U_star = np.array([rho_star, rhov_star, rho_star * vy_k, E_star]) if x else np.array(
             [rho_star, rho_star * vx_k, rhov_star, E_star])
-
-        return F_k + np.multiply(S_k, U_star - U_k)
+        U_star = np.transpose(U_star, (1, 2, 0))
+        S_k = np.expand_dims(S_k, axis=-1)
+        return F_k + S_k * (U_star - U_k)
 
     def flux(self, F_L, F_R, U_L, U_R, x=True):
         """
             HLLC algorithm adapted from Robert Caddy
             https://robertcaddy.com/posts/HLLC-Algorithm/
         """
-        rho_L, vx_L, vy_L, p_L, E_L = self.get_vars(U_L)
-        rho_R, vx_R, vy_R, p_R, E_R = self.get_vars(U_R)
+        rho_L, vx_L, vy_L, p_L = get_prims(self.gamma, U_L)
+        rho_R, vx_R, vy_R, p_R = get_prims(self.gamma, U_R)
+        E_L, E_R = E(self.gamma, rho_L, p_L, vx_L, vy_L), E(self.gamma, rho_R, p_R, vx_R, vy_R)
         v_L = vx_L if x else vy_L
         v_R = vx_R if x else vy_R
 
@@ -81,42 +103,47 @@ class HLLC(Solver):
         c_t = np.sqrt((self.gamma - 1) * (H_t + (0.5 * v_t ** 2)))
         c_L, c_R = c_s(self.gamma, p_L, rho_L), c_s(self.gamma, p_R, rho_R)
 
-        S_L = min(v_L - c_L, v_t - c_t)
-        S_R = max(v_R + c_R, v_t + c_t)
+        S_L = np.minimum(v_L - c_L, v_t - c_t)
+        S_R = np.maximum(v_R + c_R, v_t + c_t)
         S_M = (rho_R * v_R * (S_R - v_R) - rho_L * v_L * (S_L - v_L) + p_L - p_R) \
             / (rho_R * (S_R - v_R) - rho_L * (S_L - v_L))
 
-        if S_L > 0:
-            return F_L
-        elif S_L <= 0 and S_M >= 0:
-            return self.F_star(F_L, S_L, S_M, U_L, x)
-        if S_M <= 0 and S_R >= 0:
-            return self.F_star(F_R, S_R, S_M, U_R, x)
-        else:
-            return F_R
-
+        F = np.empty_like(F_L)
+        
+        case_1 = S_L > 0
+        case_2 = (S_L <= 0) & (S_M >= 0)
+        case_3 = (S_M <= 0) & (S_R >= 0)
+        case_4 = S_R < 0
+        F[case_1] = F_L[case_1]
+        F[case_2] = self.F_star(F_L, S_L, S_M, U_L, x)[case_2]
+        F[case_3] = self.F_star(F_R, S_R, S_M, U_R, x)[case_3]
+        F[case_4] = F_R[case_4]
+        
+        return F
 
 class HLL(Solver):
 
     # returns (lambda_plus, lambda_minus)
     def lambdas(self, U, x=True):
-        v_x, v_y = U[1] / U[0], U[2] / U[0]
-        rho, E = U[0], U[-1]
-        cs = c_s(self.gamma, P(self.gamma, rho, v_x, v_y, E), rho)
+        rho, u, v, p = get_prims(self.gamma, U)
+        cs = c_s(self.gamma, p, rho)
 
-        v = v_x if x else v_y
-        return (v + cs, v - cs)
+        v = u if x else v
+        return v + cs, v - cs
 
     # returns (alpha_p, alpha_m)
     def alphas(self, U_L, U_R, x=True):
         lambda_L = self.lambdas(U_L, x=x)
         lambda_R = self.lambdas(U_R, x=x)
-        alpha_p = max(0, lambda_L[0], lambda_R[0])
-        alpha_m = max(0, -lambda_L[1], -lambda_R[1])
+        # element-wise max()
+        alpha_p = np.maximum(0, np.maximum(lambda_L[0], lambda_R[0]))
+        alpha_m = np.maximum(0, np.maximum(-lambda_L[1], -lambda_R[1]))
 
-        return (alpha_p, alpha_m)
+        return alpha_p, alpha_m
 
     def flux(self, F_L, F_R, U_L, U_R, x=True):
         a_p, a_m = self.alphas(U_L, U_R, x=x)
-
+        # add dimension to match F, U arrays
+        a_p = np.expand_dims(a_p, axis=-1)
+        a_m = np.expand_dims(a_m, axis=-1)
         return (a_p * F_L + a_m * F_R - (a_p * a_m * (U_R - U_L))) / (a_p + a_m)

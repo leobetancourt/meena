@@ -9,6 +9,17 @@ def E(gamma, rho, p, u, v):
 def P(gamma, rho, u, v, E):
     return (gamma - 1) * (E - (0.5 * rho * (u ** 2 + v ** 2)))
 
+# returns rho, u, v, p
+def get_prims(gamma, U):
+    rho = U[:, :, 0]
+    u, v = U[:, :, 1] / rho, U[:, :, 2] / rho
+    E = U[:, :, 3]
+    p = P(gamma, rho, u, v, E)
+    return rho, u, v, p
+
+# returns rho, rho * u, rho * v, E
+def get_cons(gamma, U):
+    return U[:, :, 0], U[:, :, 1], U[:, :, 2], U[:, :, 3]
 
 def enthalpy(rho, p, E):
     return (E + p) / rho
@@ -36,6 +47,12 @@ def plot_grid(gamma, U, plot="density", extent=[0, 1, 0, 1]):
     if plot == "density":
         # plot density matrix (excluding ghost cells)
         c = plt.imshow(np.transpose(rho[1:-1, 1:-1]), cmap="plasma", interpolation='nearest',
+                        origin='lower', extent=extent)
+    elif plot == "u":
+        c = plt.imshow(np.transpose(u[1:-1, 1:-1]), cmap="plasma", interpolation='nearest',
+                        origin='lower', extent=extent)
+    elif plot == "v":
+        c = plt.imshow(np.transpose(u[1:-1, 1:-1]), cmap="plasma", interpolation='nearest',
                         origin='lower', extent=extent)
     elif plot == "pressure":
         c = plt.imshow(np.transpose(p[1:-1, 1:-1]), cmap="plasma", interpolation='nearest',

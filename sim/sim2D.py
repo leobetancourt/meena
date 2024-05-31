@@ -30,6 +30,7 @@ class Sim_2D:
         self.dx, self.dy = (self.xmax - self.xmin) / \
             self.res_x, (self.ymax - self.ymin) / self.res_y
 
+        self.num_g = 2  # number of ghost cells
         self.set_bcs()
 
         # conservative variable
@@ -48,10 +49,10 @@ class Sim_2D:
         self.cfl = 0.4
         if solver == "hll":
             self.solver = HLL(
-                gamma, resolution, self.x, self.y, self.dx, self.dy)
+                gamma, resolution, self.num_g, self.x, self.y, self.dx, self.dy)
         elif solver == "hllc":
             self.solver = HLLC(
-                gamma, resolution, self.x, self.y, self.dx, self.dy)
+                gamma, resolution, self.num_g, self.x, self.y, self.dx, self.dy)
         else:
             raise Exception("Invalid solver: must be 'hll' or 'hllc'")
 
@@ -63,10 +64,12 @@ class Sim_2D:
 
     def add_ghost_cells(self):
         # add ghost cells to the top and bottom boundaries
-        self.U = np.hstack((self.U[:, 0:1, :], self.U, self.U[:, -1:, :]))
+        self.U = np.hstack((np.repeat(self.U[:, :1, :], self.num_g, axis=1), self.U, np.repeat(
+            self.U[:, :1, :], self.num_g, axis=1)))
 
         # add ghost cells to the left and right boundaries
-        self.U = np.vstack((self.U[0:1, :, :], self.U, self.U[-1:, :, :]))
+        self.U = np.vstack((np.repeat(self.U[:1, :, :], self.num_g, axis=0), self.U, np.repeat(
+            self.U[:1, :, :], self.num_g, axis=0)))
 
     # bc_x = (left, right), bc_y = (bottom, top)
     def set_bcs(self, bc_x=(Boundary.OUTFLOW, Boundary.OUTFLOW), bc_y=(Boundary.OUTFLOW, Boundary.OUTFLOW)):
@@ -74,41 +77,42 @@ class Sim_2D:
         self.bc_y = bc_y
 
     def apply_bcs(self):
+        g = self.num_g
         # left
         if self.bc_x[0] == Boundary.OUTFLOW:
-            self.U[0, :, :] = self.U[1, :, :]
+            self.U[:g, :, :] = self.U[g, :, :]
         elif self.bc_x[0] == Boundary.REFLECTIVE:
-            self.U[0, :, :] = self.U[1, :, :]
-            self.U[0, :, 1] = -self.U[1, :, 1]  # invert x momentum
+            self.U[:g, :, :] = self.U[g:(g+1), :, :]
+            self.U[:g, :, 1] = -self.U[g:(g+1), :, 1]  # invert x momentum
         elif self.bc_x[0] == Boundary.PERIODIC:
-            self.U[0, :, :] = self.U[-2, :, :]
+            self.U[:g, :, :] = self.U[(-2*g):(-g), :, :]
 
         # right
         if self.bc_x[1] == Boundary.OUTFLOW:
-            self.U[-1, :, :] = self.U[-2, :, :]
+            self.U[-g:, :, :] = self.U[-(g+1), :, :]
         elif self.bc_x[1] == Boundary.REFLECTIVE:
-            self.U[-1, :, :] = self.U[-2, :, :]
-            self.U[-1, :, 1] = -self.U[-2, :, 1]  # invert x momentum
+            self.U[-g:, :, :] = self.U[-(g+1):-g, :, :]
+            self.U[-g:, :, 1] = -self.U[-(g+1):-g, :, 1]  # invert x momentum
         elif self.bc_x[1] == Boundary.PERIODIC:
-            self.U[-1, :, :] = self.U[1, :, :]
+            self.U[-g:, :, :] = self.U[g:(2*g), :, :]
 
         # bottom
         if self.bc_y[0] == Boundary.OUTFLOW:
-            self.U[:, 0, :] = self.U[:, 1, :]
+            self.U[:, :g, :] = self.U[:, g:(g+1), :]
         elif self.bc_y[0] == Boundary.REFLECTIVE:
-            self.U[:, 0, :] = self.U[:, 1, :]
-            self.U[:, 0, 2] = -self.U[:, 1, 2]  # invert y momentum
+            self.U[:, :g, :] = self.U[:, g:(g+1), :]
+            self.U[:, :g, 2] = -self.U[:, g:(g+1), 2]  # invert y momentum
         elif self.bc_y[0] == Boundary.PERIODIC:
-            self.U[:, 0, :] = self.U[:, -2, :]
+            self.U[:, :g, :] = self.U[:, (-2*g):(-g), :]
 
         # top
         if self.bc_y[1] == Boundary.OUTFLOW:
-            self.U[:, -1, :] = self.U[:, -2, :]
+            self.U[:, -g:, :] = self.U[:, -(g+1):-g, :]
         elif self.bc_y[1] == Boundary.REFLECTIVE:
-            self.U[:, -1, :] = self.U[:, -2, :]
-            self.U[:, -1, 2] = -self.U[:, -2, 2]  # invert y momentum
+            self.U[:, -g:, :] = self.U[:, -(g+1):-g, :]
+            self.U[:, -g:, 2] = -self.U[:, -(g+1):-g, 2]  # invert y momentum
         elif self.bc_y[1] == Boundary.PERIODIC:
-            self.U[:, -1, :] = self.U[:, 1, :]
+            self.U[:, -g:, :] = self.U[:, g:(2*g), :]
 
     def initialize(self, U):
         self.U = U
@@ -139,12 +143,13 @@ class Sim_2D:
             np.min(self.dx / (np.sqrt(self.gamma * p / rho) + np.sqrt(u**2 + v**2)))
 
     def first_order_step(self):
+        g = self.num_g
         self.dt = self.compute_timestep()
 
         if self.S:
             self.U = np.add(self.U, self.S(self.U) * (self.dt / 2))
         L = self.solver.solve(self.U, self.F, self.G)
-        self.U = np.add(self.U, L * self.dt)
+        self.U[g:-g, g:-g, :] = np.add(self.U[g:-g, g:-g, :], L * self.dt)
         if self.S:
             self.U = np.add(self.U, self.S(self.U) * (self.dt / 2))
 
@@ -164,26 +169,28 @@ class Sim_2D:
         self.U = np.add(np.add((1/3) * self.U, (2/3) * U_2),
                         (2/3) * self.dt * L_2)
 
-    def run(self, T, plot=None, filename="out", save_interval=0.01):
+    def run(self, T, plot=None, filename="out", save_interval=0.1):
         t = 0
         fig = plt.figure()
-        history = []
         PATH = f"./output/{filename}.hdf"
         self.add_ghost_cells()
 
-        next_checkpoint = save_interval
+        next_checkpoint = 0
+        g = self.num_g
 
         # open HDF5 file to save U state at each checkpoint
         with h5py.File(PATH, "w") as outfile:
             # Create an extendable dataset
-            max_shape = (None, self.res_x, self.res_y, 4)  # None allows unlimited growth in the first dimension
-            dataset = outfile.create_dataset("data", shape=(0, self.res_x, self.res_y, 4), maxshape=max_shape, chunks=True)
-            
+            # None allows unlimited growth in the first dimension
+            max_shape = (None, self.res_x, self.res_y, 4)
+            dataset = outfile.create_dataset("data", shape=(
+                0, self.res_x, self.res_y, 4), maxshape=max_shape, chunks=True)
+
             # metadata
             dataset.attrs["gamma"] = self.gamma
             dataset.attrs["xrange"] = (self.xmin, self.xmax)
             dataset.attrs["yrange"] = (self.ymin, self.ymax)
-            
+
             while t < T:
                 self.apply_bcs()
                 self.compute_flux()
@@ -196,7 +203,7 @@ class Sim_2D:
                 # at each checkpoint, save the current state excluding the ghost cells
                 if t >= next_checkpoint:
                     dataset.resize(dataset.shape[0] + 1, axis=0)
-                    dataset[-1] = self.U[1:-1, 1:-1]
+                    dataset[-1] = self.U[g:-g, g:-g]
                     next_checkpoint += save_interval
 
                 t = t + self.dt if (t + self.dt <= T) else T
@@ -204,8 +211,8 @@ class Sim_2D:
 
                 if plot:
                     fig.clear()
-                    plot_grid(self.gamma, self.U[1:-1, 1:-1], plot,
-                            extent=[self.xmin, self.xmax, self.ymin, self.ymax])
+                    plot_grid(self.gamma, self.U[g:-g, g:-g], plot,
+                              extent=[self.xmin, self.xmax, self.ymin, self.ymax])
                     plt.pause(0.001)
 
     # call in a loop to print dynamic progress bar

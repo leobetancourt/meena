@@ -14,8 +14,8 @@ parser.add_argument('-f', '--file', type=str, required=True,
                     help='The path to the .hdf file (required)')
 
 parser.add_argument('-o', '--output', type=str, required=True,
-                    choices=['density', 'u', 'v', 'pressure'],
-                    help='The variable to plot: density, u, v, or pressure (required)')
+                    choices=['density', 'u', 'v', 'pressure', 'energy'],
+                    help='The variable to plot: density, u, v, pressure or energy (required)')
 
 args = parser.parse_args()
 

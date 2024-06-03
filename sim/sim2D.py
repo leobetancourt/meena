@@ -1,4 +1,4 @@
-from sim.helpers import E, P, cartesian_to_polar, plot_grid
+from sim.helpers import E, P, get_prims, cartesian_to_polar, plot_grid
 from sim.solvers import HLL, HLLC
 
 import numpy as np
@@ -14,7 +14,7 @@ class Boundary:
 
 class Sim_2D:
     def __init__(self, gamma=1.4, resolution=(100, 100),
-                 xrange=(-1, 1), yrange=(-1, 1), solver="hll", order="first"):
+                 xrange=(-1, 1), yrange=(-1, 1), solver="hll", high_time=False, high_space=False):
         self.gamma = gamma
 
         # grid initialization
@@ -35,24 +35,19 @@ class Sim_2D:
 
         # conservative variable
         self.U = np.zeros((self.res_x, self.res_y, 4))
-        # flux in x: F = (rho * u, rho * u^2 + P, rho * u * v, (E + P) * u)
-        self.F = np.zeros((self.res_x, self.res_y, 4))
-        # flux in y: G = (rho * v, rho * u * v, rho * v^2 + P, (E + P) * v)
-        self.G = np.zeros((self.res_x, self.res_y, 4))
         # source term (function of U)
         self.S = None
 
-        if order != "first" and order != "high":
-            raise Exception("Invalid order: must be 'first' or 'high'")
-        self.order = order
+        self.high_time = high_time
+        self.high_space = high_space
         self.dt = self.dx
         self.cfl = 0.4
         if solver == "hll":
             self.solver = HLL(
-                gamma, resolution, self.num_g, self.x, self.y, self.dx, self.dy)
+                gamma, resolution, self.num_g, self.x, self.y, self.dx, self.dy, self.high_space)
         elif solver == "hllc":
             self.solver = HLLC(
-                gamma, resolution, self.num_g, self.x, self.y, self.dx, self.dy)
+                gamma, resolution, self.num_g, self.x, self.y, self.dx, self.dy, self.high_space)
         else:
             raise Exception("Invalid solver: must be 'hll' or 'hllc'")
 
@@ -120,25 +115,8 @@ class Sim_2D:
     def add_source(self, source):
         self.S = source
 
-    def compute_flux(self):
-        rho, u, v, p, E = self.get_vars()
-
-        self.F = np.array([
-            rho * u,
-            rho * (u ** 2) + p,
-            rho * u * v,
-            (E + p) * u
-        ]).transpose((1, 2, 0))  # transpose to match original shape (self.res_x, self.res_y, 4)
-
-        self.G = np.array([
-            rho * v,
-            rho * u * v,
-            rho * (v ** 2) + p,
-            (E + p) * v
-        ]).transpose((1, 2, 0))
-
     def compute_timestep(self):
-        rho, u, v, p, E = self.get_vars()
+        rho, u, v, p = get_prims(self.gamma, self.U)
         return self.cfl * \
             np.min(self.dx / (np.sqrt(self.gamma * p / rho) + np.sqrt(u**2 + v**2)))
 
@@ -148,7 +126,7 @@ class Sim_2D:
 
         if self.S:
             self.U = np.add(self.U, self.S(self.U) * (self.dt / 2))
-        L = self.solver.solve(self.U, self.F, self.G)
+        L = self.solver.solve(self.U)
         self.U[g:-g, g:-g, :] = np.add(self.U[g:-g, g:-g, :], L * self.dt)
         if self.S:
             self.U = np.add(self.U, self.S(self.U) * (self.dt / 2))
@@ -158,14 +136,14 @@ class Sim_2D:
         Third-order Runge-Kutta method
         """
         self.dt = self.compute_timestep()
-        L = self.solver.solve(self.U, self.F, self.G)
+        L = self.solver.solve(self.U)
         U_1 = np.add(self.U, L * self.dt)
 
-        L_1 = self.solver.solve(U_1, self.F, self.G)
+        L_1 = self.solver.solve(U_1)
         U_2 = np.add(np.add((3/4) * self.U, (1/4) * U_1),
                      (1/4) * self.dt * L_1)
 
-        L_2 = self.solver.solve(U_2, self.F, self.G)
+        L_2 = self.solver.solve(U_2)
         self.U = np.add(np.add((1/3) * self.U, (2/3) * U_2),
                         (2/3) * self.dt * L_2)
 
@@ -193,12 +171,11 @@ class Sim_2D:
 
             while t < T:
                 self.apply_bcs()
-                self.compute_flux()
 
-                if self.order == "first":
-                    self.first_order_step()
-                elif self.order == "high":
+                if self.high_time:
                     self.high_order_step()
+                else:
+                    self.first_order_step()
 
                 # at each checkpoint, save the current state excluding the ghost cells
                 if t >= next_checkpoint:

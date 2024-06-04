@@ -72,7 +72,7 @@ class Solver(ABC):
                    (prims_C - prims_LL), theta * (prims_C - prims_L))
 
         # right-biased state
-        prims_lr = prims_C + 0.5 * \
+        prims_lr = prims_C - 0.5 * \
             minmod(theta * (prims_C - prims_L), 0.5 *
                    (prims_R - prims_L), theta * (prims_R - prims_C))
 
@@ -83,7 +83,7 @@ class Solver(ABC):
                    (prims_R - prims_L), theta * (prims_R - prims_C))
 
         # right-biased state
-        prims_rr = prims_R + 0.5 * \
+        prims_rr = prims_R - 0.5 * \
             minmod(theta * (prims_R - prims_C), 0.5 *
                    (prims_RR - prims_C), theta * (prims_RR - prims_R))
 
@@ -141,9 +141,7 @@ class Solver(ABC):
 
     def solve(self, U):
         F_l, F_r, G_l, G_r = self.interface_flux(U)
-        L_ = self.L(F_l, F_r, G_l, G_r)
-
-        return L_
+        return self.L(F_l, F_r, G_l, G_r)
 
 
 class HLLC(Solver):

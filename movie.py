@@ -29,6 +29,7 @@ var = args.output
 with h5py.File(PATH, "r") as infile:
     dataset = infile["data"]
     history = dataset[...]
+    t_vals = dataset.attrs["t"]
     gamma = dataset.attrs["gamma"]
     xmin, xmax = dataset.attrs["xrange"]
     ymin, ymax = dataset.attrs["yrange"]
@@ -45,9 +46,11 @@ if not os.path.exists(PATH):
 cm = writer.saving(fig, f"{PATH}/{var}.mp4", 100)
 
 with cm:
-    for U in history:
+    for i in range(len(history)):
+        U = history[i]
+        t = t_vals[i]
         fig.clear()
-        plot_grid(gamma, U, plot=var, extent=[xmin, xmax, ymin, ymax])
+        plot_grid(gamma, U, t=t, plot=var, extent=[xmin, xmax, ymin, ymax])
         writer.grab_frame()
 
 print("Movie saved to", PATH)

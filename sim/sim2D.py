@@ -1,4 +1,4 @@
-from sim.helpers import E, P, get_prims, cartesian_to_polar, plot_grid
+from sim.helpers import c_s, E, P, get_prims, cartesian_to_polar, plot_grid
 from sim.solvers import HLL, HLLC
 
 import numpy as np
@@ -155,6 +155,7 @@ class Sim_2D:
 
         next_checkpoint = 0
         g = self.num_g
+        t_vals = []
 
         # open HDF5 file to save U state at each checkpoint
         with h5py.File(PATH, "w") as outfile:
@@ -168,6 +169,7 @@ class Sim_2D:
             dataset.attrs["gamma"] = self.gamma
             dataset.attrs["xrange"] = (self.xmin, self.xmax)
             dataset.attrs["yrange"] = (self.ymin, self.ymax)
+            dataset.attrs["t"] = []
 
             while t < T:
                 self.apply_bcs()
@@ -182,15 +184,17 @@ class Sim_2D:
                     dataset.resize(dataset.shape[0] + 1, axis=0)
                     dataset[-1] = self.U[g:-g, g:-g]
                     next_checkpoint += save_interval
+                    dataset.attrs["t"] = np.append(dataset.attrs["t"], t)
 
                 t = t + self.dt if (t + self.dt <= T) else T
                 self.print_progress_bar(t, T, suffix="complete", length=50)
 
                 if plot:
                     fig.clear()
-                    plot_grid(self.gamma, self.U[g:-g, g:-g], plot,
+                    plot_grid(self.gamma, self.U[g:-g, g:-g], t=t, plot=plot,
                               extent=[self.xmin, self.xmax, self.ymin, self.ymax])
                     plt.pause(0.001)
+                    
 
     # call in a loop to print dynamic progress bar
 
@@ -237,11 +241,13 @@ class Sim_2D:
         self.U = np.zeros((self.res_x, self.res_y, 4))
         g = -0.1
 
+        p_m = 2.5
+        cs = c_s(self.gamma, p_m, 2)
         for i in range(len(self.grid)):
             for j in range(len(self.grid[i])):
                 x = self.grid[i][j][0]
                 y = self.grid[i][j][1]
-                v = 0.0025 * (1-np.cos(4 * np.pi * x)) * \
+                v = (cs * 0.01) * (1-np.cos(4 * np.pi * x)) * \
                     (1-np.cos(4 * np.pi * y / 3))
 
                 if y >= 0.75:

@@ -37,6 +37,8 @@ class Sim_2D:
         self.U = np.zeros((self.res_x, self.res_y, 4))
         # source term (function of U)
         self.S = None
+        # kernel
+        self.A = np.zeros((self.res_x, self.res_y))
 
         self.high_time = high_time
         self.high_space = high_space
@@ -115,6 +117,15 @@ class Sim_2D:
     def add_source(self, source):
         self.S = source
 
+    def apply_kernel(self):
+        g = self.num_g
+        u = self.U[g:-g, g:-g, :]
+        rho = u[:, :, 0]
+        rho = rho - self.A * rho
+        rho[rho < 0] = 1e-6
+        u[:, :, 0] = rho
+        self.U[g:-g, g:-g, :] = u
+
     def compute_timestep(self):
         rho, u, v, p = get_prims(self.gamma, self.U)
         return self.cfl * \
@@ -122,14 +133,16 @@ class Sim_2D:
 
     def first_order_step(self):
         g = self.num_g
+        u = self.U[g:-g, g:-g, :]
         self.dt = self.compute_timestep()
 
-        if self.S:
-            self.U = np.add(self.U, self.S(self.U) * (self.dt / 2))
         L = self.solver.solve(self.U)
-        self.U[g:-g, g:-g, :] = np.add(self.U[g:-g, g:-g, :], L * self.dt)
+        u = u + L * self.dt
         if self.S:
-            self.U = np.add(self.U, self.S(self.U) * (self.dt / 2))
+            u = u + self.S(u) * self.dt        
+        self.U[g:-g, g:-g, :] = u
+        
+        self.apply_kernel()
 
     def high_order_step(self):
         """
@@ -146,6 +159,8 @@ class Sim_2D:
         L_2 = self.solver.solve(U_2)
         self.U = np.add(np.add((1/3) * self.U, (2/3) * U_2),
                         (2/3) * self.dt * L_2)
+    
+        self.apply_kernel()
 
     def run(self, T, plot=None, filename="out", save_interval=0.1):
         t = 0
@@ -155,7 +170,6 @@ class Sim_2D:
 
         next_checkpoint = 0
         g = self.num_g
-        t_vals = []
 
         # open HDF5 file to save U state at each checkpoint
         with h5py.File(PATH, "w") as outfile:
@@ -194,7 +208,6 @@ class Sim_2D:
                     plot_grid(self.gamma, self.U[g:-g, g:-g], t=t, plot=plot,
                               extent=[self.xmin, self.xmax, self.ymin, self.ymax])
                     plt.pause(0.001)
-                    
 
     # call in a loop to print dynamic progress bar
 
@@ -282,3 +295,39 @@ class Sim_2D:
                     p = 2.5
                     self.U[i][j] = np.array(
                         [rho, u, v, E(self.gamma, rho, p, u, v)])
+
+    def kepler(self):
+        r, theta = cartesian_to_polar(self.grid[:, :, 0], self.grid[:, :, 1])
+        eps = 0.01
+        G = 1
+        M = 1
+        g = G * M / ((r + eps) ** 2)
+        rho = np.ones_like(r) * 0.1
+        p = np.ones_like(r) * rho * g * r
+
+        # Keplerian velocity for a circular orbit: v = sqrt(GM/r)
+        v_kep = np.sqrt(G * M / (r + eps))
+        u = - v_kep * np.sin(theta)
+        v = v_kep * np.cos(theta)
+        self.U = np.array([
+            rho,
+            rho * u,
+            rho * v,
+            E(self.gamma, rho, p, u, v)
+        ]).transpose((1, 2, 0))
+
+        def gravity(U):
+            S = np.zeros_like(U)
+            rho, u, v, p = get_prims(self.gamma, U)
+            S[:, :, 1] = rho * g * -np.cos(theta)
+            S[:, :, 2] = rho * g * -np.sin(theta)
+            S[:, :, 3] = g * rho * np.sqrt(u**2 + v**2)
+            return S
+
+        self.add_source(gravity)
+
+        # Gaussian kernel
+        a = 0.1
+        b = 0.0001
+        A = a * np.exp(-(r ** 2) / b)
+        self.A = A

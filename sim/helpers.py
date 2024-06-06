@@ -59,7 +59,7 @@ def enthalpy(rho, p, E):
 
 
 def minmod(x, y, z):
-    return 0.25 * np.absolute(np.sign(x) + np.sign(y)) * (np.sign(x) + np.sign(z)) * np.minimum(np.absolute(x), np.minimum(np.absolute(y), np.absolute(z)))
+    return 0.25 * np.absolute(np.sign(x) + np.sign(y)) * (np.sign(x) + np.sign(z)) * np.minimum(np.minimum(np.absolute(x), np.absolute(y)), np.absolute(z))
 
 
 def cartesian_to_polar(x, y):
@@ -81,7 +81,7 @@ def plot_grid(gamma, U, t=0, plot="density", extent=[0, 1, 0, 1]):
     u, v, E = U[:, :, 1] / rho, U[:, :, 2] / rho, U[:, :, 3]
     p = P(gamma, rho, u, v, E)
     labels = {"density": r"$\rho$", "u": r"$u$",
-              "v": r"$v$", "pressure": r"$P$", "E": r"$E$", }
+              "v": r"$v$", "pressure": r"$P$", "energy": r"$E$", }
 
     plt.cla()
     if plot == "density":

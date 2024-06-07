@@ -53,12 +53,6 @@ class Sim_2D:
         else:
             raise Exception("Invalid solver: must be 'hll' or 'hllc'")
 
-    def get_vars(self):
-        rho = self.U[:, :, 0]
-        u, v, E = self.U[:, :, 1] / rho, self.U[:, :, 2] / rho, self.U[:, :, 3]
-        p = P(self.gamma, rho, u, v, E)
-        return rho, u, v, p, E
-
     def add_ghost_cells(self):
         # add ghost cells to the top and bottom boundaries
         self.U = np.hstack((np.repeat(self.U[:, :1, :], self.num_g, axis=1), self.U, np.repeat(
@@ -77,19 +71,19 @@ class Sim_2D:
         g = self.num_g
         # left
         if self.bc_x[0] == Boundary.OUTFLOW:
-            self.U[:g, :, :] = self.U[g, :, :]
-        elif self.bc_x[0] == Boundary.REFLECTIVE:
             self.U[:g, :, :] = self.U[g:(g+1), :, :]
-            self.U[:g, :, 1] = -self.U[g:(g+1), :, 1]  # invert x momentum
+        elif self.bc_x[0] == Boundary.REFLECTIVE:
+            self.U[:g, :, :] = np.flip(self.U[g:(2*g), :, :], axis=0)
+            self.U[:g, :, 1] = -np.flip(self.U[g:(2*g), :, 1], axis=0)  # invert x momentum
         elif self.bc_x[0] == Boundary.PERIODIC:
             self.U[:g, :, :] = self.U[(-2*g):(-g), :, :]
 
         # right
         if self.bc_x[1] == Boundary.OUTFLOW:
-            self.U[-g:, :, :] = self.U[-(g+1), :, :]
+            self.U[-g:, :, :] = self.U[-(g+1):(-g), :, :]
         elif self.bc_x[1] == Boundary.REFLECTIVE:
-            self.U[-g:, :, :] = self.U[-(g+1):-g, :, :]
-            self.U[-g:, :, 1] = -self.U[-(g+1):-g, :, 1]  # invert x momentum
+            self.U[-g:, :, :] = np.flip(self.U[(-2*g):(-g), :, :], axis=0)
+            self.U[-g:, :, 1] = -np.flip(self.U[(-2*g):(-g), :, 1], axis=0)  # invert x momentum
         elif self.bc_x[1] == Boundary.PERIODIC:
             self.U[-g:, :, :] = self.U[g:(2*g), :, :]
 
@@ -97,34 +91,34 @@ class Sim_2D:
         if self.bc_y[0] == Boundary.OUTFLOW:
             self.U[:, :g, :] = self.U[:, g:(g+1), :]
         elif self.bc_y[0] == Boundary.REFLECTIVE:
-            self.U[:, :g, :] = self.U[:, g:(g+1), :]
-            self.U[:, :g, 2] = -self.U[:, g:(g+1), 2]  # invert y momentum
+            self.U[:, :g, :] = np.flip(self.U[:, g:(2*g), :], axis=1)
+            self.U[:, :g, 2] = -np.flip(self.U[:, g:(2*g), 2], axis=1)  # invert y momentum
         elif self.bc_y[0] == Boundary.PERIODIC:
             self.U[:, :g, :] = self.U[:, (-2*g):(-g), :]
 
         # top
         if self.bc_y[1] == Boundary.OUTFLOW:
-            self.U[:, -g:, :] = self.U[:, -(g+1):-g, :]
+            self.U[:, -g:, :] = self.U[:, -(g+1):(-g), :]
         elif self.bc_y[1] == Boundary.REFLECTIVE:
-            self.U[:, -g:, :] = self.U[:, -(g+1):-g, :]
-            self.U[:, -g:, 2] = -self.U[:, -(g+1):-g, 2]  # invert y momentum
+            self.U[:, -g:, :] = np.flip(self.U[:, (-2*g):(-g), :], axis=1)
+            self.U[:, -g:, 2] = -np.flip(self.U[:, (-2*g):(-g), 2], axis=1)  # invert y momentum
         elif self.bc_y[1] == Boundary.PERIODIC:
             self.U[:, -g:, :] = self.U[:, g:(2*g), :]
-
-    def initialize(self, U):
-        self.U = U
 
     def add_source(self, source):
         self.S = source
 
     def apply_kernel(self):
         g = self.num_g
-        u = self.U[g:-g, g:-g, :]
-        rho = u[:, :, 0]
+        rho, u, v, p = get_prims(self.gamma, self.U[g:-g, g:-g, :])
         rho = rho - self.A * rho
-        rho[rho < 0] = 1e-6
-        u[:, :, 0] = rho
-        self.U[g:-g, g:-g, :] = u
+        rho[rho <= 0] = 1e-6
+        self.U[g:-g, g:-g, :] = np.array([
+            rho,
+            rho * u,
+            rho * v,
+            E(self.gamma, rho, p, u, v)
+        ]).transpose((1, 2, 0))
 
     def compute_timestep(self):
         rho, u, v, p = get_prims(self.gamma, self.U)
@@ -139,9 +133,9 @@ class Sim_2D:
         L = self.solver.solve(self.U)
         u = u + L * self.dt
         if self.S:
-            u = u + self.S(u) * self.dt        
+            u = u + self.S(u) * self.dt
         self.U[g:-g, g:-g, :] = u
-        
+
         self.apply_kernel()
 
     def high_order_step(self):
@@ -159,7 +153,7 @@ class Sim_2D:
         L_2 = self.solver.solve(U_2)
         self.U = np.add(np.add((1/3) * self.U, (2/3) * U_2),
                         (2/3) * self.dt * L_2)
-    
+
         self.apply_kernel()
 
     def run(self, T, plot=None, filename="out", save_interval=0.1):
@@ -302,7 +296,7 @@ class Sim_2D:
         G = 1
         M = 1
         g = G * M / ((r + eps) ** 2)
-        rho = np.ones_like(r) * 0.1
+        rho = np.ones_like(r) * 1  # try varying density
         p = np.ones_like(r) * rho * g * r
 
         # Keplerian velocity for a circular orbit: v = sqrt(GM/r)
@@ -328,6 +322,6 @@ class Sim_2D:
 
         # Gaussian kernel
         a = 0.1
-        b = 0.0001
+        b = 0.001
         A = a * np.exp(-(r ** 2) / b)
         self.A = A

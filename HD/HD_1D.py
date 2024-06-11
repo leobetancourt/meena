@@ -167,7 +167,7 @@ class PLM_Solver:
         return L_
 
 
-class Sim_1D:
+class HD_1D:
     def __init__(self, gamma=1.4, resolution=100, polar=False, method="HLL", order="first"):
         self.gamma = gamma
         self.res = resolution

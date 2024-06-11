@@ -1,4 +1,4 @@
-from sim.helpers import E, F_from_prim, U_from_prim, enthalpy, c_s, get_prims, minmod
+from HD.helpers import E, F_from_prim, U_from_prim, enthalpy, c_s, get_prims, minmod
 
 from abc import ABC, abstractmethod
 import numpy as np

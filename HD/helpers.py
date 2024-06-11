@@ -2,6 +2,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
+def c_s(gamma, P, rho):
+    return np.sqrt(gamma * P / rho)
+
+
+def enthalpy(rho, p, E):
+    return (E + p) / rho
+
+
 def E(gamma, rho, p, u, v):
     return (p / (gamma - 1)) + (0.5 * rho * (u ** 2 + v ** 2))
 
@@ -9,32 +17,37 @@ def E(gamma, rho, p, u, v):
 def P(gamma, rho, u, v, E):
     return (gamma - 1) * (E - (0.5 * rho * (u ** 2 + v ** 2)))
 
-# returns rho, u, v, p
-
 
 def get_prims(gamma, U):
+    """
+        Returns:
+            rho, u, v, p
+    """
+    U = np.copy(U)
     rho = U[:, :, 0]
     u, v = U[:, :, 1] / rho, U[:, :, 2] / rho
     E = U[:, :, 3]
     p = P(gamma, rho, u, v, E)
     return rho, u, v, p
 
-# returns rho, rho * u, rho * v, E
-
 
 def get_cons(gamma, U):
+    """
+        Returns:
+            rho, rho * u, rho * v, E
+    """
     return U[:, :, 0], U[:, :, 1], U[:, :, 2], U[:, :, 3]
 
 
 def U_from_prim(gamma, prims):
-    rho, u, v, p = prims[0], prims[1], prims[2], prims[3]
+    rho, u, v, p = prims
     e = E(gamma, rho, p, u, v)
     U = np.array([rho, rho * u, rho * v, e]).transpose((1, 2, 0))
     return U
 
 
 def F_from_prim(gamma, prims, x=True):
-    rho, u, v, p = prims[0], prims[1], prims[2], prims[3]
+    rho, u, v, p = prims
     e = E(gamma, rho, p, u, v)
     if x:
         F = np.array([
@@ -54,10 +67,6 @@ def F_from_prim(gamma, prims, x=True):
     return F
 
 
-def enthalpy(rho, p, E):
-    return (E + p) / rho
-
-
 def minmod(x, y, z):
     return 0.25 * np.absolute(np.sign(x) + np.sign(y)) * (np.sign(x) + np.sign(z)) * np.minimum(np.minimum(np.absolute(x), np.absolute(y)), np.absolute(z))
 
@@ -65,15 +74,11 @@ def minmod(x, y, z):
 def cartesian_to_polar(x, y):
     r = np.sqrt(x ** 2 + y ** 2)
     theta = np.arctan2(y, x)
-    return (r, theta)
+    return r, theta
 
 
 def polar_to_cartesian(r, theta):
     return (r * np.cos(theta), r * np.sin(theta))
-
-
-def c_s(gamma, P, rho):
-    return np.sqrt(gamma * P / rho)
 
 
 def plot_grid(gamma, U, t=0, plot="density", extent=[0, 1, 0, 1]):
@@ -85,9 +90,8 @@ def plot_grid(gamma, U, t=0, plot="density", extent=[0, 1, 0, 1]):
 
     plt.cla()
     if plot == "density":
-        # plot density matrix (excluding ghost cells)
         c = plt.imshow(np.transpose(rho), cmap="plasma", interpolation='nearest',
-                       origin='lower', extent=extent)
+                       origin='lower', extent=extent, vmin=0, vmax=1)
     elif plot == "u":
         c = plt.imshow(np.transpose(u), cmap="plasma", interpolation='nearest',
                        origin='lower', extent=extent)

@@ -37,8 +37,6 @@ class HD_2D:
         self.U = np.zeros((self.res_x, self.res_y, 4))
         # source terms (each a function of U)
         self.S = []
-        # kernel
-        self.A = np.zeros((self.res_x, self.res_y))
 
         self.high_time = high_time
         self.high_space = high_space
@@ -193,7 +191,7 @@ class HD_2D:
             dataset.attrs["t"] = []
 
             while t < T:
-                self.check_physical()
+                # self.check_physical()
                 self.apply_bcs()
 
                 if self.high_time:
@@ -342,7 +340,7 @@ class HD_2D:
             rho, u, v, p = get_prims(self.gamma, U)
             S[:, :, 1] = rho * g * np.cos(theta)
             S[:, :, 2] = rho * g * np.sin(theta)
-            S[:, :, 3] = g * rho * np.sqrt(u**2 + v**2)
+            S[:, :, 3] = 0 # g * rho * np.sqrt(u**2 + v**2)
             return S
 
         self.add_source(gravity)

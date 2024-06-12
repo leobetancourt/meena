@@ -20,26 +20,6 @@ class Solver(ABC):
     def L(self, F_l, F_r, G_l, G_r):
         return - ((F_r - F_l) / self.dx) - ((G_r - G_l) / self.dy)
 
-    def compute_flux(self, U):
-        rho, u, v, p = get_prims(self.gamma, U)
-        e = E(self.gamma, rho, p, u, v)
-
-        F = np.array([
-            rho * u,
-            rho * (u ** 2) + p,
-            rho * u * v,
-            (e + p) * u
-        ]).transpose((1, 2, 0))  # transpose to match original shape (self.res_x, self.res_y, 4)
-
-        G = np.array([
-            rho * v,
-            rho * u * v,
-            rho * (v ** 2) + p,
-            (e + p) * v
-        ]).transpose((1, 2, 0))
-
-        return F, G
-
     # returns U_rl, U_rr, U_ll, U_lr, F_rl, F_rr, F_ll, F_lr
     def PLM_states(self, U, x=True):
         g = self.num_g
@@ -113,7 +93,10 @@ class Solver(ABC):
             # G_(i+1/2)
             G_r = self.flux(G_rl, G_rr, U_rl, U_rr, x=False)
         else:
-            F, G = self.compute_flux(U)
+            rho, u, v, p = get_prims(self.gamma, U)            
+            F = F_from_prim(self.gamma, (rho, u, v, p), x=True)
+            G = F_from_prim(self.gamma, (rho, u, v, p), x=False)
+            
             F_L = F[(g-1):-(g+1), g:-g, :]
             F_R = F[(g+1):-(g-1), g:-g, :]
             G_L = G[g:-g, (g-1):-(g+1), :]

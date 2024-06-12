@@ -91,7 +91,7 @@ def plot_grid(gamma, U, t=0, plot="density", extent=[0, 1, 0, 1]):
     plt.cla()
     if plot == "density":
         c = plt.imshow(np.transpose(rho), cmap="plasma", interpolation='nearest',
-                       origin='lower', extent=extent, vmin=0, vmax=1)
+                       origin='lower', extent=extent)
     elif plot == "u":
         c = plt.imshow(np.transpose(u), cmap="plasma", interpolation='nearest',
                        origin='lower', extent=extent)

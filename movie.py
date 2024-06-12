@@ -1,4 +1,4 @@
-from sim.HD.helpers import plot_grid
+from HD.helpers import plot_grid
 import h5py
 import os
 from argparse import ArgumentParser

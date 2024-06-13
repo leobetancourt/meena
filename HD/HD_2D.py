@@ -121,14 +121,17 @@ class HD_2D:
         might need to exclude zones below a certain density from compute_timestep()
         write 1D MHD and run test problems
     """
+
     def check_physical(self):
         g = self.num_g
         u = self.U[g:-g, g:-g]
         for i in range(len(u)):
             for j in range(len(u[i])):
                 cons = u[i][j]
-                if np.isnan(cons[0]) or cons[0] <= 0: print(f"rho={cons[0]} at ({self.x[i]}, {self.y[j]})")
-                if np.isnan(cons[3]) or cons[3] <= 0: print(f"E={cons[3]} at ({self.x[i]}, {self.y[j]})")
+                if np.isnan(cons[0]) or cons[0] <= 0:
+                    print(f"rho={cons[0]} at ({self.x[i]}, {self.y[j]})")
+                if np.isnan(cons[3]) or cons[3] <= 0:
+                    print(f"E={cons[3]} at ({self.x[i]}, {self.y[j]})")
 
         # rho = self.U[:, :, 0]
         # momx = self.U[:, :, 1]
@@ -320,7 +323,7 @@ class HD_2D:
         mach = 10
         G = 1
         M = 1
-        g = -0.1 # G * M / ((r + eps) ** 2)
+        g = -0.1  # G * M / ((r + eps) ** 2)
         rho = np.ones_like(r) * 1
         v_k = np.sqrt(G * M / (r + eps))  # keplerian velocity
         cs = v_k / mach
@@ -340,7 +343,7 @@ class HD_2D:
             rho, u, v, p = get_prims(self.gamma, U)
             S[:, :, 1] = rho * g * np.cos(theta)
             S[:, :, 2] = rho * g * np.sin(theta)
-            S[:, :, 3] = 0 # g * rho * np.sqrt(u**2 + v**2)
+            S[:, :, 3] = 0  # g * rho * np.sqrt(u**2 + v**2)
             return S
 
         self.add_source(gravity)

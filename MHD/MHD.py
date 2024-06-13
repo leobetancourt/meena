@@ -1,4 +1,4 @@
-from MHD.helpers import c_s, c_fm, E, P, get_prims, plot_grid
+from MHD.helpers import c_s, c_fm, E, P, get_prims, cartesian_to_polar, plot_grid
 from MHD.solvers import HLL
 
 import numpy as np
@@ -37,13 +37,13 @@ class MHD:
         self.set_bcs()
 
         # conservative variable
-        self.U = np.zeros((self.res_x, self.res_y, self.res_y, 8))
+        self.U = np.zeros((self.res_x, self.res_y, self.res_z, 8))
         # source terms (each a function of U)
         self.S = []
 
         self.high_time = high_time
         self.dt = self.dx
-        self.cfl = 1
+        self.cfl = 0.4
         self.solver = HLL(gamma, resolution, self.num_g, self.x,
                           self.y, self.z, self.dx, self.dy, self.dz)
 
@@ -113,7 +113,7 @@ class MHD:
             self.U[:, -g:, :, :] = self.U[:, -(g+1):(-g), :, :]
         elif self.bc_y[1] == Boundary.REFLECTIVE:
             self.U[:, -g:, :,
-                :] = np.flip(self.U[:, (-2*g):(-g), :, :], axis=1)
+                   :] = np.flip(self.U[:, (-2*g):(-g), :, :], axis=1)
             # invert y momentum
             self.U[:, -g:, :, 2] = - \
                 np.flip(self.U[:, (-2*g):(-g), :, 2], axis=1)
@@ -135,7 +135,7 @@ class MHD:
             self.U[:, :, -g:, :] = self.U[:, :, -(g+1):(-g), :]
         elif self.bc_z[1] == Boundary.REFLECTIVE:
             self.U[:, :, -g:,
-                :] = np.flip(self.U[:, :, (-2*g):(-g), :], axis=2)
+                   :] = np.flip(self.U[:, :, (-2*g):(-g), :], axis=2)
             # invert y momentum
             self.U[:, :, -g:, 3] = - \
                 np.flip(self.U[:, :, (-2*g):(-g), 3], axis=2)
@@ -147,7 +147,9 @@ class MHD:
 
     def compute_timestep(self):
         rho, u, v, w, p, Bx, By, Bz = get_prims(self.gamma, self.U)
-        cfm = c_fm(self.gamma, p, rho, Bx, By, Bz)
+        cfm = np.maximum(c_fm(self.gamma, p, rho, Bx, By, Bz, dir="x"),
+                         c_fm(self.gamma, p, rho, Bx, By, Bz, dir="y"),
+                         c_fm(self.gamma, p, rho, Bx, By, Bz, dir="y"))
         return self.cfl * np.min(self.dx / (np.sqrt(u ** 2 + v ** 2 + w ** 2) + cfm))
 
     def first_order_step(self):
@@ -183,6 +185,11 @@ class MHD:
 
         next_checkpoint = 0
         g = self.num_g
+        
+        # plot_grid(self.gamma, self.U[g:-g, g:-g, g:-g], t=t, plot=plot, extent=[
+        #                       self.xmin, self.xmax, self.ymin, self.ymax])
+        # plt.show()
+        # return
 
         # open HDF5 file to save U state at each checkpoint
         with h5py.File(PATH, "w") as outfile:
@@ -219,7 +226,8 @@ class MHD:
 
                 if plot:
                     fig.clear()
-                    plot_grid(self.gamma, self.U[g:-g, g:-g, g:-g], t=t, plot=plot, extent=[self.xmin, self.xmax, self.ymin, self.ymax])
+                    plot_grid(self.gamma, self.U[g:-g, g:-g, g:-g], t=t, plot=plot, extent=[
+                              self.xmin, self.xmax, self.ymin, self.ymax])
                     plt.pause(0.001)
 
             plt.show()
@@ -227,10 +235,10 @@ class MHD:
     # call in a loop to print dynamic progress bar
 
     def print_progress_bar(self, iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█', printEnd="\r"):
-        percent= ("{0:." + str(decimals) + "f}").format(100 *
+        percent = ("{0:." + str(decimals) + "f}").format(100 *
                                                          (iteration / float(total)))
-        filledLength= int(length * iteration // total)
-        bar= fill * filledLength + '-' * (length - filledLength)
+        filledLength = int(length * iteration // total)
+        bar = fill * filledLength + '-' * (length - filledLength)
         print(f'\r{prefix} |{bar}| {percent}% {suffix}', end=printEnd)
         # print new line on complete
         if iteration == total:
@@ -238,11 +246,21 @@ class MHD:
 
     # Brio and Wu shock tube
     def shock_tube(self):
-        Bx= 0.75
-        rho_L, u_L, v_L, w_L, Bx_L, By_L, Bz_L, p_L= 1, 0, 0, 0, Bx, 1, 0, 1
-        rho_R, u_R, v_R, w_R, Bx_R, By_R, Bz_R, p_R= 0.125, 0, 0, 0, Bx, -1, 0, 0.1
-        E_L= E(self.gamma, rho_L, u_L, v_L, w_L, p_L, Bx_L, By_L, Bz_L)
-        U_L= np.array([rho_L, rho_L * u_L, rho_L * v_L, rho_L * w_L, Bx_L, By_L, Bz_L, E_L])
-        E_R= E(self.gamma, rho_R, u_R, v_R, w_R, p_R, Bx_R, By_R, Bz_R)
-        U_R= np.array([rho_R, rho_R * u_R, rho_R * v_R, rho_R * w_R, Bx_R, By_R, Bz_R, E_R])
-        self.U= np.array([[[U_L if x <= 0 else U_R]] for x in self.x])
+        Bx = 0.75
+        rho_L, u_L, v_L, w_L, Bx_L, By_L, Bz_L, p_L = 1, 0, 0, 0, Bx, 1, 0, 1
+        rho_R, u_R, v_R, w_R, Bx_R, By_R, Bz_R, p_R = 0.125, 0, 0, 0, Bx, -1, 0, 0.1
+        E_L = E(self.gamma, rho_L, u_L, v_L, w_L, p_L, Bx_L, By_L, Bz_L)
+        U_L = np.array([rho_L, rho_L * u_L, rho_L * v_L,
+                       rho_L * w_L, Bx_L, By_L, Bz_L, E_L])
+        E_R = E(self.gamma, rho_R, u_R, v_R, w_R, p_R, Bx_R, By_R, Bz_R)
+        U_R = np.array([rho_R, rho_R * u_R, rho_R * v_R,
+                       rho_R * w_R, Bx_R, By_R, Bz_R, E_R])
+        self.U = np.array([[[U_L if x <= 0 else U_R]] for x in self.x])
+
+    def spherical_blast(self):
+        r, _ = cartesian_to_polar(self.grid[:, :, :, 0], self.grid[:, :, :, 1])
+        B = 1 / np.sqrt(2)
+        En = E(self.gamma, 1, 0, 0, 0, 10, B, B, 0)
+        self.U[r < 0.1] = np.array([1, 0, 0, 0, B, B, 0, En])
+        En = E(self.gamma, 1, 0, 0, 0, 0.1, B, B, 0)
+        self.U[r >= 0.1] = np.array([1, 0, 0, 0, B, B, 0, En])

@@ -1,5 +1,5 @@
 from HD.helpers import plot_grid
-from MHD.helpers import plot_1d
+from MHD.helpers import plot_grid as plot_MHD
 import h5py
 import os
 from argparse import ArgumentParser
@@ -57,7 +57,7 @@ with cm:
         else: # MHD
             x = np.linspace(xmin, xmax,
                         num=U.shape[0], endpoint=False)
-            plot_1d(gamma, x, U, t=t, plot=var)
+            plot_MHD(gamma, U, t=t, plot=var, extent=[xmin, xmax, ymin, ymax])
         writer.grab_frame()
 
 print("Movie saved to", PATH)

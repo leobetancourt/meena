@@ -24,7 +24,8 @@ class Solver(ABC):
 
         rho, u, v, w, p, Bx, By, Bz = get_prims(self.gamma, U)
         F = F_from_prim(self.gamma, (rho, u, v, w, p, Bx, By, Bz), dir="x")
-        G, H = np.zeros_like(F), np.zeros_like(F)
+        G = F_from_prim(self.gamma, (rho, u, v, w, p, Bx, By, Bz), dir="y")
+        H = F_from_prim(self.gamma, (rho, u, v, w, p, Bx, By, Bz), dir="z")
 
         F_L = F[(g-1):-(g+1), g:-g, g:-g, :]
         F_R = F[(g+1):-(g-1), g:-g, g:-g, :]
@@ -71,7 +72,7 @@ class HLL(Solver):
     # returns (lambda_plus, lambda_minus)
     def lambdas(self, U, dir="x"):
         rho, u, v, w, p, Bx, By, Bz = get_prims(self.gamma, U)
-        cfm = c_fm(self.gamma, p, rho, Bx, By, Bz)
+        cfm = c_fm(self.gamma, p, rho, Bx, By, Bz, dir)
         if dir == "x": vel = u
         elif dir == "y": vel = v
         elif dir == "z": vel = w

@@ -12,7 +12,7 @@ if __name__ == "__main__":
     #             (Boundary.OUTFLOW, Boundary.OUTFLOW))
     # sim.sedov_blast()
     # sim.run(T=2, filename="sedov", save_interval=0.01)
-    
+
     # sim = HD_2D(gamma=5/3, resolution=(200, 200),
     #              xrange=(0, 1), yrange=(0, 1), solver="hllc", high_space=True)
     # sim.set_bcs((Boundary.PERIODIC, Boundary.PERIODIC),
@@ -33,7 +33,14 @@ if __name__ == "__main__":
     #             (Boundary.OUTFLOW, Boundary.OUTFLOW))
     # sim.kepler()
     # sim.run(T=2, plot="energy", filename="kepler", save_interval=0.01)
-    
-    sim = MHD(gamma=2, resolution=(800, 1, 1), xrange=(-1, 1))
-    sim.shock_tube()
-    sim.run(T=0.2, plot="By", filename="BW", save_interval=0.01)
+
+    # sim = MHD(gamma=2, resolution=(800, 1, 1), xrange=(-1, 1))
+    # sim.shock_tube()
+    # sim.run(T=0.2, plot="By", filename="BW", save_interval=0.01)
+
+    sim = MHD(gamma=5/3, resolution=(300, 450, 1), xrange=(-0.5, 0.5), yrange=(-0.75, 0.75))
+    sim.set_bcs((Boundary.PERIODIC, Boundary.PERIODIC),
+                (Boundary.PERIODIC, Boundary.PERIODIC),
+                (Boundary.PERIODIC, Boundary.PERIODIC))
+    sim.spherical_blast()
+    sim.run(T=1, plot="density", filename="MHD blast", save_interval=0.01)

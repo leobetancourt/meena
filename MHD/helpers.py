@@ -14,14 +14,16 @@ def c_A(rho, Bx, By, Bz):
     return np.sqrt((Bx ** 2 + By ** 2 + Bz ** 2) / rho)
 
 
-def c_fm(gamma, P, rho, Bx, By, Bz):
+def c_fm(gamma, P, rho, Bx, By, Bz, dir="x"):
     """
         Returns:
             Fast magnetosonic speed
     """
     c_s2 = c_s(gamma, P, rho) ** 2
     c_A2 = c_A(rho, Bx, By, Bz) ** 2
-    c_Ax2 = (Bx ** 2) / rho
+    if dir == "x": c_Ax2 = (Bx ** 2) / rho
+    elif dir == "y": c_Ax2 = (By ** 2) / rho
+    elif dir == "z": c_Ax2 = (Bz ** 2) / rho
 
     return np.sqrt(0.5 * (c_s2 + c_A2) + 0.5 * np.sqrt((c_s2 + c_A2) ** 2 - 4 * c_s2 * c_Ax2))
 
@@ -112,11 +114,35 @@ def F_from_prim(gamma, prims, dir="x"):
             Bz * u - w * Bx,
             u * (En + p + 0.5 * B2) - Bx * (u * Bx + v * By + w * Bz)
         ]).transpose((1, 2, 3, 0))
-    else:
-        pass  # implement flux in y and z
+    elif dir == "y":
+        F = np.array([
+            rho * v,
+            rho * v * u - By * Bx,
+            rho * (v ** 2) + p + 0.5 * B2 - By**2,
+            rho * v * w - By * Bz,
+            Bx * v - u * By,
+            np.zeros_like(rho),
+            Bz * v - w * By,
+            v * (En + p + 0.5 * B2) - By * (u * Bx + v * By + w * Bz)
+        ]).transpose((1, 2, 3, 0))
+    elif dir == "z":
+        F = np.array([
+            rho * w,
+            rho * w * u - Bz * Bx,
+            rho * w * v - Bz * By,
+            rho * (w ** 2) + p + 0.5 * B2 - Bz**2,
+            Bx * w - u * Bz,
+            By * w - v * Bz,
+            np.zeros_like(rho),
+            w * (En + p + 0.5 * B2) - Bz * (u * Bx + v * By + w * Bz)
+        ]).transpose((1, 2, 3, 0))
 
     return F
 
+def cartesian_to_polar(x, y):
+    r = np.sqrt(x ** 2 + y ** 2)
+    theta = np.arctan2(y, x)
+    return r, theta
 
 def plot_grid(gamma, U, t=0, plot="density", x=None, extent=None):
     rho, u, v, w, p, Bx, By, Bz = get_prims(gamma, U)
@@ -135,6 +161,9 @@ def plot_grid(gamma, U, t=0, plot="density", x=None, extent=None):
                            origin='lower', extent=extent)
         elif plot == "w":
             c = plt.imshow(np.transpose(v[:, :, 0]), cmap="plasma", interpolation='nearest',
+                           origin='lower', extent=extent)
+        elif plot == "pressure":
+            c = plt.imshow(np.transpose(p[:, :, 0]), cmap="plasma", interpolation='nearest',
                            origin='lower', extent=extent)
         elif plot == "By":
             c = plt.imshow(np.transpose(By[:, :, 0]), cmap="plasma", interpolation='nearest',

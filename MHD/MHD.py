@@ -12,7 +12,7 @@ class Boundary:
     PERIODIC = "periodic"
 
 
-class MHD_1D:
+class MHD:
     def __init__(self, gamma=1.4, resolution=(100, 100, 100),
                  xrange=(-1, 1), yrange=(-1, 1), zrange=(-1, 1), solver="hll", high_time=False, high_space=False):
         self.gamma = gamma
@@ -143,9 +143,7 @@ class MHD_1D:
     def compute_timestep(self):
         rho, u, v, w, p, Bx, By, Bz = get_prims(self.gamma, self.U)
         cfm = c_fm(self.gamma, p, rho, Bx, By, Bz)
-        s1, s2 = np.abs(u - cfm), np.abs(u + cfm)
-        s = np.maximum(s1, s2)
-        return self.cfl * np.min(self.dx / s)
+        return self.cfl * np.min(self.dx / (np.sqrt(u ** 2 + v ** 2 + w ** 2) + cfm))
 
     def first_order_step(self):
         g = self.num_g

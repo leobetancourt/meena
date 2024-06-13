@@ -1,4 +1,5 @@
 from HD.helpers import plot_grid
+from MHD.helpers import plot_1d
 import h5py
 import os
 from argparse import ArgumentParser
@@ -14,7 +15,7 @@ parser.add_argument('-f', '--file', type=str, required=True,
                     help='The path to the .hdf file (required)')
 
 parser.add_argument('-o', '--output', type=str, required=True,
-                    choices=['density', 'u', 'v', 'pressure', 'energy'],
+                    choices=['density', 'u', 'v', 'w', 'pressure', 'energy', 'Bx', 'By', 'Bz'],
                     help='The variable to plot: density, u, v, pressure or energy (required)')
 
 args = parser.parse_args()
@@ -33,6 +34,7 @@ with h5py.File(PATH, "r") as infile:
     gamma = dataset.attrs["gamma"]
     xmin, xmax = dataset.attrs["xrange"]
     ymin, ymax = dataset.attrs["yrange"]
+    zmin, zmax = dataset.attrs["zrange"]
 
 fig = plt.figure()
 fps = 12
@@ -50,7 +52,12 @@ with cm:
         U = history[i]
         t = t_vals[i]
         fig.clear()
-        plot_grid(gamma, U, t=t, plot=var, extent=[xmin, xmax, ymin, ymax])
+        if U.shape[-1] == 4: # HD
+            plot_grid(gamma, U, t=t, plot=var, extent=[xmin, xmax, ymin, ymax])
+        else: # MHD
+            x = np.linspace(xmin, xmax,
+                        num=U.shape[0], endpoint=False)
+            plot_1d(gamma, x, U, t=t, plot=var)
         writer.grab_frame()
 
 print("Movie saved to", PATH)

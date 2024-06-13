@@ -48,16 +48,16 @@ class Solver(ABC):
         U_L = U[g:-g, (g-1):-(g+1), g:-g, :]
         U_R = U[g:-g, (g+1):-(g-1), g:-g, :]
         # G_(i-1/2)
-        G_l = np.zeros_like(F_l) # self.flux(G_L, G_C, U_L, U_C, dir="y")
+        G_l = self.flux(G_L, G_C, U_L, U_C, dir="y")
         # G_(i+1/2)
-        G_r = np.zeros_like(F_l) # self.flux(G_C, G_R, U_C, U_R, dir="y")
+        G_r = self.flux(G_C, G_R, U_C, U_R, dir="y")
 
         U_L = U[g:-g, g:-g, (g-1):-(g+1), :]
         U_R = U[g:-g, g:-g, (g+1):-(g-1), :]
         # G_(i-1/2)
-        H_l = np.zeros_like(F_l) # self.flux(H_L, H_C, U_L, U_C, dir="z")
+        H_l = self.flux(H_L, H_C, U_L, U_C, dir="z")
         # G_(i+1/2)
-        H_r = np.zeros_like(F_l) # self.flux(H_C, H_R, U_C, U_R, dir="z")
+        H_r = self.flux(H_C, H_R, U_C, U_R, dir="z")
         
         return F_l, F_r, G_l, G_r, H_l, H_r
 
@@ -72,7 +72,10 @@ class HLL(Solver):
     def lambdas(self, U, dir="x"):
         rho, u, v, w, p, Bx, By, Bz = get_prims(self.gamma, U)
         cfm = c_fm(self.gamma, p, rho, Bx, By, Bz)
-        return u + cfm, u - cfm
+        if dir == "x": vel = u
+        elif dir == "y": vel = v
+        elif dir == "z": vel = w
+        return vel + cfm, vel - cfm
 
     # returns (alpha_p, alpha_m)
     def alphas(self, U_L, U_R, dir="x"):

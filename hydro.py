@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from HD.HD_1D import HD_1D
 from HD.HD_2D import HD_2D, Boundary
 
-from MHD.MHD import MHD_1D
+from MHD.MHD import MHD
 
 if __name__ == "__main__":
     # sim = HD_2D(gamma=5/3, resolution=(200, 200),
@@ -34,6 +34,6 @@ if __name__ == "__main__":
     # sim.kepler()
     # sim.run(T=2, plot="energy", filename="kepler", save_interval=0.01)
     
-    sim = MHD_1D(gamma=2, resolution=(800, 1, 1), xrange=(-1, 1))
+    sim = MHD(gamma=2, resolution=(800, 1, 1), xrange=(-1, 1))
     sim.shock_tube()
-    sim.run(T=0.2, plot="v", filename="BW", save_interval=0.01)
+    sim.run(T=0.2, plot="By", filename="BW", save_interval=0.01)

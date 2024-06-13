@@ -57,6 +57,7 @@ def P(gamma, rho, u, v, w, E, Bx, By, Bz):
     B2 = Bx ** 2 + By ** 2 + Bz ** 2
     return (gamma - 1) * (E - (0.5 * rho * u2) - 0.5 * B2)
 
+
 def get_prims(gamma, U):
     """
         Returns:
@@ -117,26 +118,49 @@ def F_from_prim(gamma, prims, dir="x"):
     return F
 
 
-def plot_1d(gamma, x, U, t=0, plot="density"):
+def plot_grid(gamma, U, t=0, plot="density", x=None, extent=None):
     rho, u, v, w, p, Bx, By, Bz = get_prims(gamma, U)
     labels = {"density": r"$\rho$", "u": r"$u$",
               "v": r"$v$", "w": r"$w$", "pressure": r"$P$", "energy": r"$E$", "Bx": r"$B_x$", "By": r"$B_y$", "Bz": r"$B_z$"}
     plt.cla()
-    if plot == "density":
-        plt.plot(x, rho[:, 0, 0], label=labels[plot])
-    elif plot == "u":
-        plt.plot(x, u[:, 0, 0], label=labels[plot])
-    elif plot == "v":
-        plt.plot(x, v[:, 0, 0], label=labels[plot])
-    elif plot == "w":
-        plt.plot(x, w[:, 0, 0], label=labels[plot])
-    elif plot == "pressure":
-        plt.plot(x, p[:, 0, 0], label=labels[plot])
-    elif plot == "By":
-        plt.plot(x, By[:, 0, 0], label=labels[plot])
-    elif plot == "Bz":
-        plt.plot(x, Bz[:, 0, 0], label=labels[plot])
+    if extent:  # plot in 2D
+        if plot == "density":
+            c = plt.imshow(np.transpose(rho[:, :, 0]), cmap="plasma", interpolation='nearest',
+                           origin='lower', extent=extent)
+        elif plot == "u":
+            c = plt.imshow(np.transpose(u[:, :, 0]), cmap="plasma", interpolation='nearest',
+                           origin='lower', extent=extent)
+        elif plot == "v":
+            c = plt.imshow(np.transpose(v[:, :, 0]), cmap="plasma", interpolation='nearest',
+                           origin='lower', extent=extent)
+        elif plot == "w":
+            c = plt.imshow(np.transpose(v[:, :, 0]), cmap="plasma", interpolation='nearest',
+                           origin='lower', extent=extent)
+        elif plot == "By":
+            c = plt.imshow(np.transpose(By[:, :, 0]), cmap="plasma", interpolation='nearest',
+                           origin='lower', extent=extent)
+        elif plot == "Bz":
+            c = plt.imshow(np.transpose(By[:, :, 0]), cmap="plasma", interpolation='nearest',
+                           origin='lower', extent=extent)
+        plt.colorbar(c, label=labels[plot])
 
-    plt.xlabel("x")
-    plt.legend()
+    else:  # plot in 1D (x)
+        if plot == "density":
+            plt.plot(x, rho[:, 0, 0], label=labels[plot])
+        elif plot == "u":
+            plt.plot(x, u[:, 0, 0], label=labels[plot])
+        elif plot == "v":
+            plt.plot(x, v[:, 0, 0], label=labels[plot])
+        elif plot == "w":
+            plt.plot(x, w[:, 0, 0], label=labels[plot])
+        elif plot == "pressure":
+            plt.plot(x, p[:, 0, 0], label=labels[plot])
+        elif plot == "By":
+            plt.plot(x, By[:, 0, 0], label=labels[plot])
+        elif plot == "Bz":
+            plt.plot(x, Bz[:, 0, 0], label=labels[plot])
+
+        plt.xlabel("x")
+        plt.legend()
+
     plt.title(f"t = {t:.2f}")

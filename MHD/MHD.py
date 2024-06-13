@@ -1,4 +1,4 @@
-from MHD.helpers import c_s, c_fm, E, P, get_prims, plot_1d
+from MHD.helpers import c_s, c_fm, E, P, get_prims, plot_grid
 from MHD.solvers import HLL
 
 import numpy as np
@@ -56,7 +56,7 @@ class MHD:
         # add ghost cells to the z boundaries
         self.U = np.dstack((np.repeat(self.U[:, :, :1, :], self.num_g, axis=2), self.U, np.repeat(
             self.U[:, :, :1, :], self.num_g, axis=2)))
-        
+
         # add ghost cells to the top and bottom boundaries
         self.U = np.hstack((np.repeat(self.U[:, :1, :, :], self.num_g, axis=1), self.U, np.repeat(
             self.U[:, :1, :, :], self.num_g, axis=1)))
@@ -64,9 +64,9 @@ class MHD:
         # add ghost cells to the left and right boundaries
         self.U = np.vstack((np.repeat(self.U[:1, :, :, :], self.num_g, axis=0), self.U, np.repeat(
             self.U[:1, :, :, :], self.num_g, axis=0)))
-                
 
     # bc_x = (left, right), bc_y = (bottom, top)
+
     def set_bcs(self, bc_x=(Boundary.OUTFLOW, Boundary.OUTFLOW), bc_y=(Boundary.OUTFLOW, Boundary.OUTFLOW), bc_z=(Boundary.OUTFLOW, Boundary.OUTFLOW)):
         self.bc_x = bc_x
         self.bc_y = bc_y
@@ -93,7 +93,8 @@ class MHD:
         elif self.bc_x[1] == Boundary.REFLECTIVE:
             self.U[-g:, ...] = np.flip(self.U[(-2*g):(-g), ...], axis=0)
             # invert x momentum
-            self.U[-g:, :, :, 1] = -np.flip(self.U[(-2*g):(-g), :, :, 1], axis=0)
+            self.U[-g:, :, :, 1] = - \
+                np.flip(self.U[(-2*g):(-g), :, :, 1], axis=0)
         elif self.bc_x[1] == Boundary.PERIODIC:
             self.U[-g:, ...] = self.U[g:(2*g), ...]
 
@@ -111,12 +112,14 @@ class MHD:
         if self.bc_y[1] == Boundary.OUTFLOW:
             self.U[:, -g:, :, :] = self.U[:, -(g+1):(-g), :, :]
         elif self.bc_y[1] == Boundary.REFLECTIVE:
-            self.U[:, -g:, :, :] = np.flip(self.U[:, (-2*g):(-g), :, :], axis=1)
+            self.U[:, -g:, :,
+                :] = np.flip(self.U[:, (-2*g):(-g), :, :], axis=1)
             # invert y momentum
-            self.U[:, -g:, :, 2] = -np.flip(self.U[:, (-2*g):(-g), :, 2], axis=1)
+            self.U[:, -g:, :, 2] = - \
+                np.flip(self.U[:, (-2*g):(-g), :, 2], axis=1)
         elif self.bc_y[1] == Boundary.PERIODIC:
             self.U[:, -g:, :, :] = self.U[:, g:(2*g), :, :]
-            
+
         # z left
         if self.bc_z[0] == Boundary.OUTFLOW:
             self.U[:, :g, :, :] = self.U[:, g:(g+1), :, :]
@@ -131,9 +134,11 @@ class MHD:
         if self.bc_z[1] == Boundary.OUTFLOW:
             self.U[:, :, -g:, :] = self.U[:, :, -(g+1):(-g), :]
         elif self.bc_z[1] == Boundary.REFLECTIVE:
-            self.U[:, :, -g:, :] = np.flip(self.U[:, :, (-2*g):(-g), :], axis=2)
+            self.U[:, :, -g:,
+                :] = np.flip(self.U[:, :, (-2*g):(-g), :], axis=2)
             # invert y momentum
-            self.U[:, :, -g:, 3] = -np.flip(self.U[:, :, (-2*g):(-g), 3], axis=2)
+            self.U[:, :, -g:, 3] = - \
+                np.flip(self.U[:, :, (-2*g):(-g), 3], axis=2)
         elif self.bc_z[1] == Boundary.PERIODIC:
             self.U[:, :, -g:, :] = self.U[:, :, g:(2*g), :]
 
@@ -148,7 +153,7 @@ class MHD:
     def first_order_step(self):
         g = self.num_g
         self.dt = self.compute_timestep()
-        
+
         L = self.solver.solve(self.U)
         u = self.U[g:-g, g:-g, g:-g, :]
         u += L * self.dt
@@ -156,7 +161,7 @@ class MHD:
         for s in self.S:
             u += s(u) * self.dt
         self.U[g:-g, g:-g, g:-g, :] = u
-        
+
     def high_order_step(self):
         # implement this
         g = self.num_g
@@ -175,7 +180,7 @@ class MHD:
         fig = plt.figure()
         PATH = f"./output/{filename}.hdf"
         self.add_ghost_cells()
-        
+
         next_checkpoint = 0
         g = self.num_g
 
@@ -214,18 +219,18 @@ class MHD:
 
                 if plot:
                     fig.clear()
-                    plot_1d(self.gamma, self.x, self.U[g:-g, g:-g, g:-g], t=t, plot=plot)
+                    plot_grid(self.gamma, self.U[g:-g, g:-g, g:-g], t=t, plot=plot, extent=[self.xmin, self.xmax, self.ymin, self.ymax])
                     plt.pause(0.001)
-            
+
             plt.show()
 
     # call in a loop to print dynamic progress bar
 
     def print_progress_bar(self, iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█', printEnd="\r"):
-        percent = ("{0:." + str(decimals) + "f}").format(100 *
+        percent= ("{0:." + str(decimals) + "f}").format(100 *
                                                          (iteration / float(total)))
-        filledLength = int(length * iteration // total)
-        bar = fill * filledLength + '-' * (length - filledLength)
+        filledLength= int(length * iteration // total)
+        bar= fill * filledLength + '-' * (length - filledLength)
         print(f'\r{prefix} |{bar}| {percent}% {suffix}', end=printEnd)
         # print new line on complete
         if iteration == total:
@@ -233,11 +238,11 @@ class MHD:
 
     # Brio and Wu shock tube
     def shock_tube(self):
-        Bx = 0.75
-        rho_L, u_L, v_L, w_L, Bx_L, By_L, Bz_L, p_L = 1, 0, 0, 0, Bx, 1, 0, 1
-        rho_R, u_R, v_R, w_R, Bx_R, By_R, Bz_R, p_R = 0.125, 0, 0, 0, Bx, -1, 0, 0.1
-        E_L = E(self.gamma, rho_L, u_L, v_L, w_L, p_L, Bx_L, By_L, Bz_L)
-        U_L = np.array([rho_L, rho_L * u_L, rho_L * v_L, rho_L * w_L, Bx_L, By_L, Bz_L, E_L])
-        E_R = E(self.gamma, rho_R, u_R, v_R, w_R, p_R, Bx_R, By_R, Bz_R)
-        U_R = np.array([rho_R, rho_R * u_R, rho_R * v_R, rho_R * w_R, Bx_R, By_R, Bz_R, E_R])
-        self.U = np.array([[[U_L if x <= 0 else U_R]] for x in self.x])
+        Bx= 0.75
+        rho_L, u_L, v_L, w_L, Bx_L, By_L, Bz_L, p_L= 1, 0, 0, 0, Bx, 1, 0, 1
+        rho_R, u_R, v_R, w_R, Bx_R, By_R, Bz_R, p_R= 0.125, 0, 0, 0, Bx, -1, 0, 0.1
+        E_L= E(self.gamma, rho_L, u_L, v_L, w_L, p_L, Bx_L, By_L, Bz_L)
+        U_L= np.array([rho_L, rho_L * u_L, rho_L * v_L, rho_L * w_L, Bx_L, By_L, Bz_L, E_L])
+        E_R= E(self.gamma, rho_R, u_R, v_R, w_R, p_R, Bx_R, By_R, Bz_R)
+        U_R= np.array([rho_R, rho_R * u_R, rho_R * v_R, rho_R * w_R, Bx_R, By_R, Bz_R, E_R])
+        self.U= np.array([[[U_L if x <= 0 else U_R]] for x in self.x])

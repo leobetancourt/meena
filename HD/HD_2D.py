@@ -112,35 +112,37 @@ class HD_2D:
 
     def compute_timestep(self):
         rho, u, v, p = get_prims(self.gamma, self.U)
-        p[p <= 0] = 1e-6
-        return self.cfl * \
+        t = self.cfl * \
             np.min(self.dx / (np.sqrt(self.gamma * p / rho) + np.sqrt(u**2 + v**2)))
-
-    """
-        find reason for crash (either P or rho is going negative)
-        might need to exclude zones below a certain density from compute_timestep()
-        write 1D MHD and run test problems
-    """
-
+        return t
+    
     def check_physical(self):
-        g = self.num_g
-        u = self.U[g:-g, g:-g]
-        for i in range(len(u)):
-            for j in range(len(u[i])):
-                cons = u[i][j]
-                if np.isnan(cons[0]) or cons[0] <= 0:
-                    print(f"rho={cons[0]} at ({self.x[i]}, {self.y[j]})")
-                if np.isnan(cons[3]) or cons[3] <= 0:
-                    print(f"E={cons[3]} at ({self.x[i]}, {self.y[j]})")
+        # g = self.num_g
+        # u = self.U[g:-g, g:-g]
+        # for i in range(len(u)):
+        #     for j in range(len(u[i])):
+        #         cons = u[i][j]
+        #         rho = cons[0]
+        #         vx, vy = cons[1] / rho, cons[2] / rho
+        #         E = cons[3]
+        #         p = P(self.gamma, rho, vx, vy, E)
+        #         if np.isnan(rho) or rho <= 0:
+        #             print(f"rho={rho} at ({self.x[i]}, {self.y[j]})")
+        #         if np.isnan(p) or p <= 0:
+        #             print(f"p={p} at ({self.x[i]}, {self.y[j]})")
+        #         if np.isnan(E) or E <= 0:
+        #             print(f"E={cons[3]} at ({self.x[i]}, {self.y[j]})")
 
-        # rho = self.U[:, :, 0]
-        # momx = self.U[:, :, 1]
-        # momy = self.U[:, :, 2]
-        # En = self.U[:, :, 3]
-        # momx[rho <= 0] = 1e-6
-        # momy[rho <= 0] = 1e-6
-        # En[rho <= 0] = E(self.gamma, 1e-6, 1e-6, 1e-6, 1e-6)
-        # rho[rho <= 0] = 1e-6
+        rho = self.U[:, :, 0]
+        momx = self.U[:, :, 1]
+        momy = self.U[:, :, 2]
+        En = self.U[:, :, 3]
+        p = P(self.gamma, rho, momx/rho, momy/rho, En)
+        invalid = (rho <= 0) | (p <= 0) | (En <= 0)
+        momx[invalid] = 1e-6
+        momy[invalid] = 1e-6
+        En[invalid] = E(self.gamma, 1e-6, 1e-6, 1e-6, 1e-6)
+        rho[invalid] = 1e-6
 
     def first_order_step(self):
         g = self.num_g
@@ -194,7 +196,7 @@ class HD_2D:
             dataset.attrs["t"] = []
 
             while t < T:
-                # self.check_physical()
+                self.check_physical()
                 self.apply_bcs()
 
                 if self.high_time:
@@ -323,7 +325,7 @@ class HD_2D:
         mach = 10
         G = 1
         M = 1
-        g = -0.1  # G * M / ((r + eps) ** 2)
+        g = - G * M / ((r + eps) ** 2)
         rho = np.ones_like(r) * 1
         v_k = np.sqrt(G * M / (r + eps))  # keplerian velocity
         cs = v_k / mach
@@ -337,27 +339,48 @@ class HD_2D:
             rho * v,
             E(self.gamma, rho, p, u, v)
         ]).transpose((1, 2, 0))
-
+        
         def gravity(U):
             S = np.zeros_like(U)
             rho, u, v, p = get_prims(self.gamma, U)
-            S[:, :, 1] = rho * g * np.cos(theta)
-            S[:, :, 2] = rho * g * np.sin(theta)
-            S[:, :, 3] = 0  # g * rho * np.sqrt(u**2 + v**2)
+            g_x, g_y = g * np.cos(theta), g * np.sin(theta)
+            S[:, :, 1] = rho * g_x
+            S[:, :, 2] = rho * g_y
+            S[:, :, 3] = rho * (u * g_x + v * g_y)
             return S
 
         self.add_source(gravity)
 
         def kernel(U):
-            a = 1
+            a = 2.5
             Delta = (self.xmax - self.xmin) / 30
             gaussian = -a * np.exp(-(r ** 2) / (2 * Delta ** 2))
             S = np.zeros_like(U)
             S[:, :, 0] = gaussian
-            S[:, :, 1] = gaussian * np.sign(S[:, :, 1])
-            S[:, :, 2] = gaussian * np.sign(S[:, :, 2])
-            S[:, :, 3] = gaussian
-
+            S[:, :, 1] = 0 # gaussian * np.sign(U[:, :, 1])
+            S[:, :, 2] = 0 # gaussian # * np.sign(U[:, :, 2])
+            S[:, :, 3] = 0 # gaussian
             return S
 
-        # self.add_source(kernel)
+        self.add_source(kernel)
+
+    def binary(self):
+        r, theta = cartesian_to_polar(self.grid[:, :, 0], self.grid[:, :, 1])
+        eps = 0.01
+        mach = 10
+        G = 1
+        M = 1
+        g = - G * M / ((r + eps) ** 2)
+        rho = np.ones_like(r) * 1
+        v_k = np.sqrt(G * M / (r + eps))  # keplerian velocity
+        cs = v_k / mach
+        p = rho * (cs ** 2) / self.gamma
+
+        u = - v_k * np.sin(theta)
+        v = v_k * np.cos(theta)
+        self.U = np.array([
+            rho,
+            rho * u,
+            rho * v,
+            E(self.gamma, rho, p, u, v)
+        ]).transpose((1, 2, 0))

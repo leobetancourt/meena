@@ -91,19 +91,19 @@ def plot_grid(gamma, U, t=0, plot="density", extent=[0, 1, 0, 1]):
     plt.cla()
     if plot == "density":
         c = plt.imshow(np.transpose(rho), cmap="plasma", interpolation='nearest',
-                       origin='lower', extent=extent)
+                       origin='lower', extent=extent, vmin=0, vmax=2)
     elif plot == "u":
         c = plt.imshow(np.transpose(u), cmap="plasma", interpolation='nearest',
-                       origin='lower', extent=extent)
+                       origin='lower', extent=extent, vmin=-10, vmax=10)
     elif plot == "v":
         c = plt.imshow(np.transpose(u), cmap="plasma", interpolation='nearest',
-                       origin='lower', extent=extent)
+                       origin='lower', extent=extent, vmin=-10, vmax=10)
     elif plot == "pressure":
         c = plt.imshow(np.transpose(p), cmap="plasma", interpolation='nearest',
-                       origin='lower', extent=extent)
+                       origin='lower', extent=extent, vmin=0, vmax=0.5)
     elif plot == "energy":
         c = plt.imshow(np.transpose(E), cmap="plasma", interpolation='nearest',
-                       origin='lower', extent=extent)
+                       origin='lower', extent=extent, vmin=0, vmax=2)
 
     plt.colorbar(c, label=labels[plot])
     # plt.xlabel("x")

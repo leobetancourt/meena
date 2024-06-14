@@ -165,6 +165,9 @@ def plot_grid(gamma, U, t=0, plot="density", x=None, extent=None):
         elif plot == "pressure":
             c = plt.imshow(np.transpose(p[:, :, 0]), cmap="plasma", interpolation='nearest',
                            origin='lower', extent=extent)
+        elif plot == "Bx":
+            c = plt.imshow(np.transpose(Bx[:, :, 0]), cmap="plasma", interpolation='nearest',
+                           origin='lower', extent=extent)
         elif plot == "By":
             c = plt.imshow(np.transpose(By[:, :, 0]), cmap="plasma", interpolation='nearest',
                            origin='lower', extent=extent)
@@ -184,6 +187,8 @@ def plot_grid(gamma, U, t=0, plot="density", x=None, extent=None):
             plt.plot(x, w[:, 0, 0], label=labels[plot])
         elif plot == "pressure":
             plt.plot(x, p[:, 0, 0], label=labels[plot])
+        elif plot == "Bx":
+            plt.plot(x, Bx[:, 0, 0], label=labels[plot])
         elif plot == "By":
             plt.plot(x, By[:, 0, 0], label=labels[plot])
         elif plot == "Bz":

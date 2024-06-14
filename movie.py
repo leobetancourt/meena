@@ -34,7 +34,8 @@ with h5py.File(PATH, "r") as infile:
     gamma = dataset.attrs["gamma"]
     xmin, xmax = dataset.attrs["xrange"]
     ymin, ymax = dataset.attrs["yrange"]
-    zmin, zmax = dataset.attrs["zrange"]
+    if "zrange" in dataset.attrs: 
+        zmin, zmax = dataset.attrs["zrange"]
 
 fig = plt.figure()
 fps = 12

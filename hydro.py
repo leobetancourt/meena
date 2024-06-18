@@ -15,8 +15,8 @@ if __name__ == "__main__":
     # sim.kepler()
     # sim.run(T=4, plot="density", filename="kepler", save_interval=0.01)
     
-    sim = Binary(gamma=5/3, resolution=(400, 400))
-    sim.run(T=4, plot="density", filename="binary", save_interval=0.01)
+    # sim = Binary(gamma=5/3, resolution=(400, 400))
+    # sim.run(T=4, plot="density", filename="binary", save_interval=0.01)
 
     # sim = MHD(gamma=2, resolution=(800, 1, 1), xrange=(-1, 1))
     # sim.shock_tube()
@@ -28,3 +28,10 @@ if __name__ == "__main__":
     #             (Boundary.PERIODIC, Boundary.PERIODIC))
     # sim.spherical_blast()
     # sim.run(T=1, plot="density", filename="MHD blast", save_interval=0.01)
+    
+    sim = MHD(gamma=5/3, resolution=(400, 600, 1), xrange=(-0.5, 0.5), yrange=(-0.75, 0.75))
+    sim.set_bcs((Boundary.PERIODIC, Boundary.PERIODIC),
+                (Boundary.PERIODIC, Boundary.PERIODIC),
+                (Boundary.PERIODIC, Boundary.PERIODIC))
+    sim.spherical_blast()
+    sim.run(T=1, plot="density", filename="MHD blast", save_interval=0.01)

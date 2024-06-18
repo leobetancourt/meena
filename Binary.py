@@ -14,18 +14,25 @@ class Binary(HD_2D):
         self.G, self.M = 1, 1
         self.mach = 10
         self.a = 1 # binary separation
+        self.R_cav = 2.5 * self.a
+        self.R_out = 10
+        self.delta_0 = 1e-5
+        self.Sigma_0 = 1
         self.eps = 0.05 * self.a # gravitational softening
         self.period = 1
         self.omega = 2 * np.pi / self.period
         self.x1, self.y1 = self.a / 2, 0
         self.x2, self.y2 = -self.a / 2, 0
 
-        self.setup()
-        
+        self.setup()        
+    
     def setup(self):
         x, y = self.grid[:, :, 0], self.grid[:, :, 1]
         r, theta = cartesian_to_polar(x, y)
-        rho = np.ones_like(r) * 1
+        # initial density profile from Santa Barbara paper
+        def f(r):
+            return 1 - (1 / (1 + np.exp(-2 * (r - self.R_out) / self.a)))
+        rho = self.Sigma_0 * ((1 - self.delta_0) * np.exp(-(self.R_cav / (r + self.eps)) ** 12) + self.delta_0) * f(r)
         v_k = np.sqrt(self.G * self.M / (r + self.eps))  # keplerian velocity
         cs = v_k / self.mach
         p = rho * (cs ** 2) / self.gamma

@@ -29,9 +29,9 @@ if __name__ == "__main__":
     # sim.spherical_blast()
     # sim.run(T=1, plot="density", filename="MHD blast", save_interval=0.01)
     
-    sim = MHD(gamma=5/3, resolution=(400, 600, 1), xrange=(-0.5, 0.5), yrange=(-0.75, 0.75))
+    sim = MHD(gamma=5/3, resolution=(512, 512, 1), xrange=(0, 1), yrange=(0, 1))
     sim.set_bcs((Boundary.PERIODIC, Boundary.PERIODIC),
                 (Boundary.PERIODIC, Boundary.PERIODIC),
                 (Boundary.PERIODIC, Boundary.PERIODIC))
-    sim.spherical_blast()
-    sim.run(T=1, plot="density", filename="MHD blast", save_interval=0.01)
+    sim.orszag_tang()
+    sim.run(T=1, plot="pressure", filename="Orszag-Tang", save_interval=0.01)

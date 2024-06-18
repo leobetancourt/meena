@@ -264,3 +264,23 @@ class MHD:
         self.U[r < 0.1] = np.array([1, 0, 0, 0, B, B, 0, En])
         En = E(self.gamma, 1, 0, 0, 0, 0.1, B, B, 0)
         self.U[r >= 0.1] = np.array([1, 0, 0, 0, B, B, 0, En])
+        
+    def orszag_tang(self):
+        x, y, z = self.grid[..., 0], self.grid[..., 1], self.grid[..., 2]
+        rho = np.ones_like(self.U[..., 0]) * 25 / (36 * np.pi)
+        p = np.ones_like(rho) * 5 / (12 * np.pi)
+        u, v, w = -np.sin(2 * np.pi * y), np.sin(2 * np.pi * x), np.zeros_like(rho)
+        B_0 = 1 / np.sqrt(4 * np.pi)
+        Bx, By, Bz = -B_0 * np.sin(2 * np.pi * y), B_0 * np.sin(4 * np.pi * x), np.zeros_like(rho)
+        En = E(self.gamma, rho, u, v, w, p, Bx, By, Bz)
+        
+        self.U = np.array([
+            rho,
+            rho * u,
+            rho * v,
+            rho * w,
+            Bx,
+            By,
+            Bz,
+            En
+        ]).transpose((1, 2, 3, 0))

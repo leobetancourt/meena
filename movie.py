@@ -1,4 +1,4 @@
-from HD.helpers import plot_grid
+from HD.helpers import plot_grid, get_prims, E, P
 from MHD.helpers import plot_grid as plot_MHD
 import h5py
 import os
@@ -38,7 +38,7 @@ with h5py.File(PATH, "r") as infile:
         zmin, zmax = dataset.attrs["zrange"]
 
 fig = plt.figure()
-fps = 12
+fps = 24
 FFMpegWriter = animation.writers['ffmpeg']
 file = os.path.splitext(os.path.basename(PATH))[0]
 metadata = dict(title=file, comment='')
@@ -49,12 +49,29 @@ if not os.path.exists(PATH):
 cm = writer.saving(fig, f"{PATH}/{var}.mp4", 100)
 
 with cm:
+    if history.shape[-1] == 4: # HD
+        vmin, vmax = 0, 2
+        rho = np.maximum(history[-1, :, :, 0], 1e-6)
+        u, v = history[-1, :, :, 1] / rho, history[-1, :, :, 2] / rho
+        En = np.maximum(history[-1, :, :, 3], 1e-6)
+        p = np.maximum(P(gamma, rho, u, v, En), 1e-6)
+        if var == "density":
+            vmin, vmax = np.min(rho), np.max(rho)
+        elif var == "u":
+            vmin, vmax = np.min(u), np.max(u)
+        elif var == "v":
+            vmin, vmax = np.min(v), np.max(v)
+        elif var == "pressure":
+            vmin, vmax = np.min(p), np.max(p)
+        elif var == "energy":
+            vmin, vmax = np.min(En), np.max(En)
+
     for i in range(len(history)):
         U = history[i]
         t = t_vals[i]
         fig.clear()
         if U.shape[-1] == 4: # HD
-            plot_grid(gamma, U, t=t, plot=var, extent=[xmin, xmax, ymin, ymax])
+            plot_grid(gamma, U, t=t, plot=var, extent=[xmin, xmax, ymin, ymax], vmin=vmin, vmax=vmax)
         else: # MHD
             x = np.linspace(xmin, xmax,
                         num=U.shape[0], endpoint=False)

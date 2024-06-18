@@ -81,7 +81,7 @@ def polar_to_cartesian(r, theta):
     return (r * np.cos(theta), r * np.sin(theta))
 
 
-def plot_grid(gamma, U, t=0, plot="density", extent=[0, 1, 0, 1]):
+def plot_grid(gamma, U, t=0, plot="density", extent=[0, 1, 0, 1], vmin=None, vmax=None):
     rho = U[:, :, 0]
     u, v, E = U[:, :, 1] / rho, U[:, :, 2] / rho, U[:, :, 3]
     p = P(gamma, rho, u, v, E)
@@ -90,20 +90,30 @@ def plot_grid(gamma, U, t=0, plot="density", extent=[0, 1, 0, 1]):
 
     plt.cla()
     if plot == "density":
+        if vmin is None:
+            vmin, vmax = np.min(rho), np.max(rho)
         c = plt.imshow(np.transpose(rho), cmap="plasma", interpolation='nearest',
-                       origin='lower', extent=extent, vmin=0, vmax=2)
+                       origin='lower', extent=extent, vmin=vmin, vmax=vmax)
     elif plot == "u":
+        if vmin is None:
+            vmin, vmax = np.min(u), np.max(u)
         c = plt.imshow(np.transpose(u), cmap="plasma", interpolation='nearest',
-                       origin='lower', extent=extent, vmin=-10, vmax=10)
+                       origin='lower', extent=extent, vmin=vmin, vmax=vmax)
     elif plot == "v":
+        if vmin is None:
+            vmin, vmax = np.min(v), np.max(v)
         c = plt.imshow(np.transpose(u), cmap="plasma", interpolation='nearest',
-                       origin='lower', extent=extent, vmin=-10, vmax=10)
+                       origin='lower', extent=extent, vmin=vmin, vmax=vmax)
     elif plot == "pressure":
+        if vmin is None:
+            vmin, vmax = np.min(p), np.max(p)
         c = plt.imshow(np.transpose(p), cmap="plasma", interpolation='nearest',
-                       origin='lower', extent=extent, vmin=0, vmax=0.5)
+                       origin='lower', extent=extent, vmin=vmin, vmax=vmax)
     elif plot == "energy":
+        if vmin is None:
+            vmin, vmax = np.min(E), np.max(E)
         c = plt.imshow(np.transpose(E), cmap="plasma", interpolation='nearest',
-                       origin='lower', extent=extent, vmin=0, vmax=2)
+                       origin='lower', extent=extent, vmin=vmin, vmax=vmax)
 
     plt.colorbar(c, label=labels[plot])
     # plt.xlabel("x")

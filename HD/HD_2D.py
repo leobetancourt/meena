@@ -144,7 +144,7 @@ class HD_2D:
         En[invalid] = E(self.gamma, 1e-6, 1e-6, 1e-6, 1e-6)
         rho[invalid] = 1e-6
 
-    def first_order_step(self):
+    def first_order_step(self, t):
         g = self.num_g
         self.dt = self.compute_timestep()
 
@@ -156,7 +156,7 @@ class HD_2D:
             u += s(u) * self.dt
         self.U[g:-g, g:-g, :] = u
 
-    def high_order_step(self):
+    def high_order_step(self, t):
         """
         Third-order Runge-Kutta method
         """
@@ -200,9 +200,9 @@ class HD_2D:
                 self.apply_bcs()
 
                 if self.high_time:
-                    self.high_order_step()
+                    self.high_order_step(t)
                 else:
-                    self.first_order_step()
+                    self.first_order_step(t)
 
                 # at each checkpoint, save the current state excluding the ghost cells
                 if t >= next_checkpoint:
@@ -325,7 +325,6 @@ class HD_2D:
         mach = 10
         G = 1
         M = 1
-        g = - G * M / ((r + eps) ** 2)
         rho = np.ones_like(r) * 1
         v_k = np.sqrt(G * M / (r + eps))  # keplerian velocity
         cs = v_k / mach
@@ -341,6 +340,7 @@ class HD_2D:
         ]).transpose((1, 2, 0))
         
         def gravity(U):
+            g = - G * M / ((r + eps) ** 2)
             S = np.zeros_like(U)
             rho, u, v, p = get_prims(self.gamma, U)
             g_x, g_y = g * np.cos(theta), g * np.sin(theta)
@@ -363,24 +363,3 @@ class HD_2D:
             return S
 
         self.add_source(kernel)
-
-    def binary(self):
-        r, theta = cartesian_to_polar(self.grid[:, :, 0], self.grid[:, :, 1])
-        eps = 0.01
-        mach = 10
-        G = 1
-        M = 1
-        g = - G * M / ((r + eps) ** 2)
-        rho = np.ones_like(r) * 1
-        v_k = np.sqrt(G * M / (r + eps))  # keplerian velocity
-        cs = v_k / mach
-        p = rho * (cs ** 2) / self.gamma
-
-        u = - v_k * np.sin(theta)
-        v = v_k * np.cos(theta)
-        self.U = np.array([
-            rho,
-            rho * u,
-            rho * v,
-            E(self.gamma, rho, p, u, v)
-        ]).transpose((1, 2, 0))

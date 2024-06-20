@@ -15,7 +15,7 @@ parser.add_argument('-f', '--file', type=str, required=True,
                     help='The path to the .hdf file (required)')
 
 parser.add_argument('-o', '--output', type=str, required=True,
-                    choices=['density', 'u', 'v', 'w', 'pressure', 'energy', 'Bx', 'By', 'Bz'],
+                    choices=['density', 'u', 'v', 'w', 'pressure', 'energy', 'Bx', 'By', 'Bz', 'div'],
                     help='The variable to plot: density, u, v, pressure or energy (required)')
 
 args = parser.parse_args()
@@ -73,8 +73,6 @@ with cm:
         if U.shape[-1] == 4: # HD
             plot_grid(gamma, U, t=t, plot=var, extent=[xmin, xmax, ymin, ymax], vmin=vmin, vmax=vmax)
         else: # MHD
-            x = np.linspace(xmin, xmax,
-                        num=U.shape[0], endpoint=False)
             plot_MHD(gamma, U, t=t, plot=var, extent=[xmin, xmax, ymin, ymax])
         writer.grab_frame()
 

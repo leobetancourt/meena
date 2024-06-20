@@ -144,10 +144,20 @@ def cartesian_to_polar(x, y):
     theta = np.arctan2(y, x)
     return r, theta
 
+def divergence(Bx, By, Bz, dx, dy, dz):
+    """
+        Returns:
+            Divergence of magnetic field, dBx/dx + dBy/dy + dBz/dz
+    """
+    dBx = (Bx[1:, :-1, :] - Bx[:-1, :-1, :]) / dx
+    dBy = (By[:-1, 1:, :] - By[:-1, :-1, :]) / dy
+    dBz = 0
+    return dBx + dBy + dBz
+
 def plot_grid(gamma, U, t=0, plot="density", x=None, extent=None):
     rho, u, v, w, p, Bx, By, Bz = get_prims(gamma, U)
     labels = {"density": r"$\rho$", "u": r"$u$",
-              "v": r"$v$", "w": r"$w$", "pressure": r"$P$", "energy": r"$E$", "Bx": r"$B_x$", "By": r"$B_y$", "Bz": r"$B_z$"}
+              "v": r"$v$", "w": r"$w$", "pressure": r"$P$", "energy": r"$E$", "Bx": r"$B_x$", "By": r"$B_y$", "Bz": r"$B_z$", "div": r"div $B$"}
     plt.cla()
     if extent:  # plot in 2D
         if plot == "density":
@@ -174,6 +184,13 @@ def plot_grid(gamma, U, t=0, plot="density", x=None, extent=None):
         elif plot == "Bz":
             c = plt.imshow(np.transpose(By[:, :, 0]), cmap="plasma", interpolation='nearest',
                            origin='lower', extent=extent)
+        elif plot == "div":
+            res_x, res_y, res_z = Bx.shape
+            dx, dy, dz = (extent[1] - extent[0]) / res_x, (extent[3] - extent[2]) / res_y, 2
+            div = divergence(Bx, By, Bz, dx, dy, dz)
+            c = plt.imshow(np.transpose(div[:, :, 0]), cmap="plasma", interpolation='nearest',
+                           origin='lower', extent=extent)
+            
         plt.colorbar(c, label=labels[plot])
 
     else:  # plot in 1D (x)

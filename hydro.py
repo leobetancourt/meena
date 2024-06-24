@@ -16,7 +16,7 @@ if __name__ == "__main__":
     # sim.run(T=4, plot="density", filename="kepler", save_interval=0.01)
     
     # sim = Binary(gamma=5/3, resolution=(400, 400))
-    # sim.run(T=4, plot="density", filename="binary", save_interval=0.01)
+    # sim.run(T=8, plot="density", filename="binary", save_interval=0.02)
 
     # sim = MHD(gamma=2, resolution=(800, 1, 1), xrange=(-1, 1))
     # sim.shock_tube()
@@ -29,9 +29,15 @@ if __name__ == "__main__":
     # sim.spherical_blast()
     # sim.run(T=1, plot="density", filename="MHD blast", save_interval=0.01)
     
-    sim = MHD(gamma=5/3, resolution=(512, 512, 1), xrange=(0, 1), yrange=(0, 1))
-    sim.set_bcs((Boundary.PERIODIC, Boundary.PERIODIC),
-                (Boundary.PERIODIC, Boundary.PERIODIC),
-                (Boundary.PERIODIC, Boundary.PERIODIC))
-    sim.orszag_tang()
-    sim.run(T=1, plot="pressure", filename="Orszag-Tang", save_interval=0.01)
+    # sim = MHD(gamma=5/3, resolution=(512, 512, 1), xrange=(0, 1), yrange=(0, 1))
+    # sim.set_bcs((Boundary.PERIODIC, Boundary.PERIODIC),
+    #             (Boundary.PERIODIC, Boundary.PERIODIC),
+    #             (Boundary.PERIODIC, Boundary.PERIODIC))
+    # sim.orszag_tang()
+    # sim.run(T=1, plot="pressure", filename="Orszag-Tang", save_interval=0.01)
+    
+    sim = HD_2D(gamma=5/3, nu=0, resolution=(300, 450), xrange=(-1, 1), yrange=(-1.5, 1.5), solver="hll")
+    sim.set_bcs((Boundary.OUTFLOW, Boundary.OUTFLOW), 
+                (Boundary.OUTFLOW, Boundary.OUTFLOW))
+    sim.sheer()
+    sim.run(T=1, plot="v", filename="sheer1", save_interval=0.01)

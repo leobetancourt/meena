@@ -21,6 +21,7 @@ class Binary(HD_2D):
         self.eps = 0.05 * self.a # gravitational softening
         self.period = 1
         self.omega = 2 * np.pi / self.period
+        self.nu = 1e-3 * self.a ** 2 * self.omega
         self.x1, self.y1 = self.a / 2, 0
         self.x2, self.y2 = -self.a / 2, 0
 
@@ -66,14 +67,14 @@ class Binary(HD_2D):
         
         def BH_kernel(U, bh_x, bh_y):
             A = 10
-            Delta = (self.xmax - self.xmin) / 100
+            Delta = self.a / 30
             dx, dy = x - bh_x, y - bh_y
             r = np.sqrt(dx ** 2 + dy ** 2)  # distance from each zone to bh
             gaussian = -A * np.exp(-(r ** 2) / (2 * Delta ** 2))
             S = np.zeros_like(U)
             S[:, :, 0] = gaussian
             S[:, :, 1] = 0 # gaussian * np.sign(U[:, :, 1])
-            S[:, :, 2] = 0 # gaussian # * np.sign(U[:, :, 2])
+            S[:, :, 2] = 0 # gaussian * np.sign(U[:, :, 2])
             S[:, :, 3] = 0 # gaussian
             return S
         

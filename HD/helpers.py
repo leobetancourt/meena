@@ -1,7 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-
 def c_s(gamma, P, rho):
     return np.sqrt(gamma * P / rho)
 
@@ -15,8 +14,9 @@ def E(gamma, rho, p, u, v):
 
 
 def P(gamma, rho, u, v, E):
-    return (gamma - 1) * (E - (0.5 * rho * (u ** 2 + v ** 2)))
-
+    p = (gamma - 1) * (E - (0.5 * rho * (u ** 2 + v ** 2)))
+    # p[p <= 0] = 1e-6
+    return p
 
 def get_prims(gamma, U):
     """
@@ -80,11 +80,20 @@ def cartesian_to_polar(x, y):
 def polar_to_cartesian(r, theta):
     return (r * np.cos(theta), r * np.sin(theta))
 
+def plot_sheer(gamma, U, t=0, extent=[0, 1], label=""):
+    res_x, res_y = U.shape[0], U.shape[1]
+    rho, u, v, p = get_prims(gamma, U)
+    v_mid = v[:, res_y // 2]
+    x = np.linspace(extent[0], extent[1], num=res_x, endpoint=False)
+    plt.plot(x, v_mid, label=label)
+    plt.xlabel(r"$x$")
+    plt.ylabel(r"$v$")
+    plt.legend()
+    plt.title(f"Velocity Shear Test at t = {t:.2f}")
 
 def plot_grid(gamma, U, t=0, plot="density", extent=[0, 1, 0, 1], vmin=None, vmax=None):
-    rho = U[:, :, 0]
-    u, v, E = U[:, :, 1] / rho, U[:, :, 2] / rho, U[:, :, 3]
-    p = P(gamma, rho, u, v, E)
+    rho, u, v, p = get_prims(gamma, U)
+    E = U[:, :, 3]
     labels = {"density": r"$\rho$", "u": r"$u$",
               "v": r"$v$", "pressure": r"$P$", "energy": r"$E$", }
 
@@ -102,13 +111,13 @@ def plot_grid(gamma, U, t=0, plot="density", extent=[0, 1, 0, 1], vmin=None, vma
     elif plot == "v":
         if vmin is None:
             vmin, vmax = np.min(v), np.max(v)
-        c = plt.imshow(np.transpose(u), cmap="plasma", interpolation='nearest',
+        c = plt.imshow(np.transpose(v), cmap="plasma", interpolation='nearest',
                        origin='lower', extent=extent, vmin=vmin, vmax=vmax)
     elif plot == "pressure":
         if vmin is None:
             vmin, vmax = np.min(p), np.max(p)
         c = plt.imshow(np.transpose(p), cmap="plasma", interpolation='nearest',
-                       origin='lower', extent=extent, vmin=vmin, vmax=vmax)
+                       origin='lower', extent=extent, vmin=0, vmax=vmax)
     elif plot == "energy":
         if vmin is None:
             vmin, vmax = np.min(E), np.max(E)

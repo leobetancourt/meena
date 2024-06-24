@@ -5,8 +5,9 @@ import numpy as np
 
 
 class Solver(ABC):
-    def __init__(self, gamma, res, num_g, x, y, dx, dy, high_order=False):
+    def __init__(self, gamma, nu, res, num_g, x, y, dx, dy, high_order=False):
         self.gamma = gamma
+        self.nu = nu
         self.num_g = num_g
         self.x, self.y = x, y
         self.dx, self.dy = dx, dy
@@ -75,6 +76,58 @@ class Solver(ABC):
 
         return U_ll, U_lr, U_rl, U_rr, F_ll, F_lr, F_rl, F_rr
 
+    def finite_difference(self, u, x=True):
+        g = self.num_g
+        if x:
+            du = (u[(g):-(g-1), g:-g] - u[(g-1):-(g), g:-g]) / (self.dx)
+        else:
+            du = (u[g:-g, (g):-(g-1)] - u[g:-g, (g-1):-(g)]) / (self.dy)
+        return du
+
+    def viscosity(self, rho, u, v):
+        g = self.num_g
+        # compute viscous flux and add to F and G
+        dudx = self.finite_difference(u, x=True)
+        dudy = self.finite_difference(u, x=False)
+        dvdx = self.finite_difference(v, x=True)
+        dvdy = self.finite_difference(v, x=False)
+
+        zero = np.zeros((self.res_x, self.res_y))
+
+        rho_l = (rho[(g-1):-(g+1), g:-g] + rho[g:-g, g:-g]) / 2
+        rho_r = (rho[g:-g, g:-g] + rho[(g+1):-(g-1), g:-g]) / 2
+        Fv_l = -self.nu * np.array([
+            zero,
+            rho_l * dudx[0:-1, :],
+            rho_l * dvdx[0:-1, :],
+            zero
+        ]).transpose((1, 2, 0))
+
+        Fv_r = -self.nu * np.array([
+            zero,
+            rho_r * dudx[1:, :],
+            rho_r * dvdx[1:, :],
+            zero
+        ]).transpose((1, 2, 0))
+
+        rho_l = (rho[g:-g, (g-1):-(g+1)] + rho[g:-g, g:-g]) / 2
+        rho_r = (rho[g:-g, g:-g] + rho[g:-g, (g+1):-(g-1)]) / 2
+        Gv_l = -self.nu * np.array([
+            zero,
+            rho_l * dudy[:, 0:-1],
+            rho_l * dvdy[:, 0:-1],
+            zero
+        ]).transpose((1, 2, 0))
+
+        Gv_r = -self.nu * np.array([
+            zero,
+            rho_r * dudy[:, 1:],
+            rho_r * dvdy[:, 1:],
+            zero
+        ]).transpose((1, 2, 0))
+
+        return Fv_l, Fv_r, Gv_l, Gv_r
+
     def interface_flux(self, U):
         g = self.num_g
 
@@ -86,17 +139,17 @@ class Solver(ABC):
             # F_(i+1/2)
             F_r = self.flux(F_rl, F_rr, U_rl, U_rr)
 
-            U_ll, U_lr, U_rl, U_rr, G_ll, G_lr, G_rl, G_rr  = self.PLM_states(
+            U_ll, U_lr, U_rl, U_rr, G_ll, G_lr, G_rl, G_rr = self.PLM_states(
                 U, x=False)
             # G_(i-1/2)
             G_l = self.flux(G_ll, G_lr, U_ll, U_lr, x=False)
             # G_(i+1/2)
             G_r = self.flux(G_rl, G_rr, U_rl, U_rr, x=False)
         else:
-            rho, u, v, p = get_prims(self.gamma, U)            
+            rho, u, v, p = get_prims(self.gamma, U)
             F = F_from_prim(self.gamma, (rho, u, v, p), x=True)
             G = F_from_prim(self.gamma, (rho, u, v, p), x=False)
-            
+
             F_L = F[(g-1):-(g+1), g:-g, :]
             F_R = F[(g+1):-(g-1), g:-g, :]
             G_L = G[g:-g, (g-1):-(g+1), :]
@@ -119,6 +172,13 @@ class Solver(ABC):
             G_l = self.flux(G_L, G_C, U_L, U_C, x=False)
             # G_(i+1/2)
             G_r = self.flux(G_C, G_R, U_C, U_R, x=False)
+
+            if self.nu:
+                Fv_l, Fv_r, Gv_l, Gv_r = self.viscosity(rho, u, v)
+                F_l += Fv_l
+                F_r += Fv_r
+                G_l += Gv_l
+                G_r += Gv_r
 
         return F_l, F_r, G_l, G_r
 

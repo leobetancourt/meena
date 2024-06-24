@@ -1,4 +1,4 @@
-from HD.helpers import c_s, E, P, get_prims, cartesian_to_polar, plot_grid
+from HD.helpers import c_s, E, P, get_prims, cartesian_to_polar, plot_grid, plot_sheer
 from HD.solvers import HLL, HLLC
 
 import numpy as np
@@ -13,9 +13,10 @@ class Boundary:
 
 
 class HD_2D:
-    def __init__(self, gamma=1.4, resolution=(100, 100),
+    def __init__(self, gamma=1.4, nu=None, resolution=(100, 100),
                  xrange=(-1, 1), yrange=(-1, 1), solver="hll", high_time=False, high_space=False):
         self.gamma = gamma
+        self.nu = nu  # viscosity
 
         # grid initialization
         self.res_x, self.res_y = resolution
@@ -44,21 +45,23 @@ class HD_2D:
         self.cfl = 0.4
         if solver == "hll":
             self.solver = HLL(
-                gamma, resolution, self.num_g, self.x, self.y, self.dx, self.dy, self.high_space)
+                gamma, self.nu, resolution, self.num_g, self.x, self.y, self.dx, self.dy, self.high_space)
         elif solver == "hllc":
             self.solver = HLLC(
-                gamma, resolution, self.num_g, self.x, self.y, self.dx, self.dy, self.high_space)
+                gamma, self.nu, resolution, self.num_g, self.x, self.y, self.dx, self.dy, self.high_space)
         else:
             raise Exception("Invalid solver: must be 'hll' or 'hllc'")
 
-    def add_ghost_cells(self):
+    def add_ghost_cells(self, arr):
         # add ghost cells to the top and bottom boundaries
-        self.U = np.hstack((np.repeat(self.U[:, :1, :], self.num_g, axis=1), self.U, np.repeat(
-            self.U[:, :1, :], self.num_g, axis=1)))
+        arr = np.hstack((np.repeat(arr[:, :1, :], self.num_g, axis=1), arr, np.repeat(
+            arr[:, :1, :], self.num_g, axis=1)))
 
         # add ghost cells to the left and right boundaries
-        self.U = np.vstack((np.repeat(self.U[:1, :, :], self.num_g, axis=0), self.U, np.repeat(
-            self.U[:1, :, :], self.num_g, axis=0)))
+        arr = np.vstack((np.repeat(arr[:1, :, :], self.num_g, axis=0), arr, np.repeat(
+            arr[:1, :, :], self.num_g, axis=0)))
+
+        return arr
 
     # bc_x = (left, right), bc_y = (bottom, top)
     def set_bcs(self, bc_x=(Boundary.OUTFLOW, Boundary.OUTFLOW), bc_y=(Boundary.OUTFLOW, Boundary.OUTFLOW)):
@@ -115,32 +118,16 @@ class HD_2D:
         t = self.cfl * \
             np.min(self.dx / (np.sqrt(self.gamma * p / rho) + np.sqrt(u**2 + v**2)))
         return t
-    
-    def check_physical(self):
-        # g = self.num_g
-        # u = self.U[g:-g, g:-g]
-        # for i in range(len(u)):
-        #     for j in range(len(u[i])):
-        #         cons = u[i][j]
-        #         rho = cons[0]
-        #         vx, vy = cons[1] / rho, cons[2] / rho
-        #         E = cons[3]
-        #         p = P(self.gamma, rho, vx, vy, E)
-        #         if np.isnan(rho) or rho <= 0:
-        #             print(f"rho={rho} at ({self.x[i]}, {self.y[j]})")
-        #         if np.isnan(p) or p <= 0:
-        #             print(f"p={p} at ({self.x[i]}, {self.y[j]})")
-        #         if np.isnan(E) or E <= 0:
-        #             print(f"E={cons[3]} at ({self.x[i]}, {self.y[j]})")
 
+    def check_physical(self):
         rho = self.U[:, :, 0]
         momx = self.U[:, :, 1]
         momy = self.U[:, :, 2]
         En = self.U[:, :, 3]
         p = P(self.gamma, rho, momx/rho, momy/rho, En)
         invalid = (rho <= 0) | (p <= 0) | (En <= 0)
-        momx[invalid] = 1e-6
-        momy[invalid] = 1e-6
+        momx[invalid] = 1e-12
+        momy[invalid] = 1e-12
         En[invalid] = E(self.gamma, 1e-6, 1e-6, 1e-6, 1e-6)
         rho[invalid] = 1e-6
 
@@ -176,7 +163,7 @@ class HD_2D:
         t = 0
         fig = plt.figure()
         PATH = f"./output/{filename}.hdf"
-        self.add_ghost_cells()
+        self.U = self.add_ghost_cells(self.U)
 
         next_checkpoint = 0
         g = self.num_g
@@ -220,6 +207,8 @@ class HD_2D:
                               extent=[self.xmin, self.xmax, self.ymin, self.ymax])
                     plt.pause(0.001)
 
+            plt.show()
+
     # call in a loop to print dynamic progress bar
 
     def print_progress_bar(self, iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█', printEnd="\r"):
@@ -241,6 +230,16 @@ class HD_2D:
         r, _ = cartesian_to_polar(self.grid[:, :, 0], self.grid[:, :, 1])
         self.U[r < 0.2] = np.array([0.125, 0, 0, E(0.125, 0.14, 0, 0)])
         self.U[r >= 0.2] = np.array([1, 0, 0, E(1, 1, 0, 0)])
+
+    def sheer(self):
+        x, y = self.grid[:, :, 0], self.grid[:, :, 1]
+        mid = (self.xmax + self.xmin) / 2
+        rho_L, u_L, v_L, p_L = 1, 0, 1, 1
+        self.U[x <= mid] = np.array(
+            [rho_L, rho_L * u_L, rho_L * v_L, E(self.gamma, rho_L, p_L, u_L, v_L)])
+        rho_R, u_R, v_R, p_R = 1, 0, -1, 1
+        self.U[x > mid] = np.array(
+            [rho_R, rho_R * u_R, rho_R * v_R, E(self.gamma, rho_R, p_R, u_R, v_R)])
 
     # case 3 in Liska Wendroff
     def quadrants(self):
@@ -338,7 +337,7 @@ class HD_2D:
             rho * v,
             E(self.gamma, rho, p, u, v)
         ]).transpose((1, 2, 0))
-        
+
         def gravity(U):
             g = - G * M / ((r + eps) ** 2)
             S = np.zeros_like(U)
@@ -357,9 +356,9 @@ class HD_2D:
             gaussian = -a * np.exp(-(r ** 2) / (2 * Delta ** 2))
             S = np.zeros_like(U)
             S[:, :, 0] = gaussian
-            S[:, :, 1] = 0 # gaussian * np.sign(U[:, :, 1])
-            S[:, :, 2] = 0 # gaussian # * np.sign(U[:, :, 2])
-            S[:, :, 3] = 0 # gaussian
+            S[:, :, 1] = 0  # gaussian * np.sign(U[:, :, 1])
+            S[:, :, 2] = 0  # gaussian # * np.sign(U[:, :, 2])
+            S[:, :, 3] = 0  # gaussian
             return S
 
         self.add_source(kernel)

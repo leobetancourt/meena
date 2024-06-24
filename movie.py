@@ -1,4 +1,4 @@
-from HD.helpers import plot_grid, get_prims, E, P
+from HD.helpers import plot_grid, plot_sheer, get_prims, E, P
 from MHD.helpers import plot_grid as plot_MHD
 import h5py
 import os
@@ -36,7 +36,7 @@ with h5py.File(PATH, "r") as infile:
     ymin, ymax = dataset.attrs["yrange"]
     if "zrange" in dataset.attrs: 
         zmin, zmax = dataset.attrs["zrange"]
-
+        
 fig = plt.figure()
 fps = 24
 FFMpegWriter = animation.writers['ffmpeg']

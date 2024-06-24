@@ -189,7 +189,7 @@ def plot_grid(gamma, U, t=0, plot="density", x=None, extent=None):
             dx, dy, dz = (extent[1] - extent[0]) / res_x, (extent[3] - extent[2]) / res_y, 2
             div = divergence(Bx, By, Bz, dx, dy, dz)
             c = plt.imshow(np.transpose(div[:, :, 0]), cmap="plasma", interpolation='nearest',
-                           origin='lower', extent=extent)
+                           origin='lower', extent=extent, vmin=-10, vmax=10)
             
         plt.colorbar(c, label=labels[plot])
 

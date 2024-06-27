@@ -6,7 +6,8 @@ from argparse import ArgumentParser
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-plt.rcParams['animation.ffmpeg_path'] = '/usr/local/bin/ffmpeg'
+plt.rcParams['figure.dpi'] = 300
+plt.rcParams['savefig.dpi'] = 300
 
 
 parser = ArgumentParser(description="Create a movie from a .hdf file.")
@@ -46,7 +47,7 @@ writer = FFMpegWriter(fps=fps, metadata=metadata)
 PATH = f"./videos/{file}"
 if not os.path.exists(PATH):
     os.makedirs(PATH)
-cm = writer.saving(fig, f"{PATH}/{var}.mp4", 100)
+cm = writer.saving(fig, f"{PATH}/{var}.mp4", 300)
 
 with cm:
     if history.shape[-1] == 4: # HD

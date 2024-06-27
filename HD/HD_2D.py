@@ -115,6 +115,8 @@ class HD_2D:
 
     def compute_timestep(self):
         rho, u, v, p = get_prims(self.gamma, self.U)
+        # valid = (rho > 1e-2) & (p > 1e-2)
+        # rho, p, u, v = rho[valid], p[valid], u[valid], v[valid]
         t = self.cfl * \
             np.min(self.dx / (np.sqrt(self.gamma * p / rho) + np.sqrt(u**2 + v**2)))
         return t
@@ -317,48 +319,3 @@ class HD_2D:
             return S
 
         self.add_source(gravity)
-
-    def kepler(self):
-        r, theta = cartesian_to_polar(self.grid[:, :, 0], self.grid[:, :, 1])
-        eps = 0.01
-        mach = 10
-        G = 1
-        M = 1
-        rho = np.ones_like(r) * 1
-        v_k = np.sqrt(G * M / (r + eps))  # keplerian velocity
-        cs = v_k / mach
-        p = rho * (cs ** 2) / self.gamma
-
-        u = - v_k * np.sin(theta)
-        v = v_k * np.cos(theta)
-        self.U = np.array([
-            rho,
-            rho * u,
-            rho * v,
-            E(self.gamma, rho, p, u, v)
-        ]).transpose((1, 2, 0))
-
-        def gravity(U):
-            g = - G * M / ((r + eps) ** 2)
-            S = np.zeros_like(U)
-            rho, u, v, p = get_prims(self.gamma, U)
-            g_x, g_y = g * np.cos(theta), g * np.sin(theta)
-            S[:, :, 1] = rho * g_x
-            S[:, :, 2] = rho * g_y
-            S[:, :, 3] = rho * (u * g_x + v * g_y)
-            return S
-
-        self.add_source(gravity)
-
-        def kernel(U):
-            a = 2.5
-            Delta = (self.xmax - self.xmin) / 30
-            gaussian = -a * np.exp(-(r ** 2) / (2 * Delta ** 2))
-            S = np.zeros_like(U)
-            S[:, :, 0] = gaussian
-            S[:, :, 1] = 0  # gaussian * np.sign(U[:, :, 1])
-            S[:, :, 2] = 0  # gaussian # * np.sign(U[:, :, 2])
-            S[:, :, 3] = 0  # gaussian
-            return S
-
-        self.add_source(kernel)

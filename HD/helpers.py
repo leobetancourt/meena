@@ -1,5 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import rc
+# plt.rcParams['figure.dpi'] = 300
+# plt.rcParams['savefig.dpi'] = 300
 
 def c_s(gamma, P, rho):
     return np.sqrt(gamma * P / rho)
@@ -93,35 +96,36 @@ def plot_sheer(gamma, U, t=0, extent=[0, 1], label=""):
 
 def plot_grid(gamma, U, t=0, plot="density", extent=[0, 1, 0, 1], vmin=None, vmax=None):
     rho, u, v, p = get_prims(gamma, U)
+    rho[rho <= 0] = 1e-6
     E = U[:, :, 3]
-    labels = {"density": r"$\rho$", "u": r"$u$",
+    labels = {"density": r"$\log_{10} \Sigma$", "u": r"$u$",
               "v": r"$v$", "pressure": r"$P$", "energy": r"$E$", }
 
     plt.cla()
     if plot == "density":
         if vmin is None:
             vmin, vmax = np.min(rho), np.max(rho)
-        c = plt.imshow(np.transpose(rho), cmap="plasma", interpolation='nearest',
-                       origin='lower', extent=extent, vmin=vmin, vmax=vmax)
+        c = plt.imshow(np.log10(np.transpose(rho)), cmap="magma", interpolation='nearest',
+                       origin='lower', extent=extent, vmin=-3, vmax=0.5)
     elif plot == "u":
         if vmin is None:
             vmin, vmax = np.min(u), np.max(u)
-        c = plt.imshow(np.transpose(u), cmap="plasma", interpolation='nearest',
+        c = plt.imshow(np.transpose(u), cmap="magma", interpolation='nearest',
                        origin='lower', extent=extent, vmin=vmin, vmax=vmax)
     elif plot == "v":
         if vmin is None:
             vmin, vmax = np.min(v), np.max(v)
-        c = plt.imshow(np.transpose(v), cmap="plasma", interpolation='nearest',
+        c = plt.imshow(np.transpose(v), cmap="magma", interpolation='nearest',
                        origin='lower', extent=extent, vmin=vmin, vmax=vmax)
     elif plot == "pressure":
         if vmin is None:
             vmin, vmax = np.min(p), np.max(p)
-        c = plt.imshow(np.transpose(p), cmap="plasma", interpolation='nearest',
+        c = plt.imshow(np.transpose(p), cmap="magma", interpolation='nearest',
                        origin='lower', extent=extent, vmin=0, vmax=vmax)
     elif plot == "energy":
         if vmin is None:
             vmin, vmax = np.min(E), np.max(E)
-        c = plt.imshow(np.transpose(E), cmap="plasma", interpolation='nearest',
+        c = plt.imshow(np.transpose(E), cmap="magma", interpolation='nearest',
                        origin='lower', extent=extent, vmin=vmin, vmax=vmax)
 
     plt.colorbar(c, label=labels[plot])

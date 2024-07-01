@@ -4,6 +4,7 @@ from HD.solvers import HLL, HLLC
 import numpy as np
 import matplotlib.pyplot as plt
 import h5py
+from abc import abstractmethod
 
 
 class Boundary:
@@ -51,6 +52,9 @@ class HD_2D:
                 gamma, self.nu, resolution, self.num_g, self.x, self.y, self.dx, self.dy, self.high_space)
         else:
             raise Exception("Invalid solver: must be 'hll' or 'hllc'")
+        
+        # list of diagnostics, each a tuple (name : string, get : method)
+        self.diagnostics = []
 
     def add_ghost_cells(self, arr):
         # add ghost cells to the top and bottom boundaries
@@ -161,6 +165,14 @@ class HD_2D:
         self.U = np.add(np.add((1/3) * self.U, (2/3) * U_2),
                         (2/3) * self.dt * L_2)
 
+    # resizes h5py dataset and saves d
+    def save_to_dset(self, dset, d):
+        dset.resize(dset.shape[0] + 1, axis=0)
+        dset[-1] = d
+        
+    def add_diagnostic(self, name, get_func):
+        self.diagnostics.append((name, get_func))
+
     def run(self, T, plot=None, filename="out", save_interval=0.1):
         t = 0
         fig = plt.figure()
@@ -171,34 +183,51 @@ class HD_2D:
         g = self.num_g
 
         # open HDF5 file to save U state at each checkpoint
-        with h5py.File(PATH, "w") as outfile:
+        with h5py.File(PATH, "w") as f:
+            # metadata
+            f.attrs["gamma"] = self.gamma
+            f.attrs["xrange"] = (self.xmin, self.xmax)
+            f.attrs["yrange"] = (self.ymin, self.ymax)
+                        
             # Create an extendable dataset
             # None allows unlimited growth in the first dimension
-            max_shape = (None, self.res_x, self.res_y, 4)
-            dataset = outfile.create_dataset("data", shape=(
-                0, self.res_x, self.res_y, 4), maxshape=max_shape, chunks=True)
-
-            # metadata
-            dataset.attrs["gamma"] = self.gamma
-            dataset.attrs["xrange"] = (self.xmin, self.xmax)
-            dataset.attrs["yrange"] = (self.ymin, self.ymax)
-            dataset.attrs["t"] = []
+            max_shape = (None, self.res_x, self.res_y)
+            dset_t = f.create_dataset("t", (0,), maxshape=(None,), chunks=True, dtype="float64") # simulation times
+            dset_tc = f.create_dataset("tc", (0,), maxshape=(None,), chunks=True, dtype="float64") # checkpoint times
+            dset_rho = f.create_dataset("rho", (0, self.res_x, self.res_y), maxshape=max_shape, chunks=True, dtype="float64")
+            dset_momx = f.create_dataset("momx", (0, self.res_x, self.res_y), maxshape=max_shape, chunks=True, dtype="float64")
+            dset_momy = f.create_dataset("momy", (0, self.res_x, self.res_y), maxshape=max_shape, chunks=True, dtype="float64")
+            dset_E = f.create_dataset("E", (0, self.res_x, self.res_y), maxshape=max_shape, chunks=True, dtype="float64")
+            for i, tup in enumerate(self.diagnostics):
+                name, get_func = tup
+                dset = f.create_dataset(name, (0,), maxshape=(None,), chunks=True, dtype="float64")
+                self.diagnostics[i] = (name, get_func, dset)
 
             while t < T:
-                self.check_physical()
+                # at each timestep, save diagnostics
+                self.save_to_dset(dset_t, t)
+                for tup in self.diagnostics:
+                    name, get_val, dset = tup
+                    self.save_to_dset(dset, get_val())
+                
+                # at each checkpoint, save the current state excluding the ghost cells
+                if t >= next_checkpoint:
+                    self.save_to_dset(dset_tc, t)
+                    self.save_to_dset(dset_rho, self.U[g:-g, g:-g, 0])
+                    self.save_to_dset(dset_momx, self.U[g:-g, g:-g, 1])
+                    self.save_to_dset(dset_momy, self.U[g:-g, g:-g, 2])
+                    self.save_to_dset(dset_E, self.U[g:-g, g:-g, 3])
+
+                    next_checkpoint += save_interval
+                
                 self.apply_bcs()
 
                 if self.high_time:
                     self.high_order_step(t)
                 else:
                     self.first_order_step(t)
-
-                # at each checkpoint, save the current state excluding the ghost cells
-                if t >= next_checkpoint:
-                    dataset.resize(dataset.shape[0] + 1, axis=0)
-                    dataset[-1] = self.U[g:-g, g:-g]
-                    next_checkpoint += save_interval
-                    dataset.attrs["t"] = np.append(dataset.attrs["t"], t)
+                    
+                self.check_physical()
 
                 t = t + self.dt if (t + self.dt <= T) else T
                 self.print_progress_bar(t, T, suffix="complete", length=50)
@@ -209,9 +238,17 @@ class HD_2D:
                               extent=[self.xmin, self.xmax, self.ymin, self.ymax])
                     plt.pause(0.001)
 
-            plt.show()
-
-    # call in a loop to print dynamic progress bar
+            for tup in self.diagnostics:
+                name, get_val, dset = tup
+                self.save_to_dset(dset, get_val())
+            self.save_to_dset(dset_t, t)
+            self.save_to_dset(dset_tc, t)
+            self.save_to_dset(dset_rho, self.U[g:-g, g:-g, 0])
+            self.save_to_dset(dset_momx, self.U[g:-g, g:-g, 1])
+            self.save_to_dset(dset_momy, self.U[g:-g, g:-g, 2])
+            self.save_to_dset(dset_E, self.U[g:-g, g:-g, 3])
+            
+        plt.show()
 
     def print_progress_bar(self, iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█', printEnd="\r"):
         percent = ("{0:." + str(decimals) + "f}").format(100 *

@@ -28,15 +28,19 @@ if not args.file.endswith('.hdf'):
 PATH = args.file
 var = args.output
 
-with h5py.File(PATH, "r") as infile:
-    dataset = infile["data"]
-    history = dataset[...]
-    t_vals = dataset.attrs["t"]
-    gamma = dataset.attrs["gamma"]
-    xmin, xmax = dataset.attrs["xrange"]
-    ymin, ymax = dataset.attrs["yrange"]
-    if "zrange" in dataset.attrs: 
-        zmin, zmax = dataset.attrs["zrange"]
+with h5py.File(PATH, "r") as f:
+    gamma = f.attrs["gamma"]
+    xmin, xmax = f.attrs["xrange"]
+    ymin, ymax = f.attrs["yrange"]
+    if "zrange" in f.attrs: 
+        zmin, zmax = f.attrs["zrange"]
+    
+    tc = f["tc"][...] # checkpoint times
+    rho, momx, momy, En = f["rho"][...], f["momx"][...], f["momy"][...], f["E"][...]
+    momz, Bx, By, Bz = None, None, None, None
+    if "Bx" in f: # MHD
+        momz, Bx, By, Bz = f["momz"], f["Bx"], f["By"], f["Bz"]
+
         
 fig = plt.figure()
 fps = 24
@@ -44,17 +48,17 @@ FFMpegWriter = animation.writers['ffmpeg']
 file = os.path.splitext(os.path.basename(PATH))[0]
 metadata = dict(title=file, comment='')
 writer = FFMpegWriter(fps=fps, metadata=metadata)
-PATH = f"./videos/{file}"
+PATH = f"./visual/{file}"
 if not os.path.exists(PATH):
     os.makedirs(PATH)
 cm = writer.saving(fig, f"{PATH}/{var}.mp4", 300)
 
 with cm:
-    if history.shape[-1] == 4: # HD
+    if not Bx: # HD
         vmin, vmax = 0, 2
-        rho = np.maximum(history[-1, :, :, 0], 1e-6)
-        u, v = history[-1, :, :, 1] / rho, history[-1, :, :, 2] / rho
-        En = np.maximum(history[-1, :, :, 3], 1e-6)
+        rho = np.maximum(rho, 1e-6)
+        u, v = momx / rho, momy / rho
+        En = np.maximum(En, 1e-6)
         p = np.maximum(P(gamma, rho, u, v, En), 1e-6)
         if var == "density":
             vmin, vmax = np.min(rho), np.max(rho)
@@ -67,14 +71,31 @@ with cm:
         elif var == "energy":
             vmin, vmax = np.min(En), np.max(En)
 
-    for i in range(len(history)):
-        U = history[i]
-        t = t_vals[i]
+    for i in range(len(tc)): # loop over checkpoints
+        if Bx: 
+            U = np.array([
+                rho[i],
+                momx[i],
+                momy[i],
+                momz[i],
+                Bx[i],
+                By[i],
+                Bz[i],
+                En[i]
+            ]).transpose((1, 2, 3, 0))
+        else:
+            U = np.array([
+                rho[i],
+                momx[i],
+                momy[i],
+                En[i]
+            ]).transpose((1, 2, 0))
+            
         fig.clear()
-        if U.shape[-1] == 4: # HD
-            plot_grid(gamma, U, t=t, plot=var, extent=[xmin, xmax, ymin, ymax], vmin=vmin, vmax=vmax)
-        else: # MHD
-            plot_MHD(gamma, U, t=t, plot=var, extent=[xmin, xmax, ymin, ymax])
+        if Bx: # MHD
+            plot_MHD(gamma, U, t=tc[i], plot=var, extent=[xmin, xmax, ymin, ymax])
+        else: # HD
+            plot_grid(gamma, U, t=tc[i], plot=var, extent=[xmin, xmax, ymin, ymax], vmin=vmin, vmax=vmax)
         writer.grab_frame()
 
 print("Movie saved to", PATH)

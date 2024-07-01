@@ -8,8 +8,8 @@ from MHD.MHD import MHD
 
 if __name__ == "__main__":
 
-    sim = Binary(gamma=5/3, resolution=(400, 400))
-    sim.run(T=20, plot="density", filename="binaryy", save_interval=0.04)
+    sim = Binary(gamma=5/3, resolution=(300, 300))
+    sim.run(T=20, plot="density", filename="binary", save_interval=0.04)
 
     # sim = MHD(gamma=2, resolution=(800, 1, 1), xrange=(-1, 1))
     # sim.shock_tube()

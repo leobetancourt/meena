@@ -49,10 +49,10 @@ def U_from_prim(gamma, prims):
     return U
 
 
-def F_from_prim(gamma, prims, x=True):
+def F_from_prim(gamma, prims, x1=True):
     rho, u, v, p = prims
     e = E(gamma, rho, p, u, v)
-    if x:
+    if x1:
         F = np.array([
             rho * u,
             rho * (u ** 2) + p,
@@ -69,6 +69,17 @@ def F_from_prim(gamma, prims, x=True):
 
     return F
 
+def add_ghost_cells(arr, num):
+    # add ghost cells to the second coordinate direction (y if cartesian, theta if polar)
+    arr = np.hstack((np.repeat(arr[:, :1, :], num, axis=1), arr, np.repeat(
+        arr[:, :1, :], num, axis=1)))
+
+    # add ghost cells to the first coordinate direction (x if cartesian, r if polar)
+    arr = np.vstack((np.repeat(arr[:1, :, :], num, axis=0), arr, np.repeat(
+        arr[:1, :, :], num, axis=0)))
+
+    return arr
+
 
 def minmod(x, y, z):
     return 0.25 * np.absolute(np.sign(x) + np.sign(y)) * (np.sign(x) + np.sign(z)) * np.minimum(np.minimum(np.absolute(x), np.absolute(y)), np.absolute(z))
@@ -81,7 +92,7 @@ def cartesian_to_polar(x, y):
 
 
 def polar_to_cartesian(r, theta):
-    return (r * np.cos(theta), r * np.sin(theta))
+    return r * np.cos(theta), r * np.sin(theta)
 
 def plot_sheer(gamma, U, t=0, extent=[0, 1], label=""):
     res_x, res_y = U.shape[0], U.shape[1]
@@ -94,41 +105,26 @@ def plot_sheer(gamma, U, t=0, extent=[0, 1], label=""):
     plt.legend()
     plt.title(f"Velocity Shear Test at t = {t:.2f}")
 
-def plot_grid(gamma, U, t=0, plot="density", extent=[0, 1, 0, 1], vmin=None, vmax=None):
-    rho, u, v, p = get_prims(gamma, U)
-    rho[rho <= 0] = 1e-6
-    E = U[:, :, 3]
-    labels = {"density": r"$\log_{10} \Sigma$", "u": r"$u$",
-              "v": r"$v$", "pressure": r"$P$", "energy": r"$E$", }
+def plot_grid(matrix, label, coords="cartesian", x1=None, x2=None, vmin=None, vmax=None):
+    extent = [x1[0], x1[-1], x2[0], x2[-1]]
 
-    plt.cla()
-    if plot == "density":
+    if coords == "cartesian":
+        fig, ax = plt.subplots()
         if vmin is None:
-            vmin, vmax = np.min(rho), np.max(rho)
-        c = plt.imshow(np.log10(np.transpose(rho)), cmap="magma", interpolation='nearest',
-                       origin='lower', extent=extent, vmin=-3, vmax=0.5)
-    elif plot == "u":
+            vmin, vmax = np.min(matrix), np.max(matrix)
+        c = ax.imshow(np.transpose(matrix), cmap="magma", interpolation='nearest',
+                    origin='lower', extent=extent, vmin=vmin, vmax=vmax)
+    elif coords == "polar":
+        fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
         if vmin is None:
-            vmin, vmax = np.min(u), np.max(u)
-        c = plt.imshow(np.transpose(u), cmap="magma", interpolation='nearest',
-                       origin='lower', extent=extent, vmin=vmin, vmax=vmax)
-    elif plot == "v":
-        if vmin is None:
-            vmin, vmax = np.min(v), np.max(v)
-        c = plt.imshow(np.transpose(v), cmap="magma", interpolation='nearest',
-                       origin='lower', extent=extent, vmin=vmin, vmax=vmax)
-    elif plot == "pressure":
-        if vmin is None:
-            vmin, vmax = np.min(p), np.max(p)
-        c = plt.imshow(np.transpose(p), cmap="magma", interpolation='nearest',
-                       origin='lower', extent=extent, vmin=0, vmax=vmax)
-    elif plot == "energy":
-        if vmin is None:
-            vmin, vmax = np.min(E), np.max(E)
-        c = plt.imshow(np.transpose(E), cmap="magma", interpolation='nearest',
-                       origin='lower', extent=extent, vmin=vmin, vmax=vmax)
-
-    plt.colorbar(c, label=labels[plot])
-    # plt.xlabel("x")
-    # plt.ylabel("y")
-    plt.title(f"t = {t:.2f}")
+            vmin, vmax = np.min(matrix), np.max(matrix)
+        ax.grid(False)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_ylim(0, np.max(x1))
+        R, Theta = np.meshgrid(x1, x2, indexing="ij")
+        c = ax.pcolormesh(Theta, R, matrix, shading='auto', cmap='magma', vmin=vmin, vmax=vmax)
+    
+    cb = plt.colorbar(c, ax=ax, label=label)
+        
+    return fig, ax, c, cb

@@ -8,8 +8,11 @@ from MHD.MHD import MHD
 
 if __name__ == "__main__":
 
-    sim = Binary(gamma=5/3, resolution=(300, 300))
-    sim.run(T=20, plot="density", filename="binary", save_interval=0.04)
+    sim = Binary(gamma=5/3, coords="polar", resolution=(500, 800),
+                 x1_range=(1, 5), x2_range=(0, 2 * np.pi), logspace=True)
+    sim.set_bcs((Boundary.OUTFLOW, Boundary.OUTFLOW),
+                (Boundary.PERIODIC, Boundary.PERIODIC))
+    sim.run(T=20, plot="log density", filename="binary", save_interval=0.04)
 
     # sim = MHD(gamma=2, resolution=(800, 1, 1), xrange=(-1, 1))
     # sim.shock_tube()
@@ -21,16 +24,23 @@ if __name__ == "__main__":
     #             (Boundary.PERIODIC, Boundary.PERIODIC))
     # sim.spherical_blast()
     # sim.run(T=1, plot="density", filename="MHD blast", save_interval=0.01)
-    
+
     # sim = MHD(gamma=5/3, resolution=(512, 512, 1), xrange=(0, 1), yrange=(0, 1))
     # sim.set_bcs((Boundary.PERIODIC, Boundary.PERIODIC),
     #             (Boundary.PERIODIC, Boundary.PERIODIC),
     #             (Boundary.PERIODIC, Boundary.PERIODIC))
     # sim.orszag_tang()
     # sim.run(T=1, plot="pressure", filename="Orszag-Tang", save_interval=0.01)
-    
+
     # sim = HD_2D(gamma=5/3, nu=0, resolution=(300, 450), xrange=(-1, 1), yrange=(-1.5, 1.5), solver="hll")
-    # sim.set_bcs((Boundary.OUTFLOW, Boundary.OUTFLOW), 
+    # sim.set_bcs((Boundary.OUTFLOW, Boundary.OUTFLOW),
     #             (Boundary.OUTFLOW, Boundary.OUTFLOW))
     # sim.sheer()
     # sim.run(T=1, plot="v", filename="sheer1", save_interval=0.01)
+
+    # sim = HD_2D(gamma=5/3, nu=1e-3, coords="polar", resolution=(100, 200),
+    #             x1_range=(0.05, 1), x2_range=(0, 2 * np.pi), logspace=True, solver="hll")
+    # sim.set_bcs((Boundary.OUTFLOW, Boundary.OUTFLOW),
+    #             (Boundary.PERIODIC, Boundary.PERIODIC))
+    # sim.sedov_blast(radius=0.1)
+    # sim.run(T=1, plot="density", filename="sedov (polar)", save_interval=0.01)

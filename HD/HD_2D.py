@@ -1,10 +1,9 @@
-from HD.helpers import c_s, E, P, get_prims, cartesian_to_polar, plot_grid, plot_sheer
+from HD.helpers import c_s, E, P, add_ghost_cells, get_prims, cartesian_to_polar, plot_grid, plot_sheer
 from HD.solvers import HLL, HLLC
 
 import numpy as np
 import matplotlib.pyplot as plt
 import h5py
-from abc import abstractmethod
 
 
 class Boundary:
@@ -13,117 +12,135 @@ class Boundary:
     PERIODIC = "periodic"
 
 
+def linspace_cells(min, max, num):
+    interfaces = np.linspace(min, max, num + 1)
+    centers = (interfaces[:-1] + interfaces[1:]) / 2
+
+    return centers, interfaces
+
+
+def logspace_cells(min, max, num):
+    interfaces = np.logspace(np.log10(min), np.log10(max), num + 1)
+    centers = (interfaces[:-1] + interfaces[1:]) / 2
+
+    return centers, interfaces
+
+
 class HD_2D:
-    def __init__(self, gamma=1.4, nu=None, resolution=(100, 100),
-                 xrange=(-1, 1), yrange=(-1, 1), solver="hll", high_time=False, high_space=False):
+    def __init__(self, gamma=1.4, nu=None, coords="cartesian", resolution=(100, 100),
+                 x1_range=(-1, 1), x2_range=(-1, 1), logspace=False, solver="hll", high_time=False, high_space=False):
         self.gamma = gamma
         self.nu = nu  # viscosity
 
+        self.coords = coords
         # grid initialization
-        self.res_x, self.res_y = resolution
-        self.xmin, self.xmax = xrange
-        self.ymin, self.ymax = yrange
-        self.x = np.linspace(self.xmin, self.xmax,
-                             num=self.res_x, endpoint=False)
-        self.y = np.linspace(self.ymin, self.ymax,
-                             num=self.res_y, endpoint=False)
+        self.res_x1, self.res_x2 = resolution
+        self.x1_min, self.x1_max = x1_range
+        self.x2_min, self.x2_max = x2_range
+        self.x1, self.x1_interf = linspace_cells(
+            self.x1_min, self.x1_max, num=self.res_x1)
+        self.x2, self.x2_interf = linspace_cells(
+            self.x2_min, self.x2_max, num=self.res_x2)
+        if logspace:
+            self.x1, self.x1_interf = logspace_cells(
+                self.x1_min, self.x1_max, num=self.res_x1)
         self.grid = np.array(
-            [np.array([[_x, _y] for _y in self.y]) for _x in self.x])
-        self.dx, self.dy = (self.xmax - self.xmin) / \
-            self.res_x, (self.ymax - self.ymin) / self.res_y
+            [np.array([[_x1, _x2] for _x2 in self.x2]) for _x1 in self.x1])
+
+        self.dx1, self.dx2 = (self.x1_max - self.x1_min) / \
+            self.res_x1, (self.x2_max - self.x2_min) / self.res_x2
+
+        self.U = np.zeros((self.res_x1, self.res_x2, 4))
 
         self.num_g = 2  # number of ghost cells
         self.set_bcs()
 
-        # conservative variable
-        self.U = np.zeros((self.res_x, self.res_y, 4))
         # source terms (each a function of U)
         self.S = []
 
         self.high_time = high_time
         self.high_space = high_space
-        self.dt = self.dx
+        self.dt = self.dx1
         self.cfl = 0.4
         if solver == "hll":
             self.solver = HLL(
-                gamma, self.nu, resolution, self.num_g, self.x, self.y, self.dx, self.dy, self.high_space)
+                gamma, self.nu, self.num_g, coords, resolution, self.x1, self.x2, self.x1_interf, self.x2_interf, high_order=self.high_space)
         elif solver == "hllc":
             self.solver = HLLC(
-                gamma, self.nu, resolution, self.num_g, self.x, self.y, self.dx, self.dy, self.high_space)
+                gamma, self.nu, self.num_g, coords, resolution, self.x1, self.x2, self.x1_interf, self.x2_interf, high_order=self.high_space)
         else:
             raise Exception("Invalid solver: must be 'hll' or 'hllc'")
-        
+
         # list of diagnostics, each a tuple (name : string, get : method)
         self.diagnostics = []
 
-    def add_ghost_cells(self, arr):
-        # add ghost cells to the top and bottom boundaries
-        arr = np.hstack((np.repeat(arr[:, :1, :], self.num_g, axis=1), arr, np.repeat(
-            arr[:, :1, :], self.num_g, axis=1)))
-
-        # add ghost cells to the left and right boundaries
-        arr = np.vstack((np.repeat(arr[:1, :, :], self.num_g, axis=0), arr, np.repeat(
-            arr[:1, :, :], self.num_g, axis=0)))
-
-        return arr
-
-    # bc_x = (left, right), bc_y = (bottom, top)
-    def set_bcs(self, bc_x=(Boundary.OUTFLOW, Boundary.OUTFLOW), bc_y=(Boundary.OUTFLOW, Boundary.OUTFLOW)):
-        self.bc_x = bc_x
-        self.bc_y = bc_y
+    def set_bcs(self, bc_x1=(Boundary.OUTFLOW, Boundary.OUTFLOW), bc_x2=(Boundary.OUTFLOW, Boundary.OUTFLOW)):
+        # bc_i is a tuple of the form defining the inner and outer boundary conditions for coordinate i
+        self.bc_x1 = bc_x1
+        self.bc_x2 = bc_x2
 
     def apply_bcs(self):
         g = self.num_g
         # left
-        if self.bc_x[0] == Boundary.OUTFLOW:
+        if self.bc_x1[0] == Boundary.OUTFLOW:
             self.U[:g, :, :] = self.U[g:(g+1), :, :]
-        elif self.bc_x[0] == Boundary.REFLECTIVE:
+        elif self.bc_x1[0] == Boundary.REFLECTIVE:
             self.U[:g, :, :] = np.flip(self.U[g:(2*g), :, :], axis=0)
             # invert x momentum
             self.U[:g, :, 1] = -np.flip(self.U[g:(2*g), :, 1], axis=0)
-        elif self.bc_x[0] == Boundary.PERIODIC:
+        elif self.bc_x1[0] == Boundary.PERIODIC:
             self.U[:g, :, :] = self.U[(-2*g):(-g), :, :]
 
         # right
-        if self.bc_x[1] == Boundary.OUTFLOW:
+        if self.bc_x1[1] == Boundary.OUTFLOW:
             self.U[-g:, :, :] = self.U[-(g+1):(-g), :, :]
-        elif self.bc_x[1] == Boundary.REFLECTIVE:
+        elif self.bc_x1[1] == Boundary.REFLECTIVE:
             self.U[-g:, :, :] = np.flip(self.U[(-2*g):(-g), :, :], axis=0)
             # invert x momentum
             self.U[-g:, :, 1] = -np.flip(self.U[(-2*g):(-g), :, 1], axis=0)
-        elif self.bc_x[1] == Boundary.PERIODIC:
+        elif self.bc_x1[1] == Boundary.PERIODIC:
             self.U[-g:, :, :] = self.U[g:(2*g), :, :]
 
         # bottom
-        if self.bc_y[0] == Boundary.OUTFLOW:
+        if self.bc_x2[0] == Boundary.OUTFLOW:
             self.U[:, :g, :] = self.U[:, g:(g+1), :]
-        elif self.bc_y[0] == Boundary.REFLECTIVE:
+        elif self.bc_x2[0] == Boundary.REFLECTIVE:
             self.U[:, :g, :] = np.flip(self.U[:, g:(2*g), :], axis=1)
             # invert y momentum
             self.U[:, :g, 2] = -np.flip(self.U[:, g:(2*g), 2], axis=1)
-        elif self.bc_y[0] == Boundary.PERIODIC:
+        elif self.bc_x2[0] == Boundary.PERIODIC:
             self.U[:, :g, :] = self.U[:, (-2*g):(-g), :]
 
         # top
-        if self.bc_y[1] == Boundary.OUTFLOW:
+        if self.bc_x2[1] == Boundary.OUTFLOW:
             self.U[:, -g:, :] = self.U[:, -(g+1):(-g), :]
-        elif self.bc_y[1] == Boundary.REFLECTIVE:
+        elif self.bc_x2[1] == Boundary.REFLECTIVE:
             self.U[:, -g:, :] = np.flip(self.U[:, (-2*g):(-g), :], axis=1)
             # invert y momentum
             self.U[:, -g:, 2] = -np.flip(self.U[:, (-2*g):(-g), 2], axis=1)
-        elif self.bc_y[1] == Boundary.PERIODIC:
+        elif self.bc_x2[1] == Boundary.PERIODIC:
             self.U[:, -g:, :] = self.U[:, g:(2*g), :]
 
     def add_source(self, source):
         self.S.append(source)
 
     def compute_timestep(self):
-        rho, u, v, p = get_prims(self.gamma, self.U)
-        # valid = (rho > 1e-2) & (p > 1e-2)
-        # rho, p, u, v = rho[valid], p[valid], u[valid], v[valid]
-        t = self.cfl * \
-            np.min(self.dx / (np.sqrt(self.gamma * p / rho) + np.sqrt(u**2 + v**2)))
-        return t
+        g = self.num_g
+        rho, u, v, p = get_prims(self.gamma, self.U[g:-g, g:-g])
+        cs = c_s(self.gamma, p, rho)
+        if self.coords == "cartesian":
+            dt = self.cfl * \
+                min(np.min(self.dx1 / (np.abs(u) + cs)),
+                       np.min(self.dx2 / (np.abs(v) + cs)))
+        elif self.coords == "polar":
+            R_interf, _ = np.meshgrid(self.x1_interf, self.x2, indexing="ij")
+            x1_l, x1_r = R_interf[:-1, :], R_interf[1:, :]
+            delta_r = x1_r - x1_l
+            R , _ = np.meshgrid(self.x1, self.x2, indexing="ij")
+            dt = self.cfl * \
+                min(np.min(delta_r / (np.abs(u) + cs)),
+                       np.min(R * self.dx2 / (np.abs(v) + cs)))
+        return dt
 
     def check_physical(self):
         rho = self.U[:, :, 0]
@@ -169,15 +186,16 @@ class HD_2D:
     def save_to_dset(self, dset, d):
         dset.resize(dset.shape[0] + 1, axis=0)
         dset[-1] = d
-        
+
     def add_diagnostic(self, name, get_func):
         self.diagnostics.append((name, get_func))
 
     def run(self, T, plot=None, filename="out", save_interval=0.1):
         t = 0
-        fig = plt.figure()
         PATH = f"./output/{filename}.hdf"
-        self.U = self.add_ghost_cells(self.U)
+        self.U = add_ghost_cells(self.U, self.num_g)
+        labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$",
+              "v": r"$v$", "pressure": r"$P$", "energy": r"$E$", }
 
         next_checkpoint = 0
         g = self.num_g
@@ -185,23 +203,51 @@ class HD_2D:
         # open HDF5 file to save U state at each checkpoint
         with h5py.File(PATH, "w") as f:
             # metadata
+            f.attrs["coords"] = self.coords
             f.attrs["gamma"] = self.gamma
-            f.attrs["xrange"] = (self.xmin, self.xmax)
-            f.attrs["yrange"] = (self.ymin, self.ymax)
-                        
-            # Create an extendable dataset
-            # None allows unlimited growth in the first dimension
-            max_shape = (None, self.res_x, self.res_y)
-            dset_t = f.create_dataset("t", (0,), maxshape=(None,), chunks=True, dtype="float64") # simulation times
-            dset_tc = f.create_dataset("tc", (0,), maxshape=(None,), chunks=True, dtype="float64") # checkpoint times
-            dset_rho = f.create_dataset("rho", (0, self.res_x, self.res_y), maxshape=max_shape, chunks=True, dtype="float64")
-            dset_momx = f.create_dataset("momx", (0, self.res_x, self.res_y), maxshape=max_shape, chunks=True, dtype="float64")
-            dset_momy = f.create_dataset("momy", (0, self.res_x, self.res_y), maxshape=max_shape, chunks=True, dtype="float64")
-            dset_E = f.create_dataset("E", (0, self.res_x, self.res_y), maxshape=max_shape, chunks=True, dtype="float64")
+            f.attrs["x1"] = self.x1
+            f.attrs["x2"] = self.x2
+
+            # create h5 datasets for time, conserved variables and diagnostics
+            max_shape = (None, self.res_x1, self.res_x2)
+            dset_t = f.create_dataset("t", (0,), maxshape=(
+                None,), chunks=True, dtype="float64")  # simulation times
+            dset_tc = f.create_dataset("tc", (0,), maxshape=(
+                None,), chunks=True, dtype="float64")  # checkpoint times
+            dset_rho = f.create_dataset(
+                "rho", (0, self.res_x1, self.res_x2), maxshape=max_shape, chunks=True, dtype="float64")
+            dset_momx1 = f.create_dataset(
+                "momx1", (0, self.res_x1, self.res_x2), maxshape=max_shape, chunks=True, dtype="float64")
+            dset_momx2 = f.create_dataset(
+                "momx2", (0, self.res_x1, self.res_x2), maxshape=max_shape, chunks=True, dtype="float64")
+            dset_E = f.create_dataset(
+                "E", (0, self.res_x1, self.res_x2), maxshape=max_shape, chunks=True, dtype="float64")
             for i, tup in enumerate(self.diagnostics):
                 name, get_func = tup
-                dset = f.create_dataset(name, (0,), maxshape=(None,), chunks=True, dtype="float64")
+                dset = f.create_dataset(name, (0,), maxshape=(
+                    None,), chunks=True, dtype="float64")
                 self.diagnostics[i] = (name, get_func, dset)
+                
+            rho, u, v, p = get_prims(self.gamma, self.U[g:-g, g:-g])
+            En = E(self.gamma, rho, p, u, v)
+            vmin, vmax = None, None
+            if plot == "density":
+                matrix = rho
+            elif plot == "log density":
+                matrix = np.log10(rho)
+                vmin, vmax = -3, 0.5
+            elif plot == "u":
+                matrix = u
+            elif plot == "v":
+                matrix = v
+            elif plot == "pressure":
+                matrix = p
+            elif plot == "energy":
+                matrix = En
+        
+            if plot:
+                fig, ax, c, cb = plot_grid(matrix, labels[plot], coords=self.coords, x1=self.x1, x2=self.x2, vmin=vmin, vmax=vmax)
+                ax.set_title(f"t = {t:.2f}")
 
             while t < T:
                 # at each timestep, save diagnostics
@@ -209,34 +255,54 @@ class HD_2D:
                 for tup in self.diagnostics:
                     name, get_val, dset = tup
                     self.save_to_dset(dset, get_val())
-                
+
                 # at each checkpoint, save the current state excluding the ghost cells
                 if t >= next_checkpoint:
                     self.save_to_dset(dset_tc, t)
                     self.save_to_dset(dset_rho, self.U[g:-g, g:-g, 0])
-                    self.save_to_dset(dset_momx, self.U[g:-g, g:-g, 1])
-                    self.save_to_dset(dset_momy, self.U[g:-g, g:-g, 2])
+                    self.save_to_dset(dset_momx1, self.U[g:-g, g:-g, 1])
+                    self.save_to_dset(dset_momx2, self.U[g:-g, g:-g, 2])
                     self.save_to_dset(dset_E, self.U[g:-g, g:-g, 3])
 
                     next_checkpoint += save_interval
-                
+
                 self.apply_bcs()
 
                 if self.high_time:
                     self.high_order_step(t)
                 else:
                     self.first_order_step(t)
-                    
+
                 self.check_physical()
+
+                if plot:
+                    if self.coords == "cartesian":
+                        c.set_data(matrix)
+                    elif self.coords == "polar":
+                        c.set_array(matrix.ravel())
+                    # c.set_clim(vmin=np.min(matrix), vmax=np.max(matrix))
+                    cb.update_normal(c)
+                    ax.set_title(f"t = {t:.2f}")
+                    fig.canvas.draw()
+                    plt.pause(0.001)
 
                 t = t + self.dt if (t + self.dt <= T) else T
                 self.print_progress_bar(t, T, suffix="complete", length=50)
-
-                if plot:
-                    fig.clear()
-                    plot_grid(self.gamma, self.U[g:-g, g:-g], t=t, plot=plot,
-                              extent=[self.xmin, self.xmax, self.ymin, self.ymax])
-                    plt.pause(0.001)
+                
+                rho, u, v, p = get_prims(self.gamma, self.U[g:-g, g:-g])
+                En = E(self.gamma, rho, p, u, v)
+                if plot == "density":
+                    matrix = rho
+                elif plot == "log density":
+                    matrix = np.log10(rho)
+                elif plot == "u":
+                    matrix = u
+                elif plot == "v":
+                    matrix = v
+                elif plot == "pressure":
+                    matrix = p
+                elif plot == "energy":
+                    matrix = En
 
             for tup in self.diagnostics:
                 name, get_val, dset = tup
@@ -244,10 +310,10 @@ class HD_2D:
             self.save_to_dset(dset_t, t)
             self.save_to_dset(dset_tc, t)
             self.save_to_dset(dset_rho, self.U[g:-g, g:-g, 0])
-            self.save_to_dset(dset_momx, self.U[g:-g, g:-g, 1])
-            self.save_to_dset(dset_momy, self.U[g:-g, g:-g, 2])
+            self.save_to_dset(dset_momx1, self.U[g:-g, g:-g, 1])
+            self.save_to_dset(dset_momx2, self.U[g:-g, g:-g, 2])
             self.save_to_dset(dset_E, self.U[g:-g, g:-g, 3])
-            
+
         plt.show()
 
     def print_progress_bar(self, iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█', printEnd="\r"):
@@ -261,18 +327,24 @@ class HD_2D:
             print()
 
     def sedov_blast(self, radius=0.1):
-        r, _ = cartesian_to_polar(self.grid[:, :, 0], self.grid[:, :, 1])
+        if self.coords == "cartesian":
+            r, _ = cartesian_to_polar(self.grid[:, :, 0], self.grid[:, :, 1])
+        elif self.coords == "polar":
+            r, _ = self.grid[:, :, 0], self.grid[:, :, 1]
         self.U[r < radius] = np.array([1, 0, 0, 10])
         self.U[r >= radius] = np.array([1, 0, 0, E(self.gamma, 1, 1e-4, 0, 0)])
 
     def implosion(self):
-        r, _ = cartesian_to_polar(self.grid[:, :, 0], self.grid[:, :, 1])
+        if self.coords == "cartesian":
+            r, _ = cartesian_to_polar(self.grid[:, :, 0], self.grid[:, :, 1])
+        elif self.coords == "polar":
+            r, _ = self.grid[:, :, 0], self.grid[:, :, 1]
         self.U[r < 0.2] = np.array([0.125, 0, 0, E(0.125, 0.14, 0, 0)])
         self.U[r >= 0.2] = np.array([1, 0, 0, E(1, 1, 0, 0)])
 
     def sheer(self):
         x, y = self.grid[:, :, 0], self.grid[:, :, 1]
-        mid = (self.xmax + self.xmin) / 2
+        mid = (self.x1_max + self.x1_min) / 2
         rho_L, u_L, v_L, p_L = 1, 0, 1, 1
         self.U[x <= mid] = np.array(
             [rho_L, rho_L * u_L, rho_L * v_L, E(self.gamma, rho_L, p_L, u_L, v_L)])
@@ -283,7 +355,7 @@ class HD_2D:
     # case 3 in Liska Wendroff
     def quadrants(self):
         x, y = self.grid[:, :, 0], self.grid[:, :, 1]
-        mid = (self.xmax - self.xmin) / 2
+        mid = (self.x1_max - self.x1_min) / 2
         rho_1, u_1, v_1, p_1 = 0.5323, 1.206, 0, 0.3
         rho_2, u_2, v_2, p_2 = 1.5, 0, 0, 1.5
         rho_3, u_3, v_3, p_3 = 0.138, 1.206, 1.206, 0.029
@@ -300,7 +372,7 @@ class HD_2D:
     # initial conditions from Deng, Boivin, Xiao
     # https://hal.science/hal-02100764/document
     def rayleigh_taylor(self):
-        self.U = np.zeros((self.res_x, self.res_y, 4))
+        self.U = np.zeros((self.res_x1, self.res_x2, 4))
         g = -0.1
 
         p_m = 2.5
@@ -322,7 +394,7 @@ class HD_2D:
                         [1, 0, 1 * v, E(self.gamma, 1, p, 0, v)])
 
     def kelvin_helmholtz(self):
-        self.U = np.zeros((self.res_x, self.res_y, 4))
+        self.U = np.zeros((self.res_x1, self.res_x2, 4))
         w0 = 0.1
         sigma = 0.05 / np.sqrt(2)
         for i in range(len(self.grid)):

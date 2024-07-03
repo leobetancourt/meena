@@ -16,8 +16,8 @@ parser.add_argument('-f', '--file', type=str, required=True,
                     help='The path to the .hdf file (required)')
 
 parser.add_argument('-o', '--output', type=str, required=True,
-                    choices=['density', 'u', 'v', 'w', 'pressure', 'energy', 'Bx', 'By', 'Bz', 'div'],
-                    help='The variable to plot: density, u, v, pressure or energy (required)')
+                    choices=['density', 'log density', 'u', 'v', 'w', 'pressure', 'energy', 'Bx', 'By', 'Bz', 'div'],
+                    help='The variable to plot: density, log density, u, v, pressure, energy, Bx, By, Bz or div (required)')
 
 args = parser.parse_args()
 
@@ -29,20 +29,43 @@ PATH = args.file
 var = args.output
 
 with h5py.File(PATH, "r") as f:
+    coords = f.attrs["coords"]
     gamma = f.attrs["gamma"]
-    xmin, xmax = f.attrs["xrange"]
-    ymin, ymax = f.attrs["yrange"]
-    if "zrange" in f.attrs: 
-        zmin, zmax = f.attrs["zrange"]
+    x1 = f.attrs["x1"]
+    x2 = f.attrs["x2"]
+
+    if "x3" in f.attrs: 
+        x3 = f.attrs["x3"]
     
     tc = f["tc"][...] # checkpoint times
-    rho, momx, momy, En = f["rho"][...], f["momx"][...], f["momy"][...], f["E"][...]
-    momz, Bx, By, Bz = None, None, None, None
+    rho, momx1, momx2, En = f["rho"][...], f["momx1"][...], f["momx2"][...], f["E"][...]
+    p = P(gamma, rho, momx1 / rho, momx2 / rho, En)
+    momx3, Bx, By, Bz = None, None, None, None
     if "Bx" in f: # MHD
-        momz, Bx, By, Bz = f["momz"], f["Bx"], f["By"], f["Bz"]
-
+        momx3, Bx, By, Bz = f["momx3"], f["Bx"], f["By"], f["Bz"]
         
-fig = plt.figure()
+labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$",
+              "v": r"$v$", "pressure": r"$P$", "energy": r"$E$", }
+
+if var == "density":
+    matrix = rho
+elif var == "log density":
+    matrix = np.log10(rho)
+elif var == "u":
+    matrix = momx1 / rho
+elif var == "v":
+    matrix = momx2 / rho
+elif var == "pressure":
+    matrix = p
+elif var == "energy":
+    matrix = En
+
+vmin, vmax = np.min(matrix), np.max(matrix)
+if var == "log density":
+    vmin, vmax = -3, 0.5
+fig, ax, c, cb = plot_grid(matrix[0], labels[var], coords=coords, x1=x1, x2=x2, vmin=vmin, vmax=vmax)
+ax.set_title(f"t = {0}")
+
 fps = 24
 FFMpegWriter = animation.writers['ffmpeg']
 file = os.path.splitext(os.path.basename(PATH))[0]
@@ -53,49 +76,32 @@ if not os.path.exists(PATH):
     os.makedirs(PATH)
 cm = writer.saving(fig, f"{PATH}/{var}.mp4", 300)
 
-with cm:
-    if not Bx: # HD
-        vmin, vmax = 0, 2
-        rho = np.maximum(rho, 1e-6)
-        u, v = momx / rho, momy / rho
-        En = np.maximum(En, 1e-6)
-        p = np.maximum(P(gamma, rho, u, v, En), 1e-6)
-        if var == "density":
-            vmin, vmax = np.min(rho), np.max(rho)
-        elif var == "u":
-            vmin, vmax = np.min(u), np.max(u)
-        elif var == "v":
-            vmin, vmax = np.min(v), np.max(v)
-        elif var == "pressure":
-            vmin, vmax = np.min(p), np.max(p)
-        elif var == "energy":
-            vmin, vmax = np.min(En), np.max(En)
-
+with cm:    
     for i in range(len(tc)): # loop over checkpoints
-        if Bx: 
-            U = np.array([
-                rho[i],
-                momx[i],
-                momy[i],
-                momz[i],
-                Bx[i],
-                By[i],
-                Bz[i],
-                En[i]
-            ]).transpose((1, 2, 3, 0))
-        else:
-            U = np.array([
-                rho[i],
-                momx[i],
-                momy[i],
-                En[i]
-            ]).transpose((1, 2, 0))
-            
-        fig.clear()
         if Bx: # MHD
-            plot_MHD(gamma, U, t=tc[i], plot=var, extent=[xmin, xmax, ymin, ymax])
+            pass
+            # plot_MHD(gamma, U, t=tc[i], plot=var, extent=[x1[0], x1[-1], x2[0], x2[-1]])
         else: # HD
-            plot_grid(gamma, U, t=tc[i], plot=var, extent=[xmin, xmax, ymin, ymax], vmin=vmin, vmax=vmax)
+            if coords == "cartesian":
+                c.set_data(matrix[i])
+            elif coords == "polar":
+                c.set_array(matrix[i].ravel())
+            cb.update_normal(c)
+            ax.set_title(f"t = {tc[i]:.2f}")
+            fig.canvas.draw()
         writer.grab_frame()
+        
+        if var == "density":
+            matrix = rho
+        elif var == "log density":
+            matrix = np.log10(rho)
+        elif var == "u":
+            matrix = momx1 / rho
+        elif var == "v":
+            matrix = momx2 / rho
+        elif var == "pressure":
+            matrix = p
+        elif var == "energy":
+            matrix = En
 
 print("Movie saved to", PATH)

@@ -1,4 +1,4 @@
-from HD.helpers import c_s, E, P, add_ghost_cells, get_prims, cartesian_to_polar, plot_grid, plot_sheer
+from HD.helpers import E, P, add_ghost_cells, get_prims, cartesian_to_polar, plot_grid, plot_sheer
 from HD.solvers import HLL, HLLC
 
 import numpy as np
@@ -61,18 +61,24 @@ class HD_2D:
         self.high_time = high_time
         self.high_space = high_space
         self.dt = self.dx1
-        self.cfl = 0.4
+        self.cfl = 0.5
         if solver == "hll":
-            self.solver = HLL(
-                gamma, self.nu, self.num_g, coords, resolution, self.x1, self.x2, self.x1_interf, self.x2_interf, high_order=self.high_space)
+            self.solver = HLL(self, gamma, self.nu, self.num_g, coords, resolution, self.x1,
+                              self.x2, self.x1_interf, self.x2_interf, high_order=self.high_space)
         elif solver == "hllc":
-            self.solver = HLLC(
-                gamma, self.nu, self.num_g, coords, resolution, self.x1, self.x2, self.x1_interf, self.x2_interf, high_order=self.high_space)
+            self.solver = HLLC(self, gamma, self.nu, self.num_g, coords, resolution, self.x1,
+                               self.x2, self.x1_interf, self.x2_interf, high_order=self.high_space)
         else:
             raise Exception("Invalid solver: must be 'hll' or 'hllc'")
 
         # list of diagnostics, each a tuple (name : string, get : method)
         self.diagnostics = []
+        
+    def c_s(self, p=None, rho=None):
+        g = self.num_g
+        if p is None:
+            rho, _, _, p = get_prims(self.gamma, self.U[g:-g, g:-g])
+        return np.sqrt(self.gamma * p / rho)
 
     def set_bcs(self, bc_x1=(Boundary.OUTFLOW, Boundary.OUTFLOW), bc_x2=(Boundary.OUTFLOW, Boundary.OUTFLOW)):
         # bc_i is a tuple of the form defining the inner and outer boundary conditions for coordinate i
@@ -127,19 +133,19 @@ class HD_2D:
     def compute_timestep(self):
         g = self.num_g
         rho, u, v, p = get_prims(self.gamma, self.U[g:-g, g:-g])
-        cs = c_s(self.gamma, p, rho)
+        cs = self.c_s()
         if self.coords == "cartesian":
             dt = self.cfl * \
                 min(np.min(self.dx1 / (np.abs(u) + cs)),
-                       np.min(self.dx2 / (np.abs(v) + cs)))
+                    np.min(self.dx2 / (np.abs(v) + cs)))
         elif self.coords == "polar":
             R_interf, _ = np.meshgrid(self.x1_interf, self.x2, indexing="ij")
             x1_l, x1_r = R_interf[:-1, :], R_interf[1:, :]
             delta_r = x1_r - x1_l
-            R , _ = np.meshgrid(self.x1, self.x2, indexing="ij")
+            R, _ = np.meshgrid(self.x1, self.x2, indexing="ij")
             dt = self.cfl * \
                 min(np.min(delta_r / (np.abs(u) + cs)),
-                       np.min(R * self.dx2 / (np.abs(v) + cs)))
+                    np.min(R * self.dx2 / (np.abs(v) + cs)))
         return dt
 
     def check_physical(self):
@@ -195,7 +201,7 @@ class HD_2D:
         PATH = f"./output/{filename}.hdf"
         self.U = add_ghost_cells(self.U, self.num_g)
         labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$",
-              "v": r"$v$", "pressure": r"$P$", "energy": r"$E$", }
+                  "v": r"$v$", "pressure": r"$P$", "energy": r"$E$", }
 
         next_checkpoint = 0
         g = self.num_g
@@ -227,7 +233,7 @@ class HD_2D:
                 dset = f.create_dataset(name, (0,), maxshape=(
                     None,), chunks=True, dtype="float64")
                 self.diagnostics[i] = (name, get_func, dset)
-                
+
             rho, u, v, p = get_prims(self.gamma, self.U[g:-g, g:-g])
             En = E(self.gamma, rho, p, u, v)
             vmin, vmax = None, None
@@ -244,9 +250,10 @@ class HD_2D:
                 matrix = p
             elif plot == "energy":
                 matrix = En
-        
+
             if plot:
-                fig, ax, c, cb = plot_grid(matrix, labels[plot], coords=self.coords, x1=self.x1, x2=self.x2, vmin=vmin, vmax=vmax)
+                fig, ax, c, cb = plot_grid(
+                    matrix, labels[plot], coords=self.coords, x1=self.x1, x2=self.x2, vmin=vmin, vmax=vmax)
                 ax.set_title(f"t = {t:.2f}")
 
             while t < T:
@@ -288,7 +295,7 @@ class HD_2D:
 
                 t = t + self.dt if (t + self.dt <= T) else T
                 self.print_progress_bar(t, T, suffix="complete", length=50)
-                
+
                 rho, u, v, p = get_prims(self.gamma, self.U[g:-g, g:-g])
                 En = E(self.gamma, rho, p, u, v)
                 if plot == "density":
@@ -345,11 +352,13 @@ class HD_2D:
     def sheer(self):
         x, y = self.grid[:, :, 0], self.grid[:, :, 1]
         mid = (self.x1_max + self.x1_min) / 2
+        print(mid)
+        print(x)
         rho_L, u_L, v_L, p_L = 1, 0, 1, 1
-        self.U[x <= mid] = np.array(
+        self.U[x <= -0.5] = np.array(
             [rho_L, rho_L * u_L, rho_L * v_L, E(self.gamma, rho_L, p_L, u_L, v_L)])
         rho_R, u_R, v_R, p_R = 1, 0, -1, 1
-        self.U[x > mid] = np.array(
+        self.U[x > -0.5] = np.array(
             [rho_R, rho_R * u_R, rho_R * v_R, E(self.gamma, rho_R, p_R, u_R, v_R)])
 
     # case 3 in Liska Wendroff
@@ -376,7 +385,7 @@ class HD_2D:
         g = -0.1
 
         p_m = 2.5
-        cs = c_s(self.gamma, p_m, 2)
+        cs = self.c_s(self.gamma, p_m, 2)
         for i in range(len(self.grid)):
             for j in range(len(self.grid[i])):
                 x = self.grid[i][j][0]

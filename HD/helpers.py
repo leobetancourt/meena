@@ -1,12 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import rc
+from matplotlib.patches import Circle
 # plt.rcParams['figure.dpi'] = 300
 # plt.rcParams['savefig.dpi'] = 300
-
-def c_s(gamma, P, rho):
-    return np.sqrt(gamma * P / rho)
-
 
 def enthalpy(rho, p, E):
     return (E + p) / rho
@@ -122,8 +119,11 @@ def plot_grid(matrix, label, coords="cartesian", x1=None, x2=None, vmin=None, vm
         ax.set_xticks([])
         ax.set_yticks([])
         ax.set_ylim(0, np.max(x1))
+        ax.set_facecolor("black")
+        circle = Circle((0, 0), radius=np.min(x1), transform=ax.transData._b, color='blue', fill=False, linewidth=1)
+        ax.add_patch(circle)
         R, Theta = np.meshgrid(x1, x2, indexing="ij")
-        c = ax.pcolormesh(Theta, R, matrix, shading='auto', cmap='magma', vmin=vmin, vmax=vmax)
+        c = ax.pcolormesh(Theta, R, matrix, shading='auto', cmap="magma", vmin=vmin, vmax=vmax)
     
     cb = plt.colorbar(c, ax=ax, label=label)
         

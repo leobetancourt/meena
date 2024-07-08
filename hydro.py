@@ -8,11 +8,11 @@ from MHD.MHD import MHD
 
 if __name__ == "__main__":
 
-    sim = Binary(gamma=5/3, coords="polar", resolution=(500, 800),
-                 x1_range=(1, 5), x2_range=(0, 2 * np.pi), logspace=True)
+    sim = Binary(gamma=5/3, coords="polar", resolution=(200, 1200),
+                 x1_range=(1, 10), x2_range=(0, 2 * np.pi), logspace=True)
     sim.set_bcs((Boundary.OUTFLOW, Boundary.OUTFLOW),
                 (Boundary.PERIODIC, Boundary.PERIODIC))
-    sim.run(T=20, plot="log density", filename="binary", save_interval=0.04)
+    sim.run(T=2 * np.pi, filename="binary (lala)", save_interval=0.01)
 
     # sim = MHD(gamma=2, resolution=(800, 1, 1), xrange=(-1, 1))
     # sim.shock_tube()
@@ -32,7 +32,7 @@ if __name__ == "__main__":
     # sim.orszag_tang()
     # sim.run(T=1, plot="pressure", filename="Orszag-Tang", save_interval=0.01)
 
-    # sim = HD_2D(gamma=5/3, nu=0, resolution=(300, 450), xrange=(-1, 1), yrange=(-1.5, 1.5), solver="hll")
+    # sim = HD_2D(gamma=5/3, nu=0, resolution=(200, 300), x1_range=(-1, 1), x2_range=(-1.5, 1.5), solver="hll")
     # sim.set_bcs((Boundary.OUTFLOW, Boundary.OUTFLOW),
     #             (Boundary.OUTFLOW, Boundary.OUTFLOW))
     # sim.sheer()

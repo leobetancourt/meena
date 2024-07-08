@@ -1,11 +1,12 @@
-from HD.helpers import E, F_from_prim, U_from_prim, enthalpy, c_s, get_prims, minmod, add_ghost_cells
+from HD.helpers import E, F_from_prim, U_from_prim, enthalpy, get_prims, minmod, add_ghost_cells
 
 from abc import ABC, abstractmethod
 import numpy as np
 
 
 class Solver(ABC):
-    def __init__(self, gamma, nu, num_g, coords, res, x1, x2, x1_interf, x2_interf, high_order=False):
+    def __init__(self, hd, gamma, nu, num_g, coords, res, x1, x2, x1_interf, x2_interf, high_order=False):
+        self.hd = hd
         self.gamma = gamma
         self.nu = nu
         self.num_g = num_g
@@ -105,7 +106,7 @@ class Solver(ABC):
 
     def finite_difference(self, u, x1=True):
         g = self.num_g
-        
+
         if self.coords == "cartesian":
             dx = self.x1[1] - self.x1[0]
             dy = self.x2[1] - self.x2[0]
@@ -117,9 +118,11 @@ class Solver(ABC):
             dR = np.diff(self.x1, prepend=0, append=0)
             dtheta = self.x2[1] - self.x2[0]
             if x1:
-                du = np.diff(u[(g-1):-(g-1), g:-g], axis=0) / (dR[:, np.newaxis])
+                du = np.diff(u[(g-1):-(g-1), g:-g], axis=0) / \
+                    (dR[:, np.newaxis])
             else:
-                du = np.diff(u[g:-g, (g-1):-(g-1)], axis=1) / (self.x1[:, np.newaxis] * dtheta)
+                du = np.diff(u[g:-g, (g-1):-(g-1)], axis=1) / \
+                    (self.x1[:, np.newaxis] * dtheta)
         return du
 
     def viscosity(self, rho, u, v):
@@ -168,6 +171,8 @@ class Solver(ABC):
 
     def interface_flux(self, U):
         g = self.num_g
+        X1, X2 = np.meshgrid(self.x1, self.x2, indexing="ij")
+        # X1, X2 = X1[:, :, np.newaxis], X2[:, :, np.newaxis]
 
         if self.high_order:
             U_ll, U_lr, U_rl, U_rr, F_ll, F_lr, F_rl, F_rr = self.PLM_states(
@@ -199,17 +204,23 @@ class Solver(ABC):
             U_L = U[(g-1):-(g+1), g:-g, :]
             U_R = U[(g+1):-(g-1), g:-g, :]
             U_C = U[g:-g, g:-g, :]
+            X1_L = X1
+            X1_R = X1
+            X1_C = X1
+            X2_L = X2
+            X2_R = X2
+            X2_C = X2
             # F_(i-1/2)
-            F_l = self.flux(F_L, F_C, U_L, U_C)
+            F_l = self.flux(F_L, F_C, U_L, U_C, X1_L, X1_C, X2_C, X2_C)
             # F_(i+1/2)
-            F_r = self.flux(F_C, F_R, U_C, U_R)
+            F_r = self.flux(F_C, F_R, U_C, U_R, X1_C, X1_R, X2_C, X2_C)
 
             U_L = U[g:-g, (g-1):-(g+1), :]
             U_R = U[g:-g, (g+1):-(g-1), :]
             # G_(i-1/2)
-            G_l = self.flux(G_L, G_C, U_L, U_C, x1=False)
+            G_l = self.flux(G_L, G_C, U_L, U_C, X1_C, X1_C, X2_L, X2_C, x1=False)
             # G_(i+1/2)
-            G_r = self.flux(G_C, G_R, U_C, U_R, x1=False)
+            G_r = self.flux(G_C, G_R, U_C, U_R, X1_C, X1_C, X2_C, X2_R, x1=False)
 
             # add fiscous flux to interface flux
             if self.nu:
@@ -264,7 +275,7 @@ class HLLC(Solver):
         H_t = (H_L + (H_R * R_rho)) / (1 + R_rho)  # H tilde
         v_t = (v_L + (v_R * R_rho)) / (1 + R_rho)
         c_t = np.sqrt((self.gamma - 1) * (H_t + (0.5 * v_t ** 2)))
-        c_L, c_R = c_s(self.gamma, p_L, rho_L), c_s(self.gamma, p_R, rho_R)
+        c_L, c_R = self.hd.c_s(p_L, rho_L), self.hd.c_s(p_R, rho_R)
 
         S_L = np.minimum(v_L - c_L, v_t - c_t)
         S_R = np.maximum(v_R + c_R, v_t + c_t)
@@ -288,25 +299,28 @@ class HLLC(Solver):
 class HLL(Solver):
 
     # returns (lambda_plus, lambda_minus)
-    def lambdas(self, U, x1=True):
+    def lambdas(self, U, X1, X2, x1=True):
         rho, u, v, p = get_prims(self.gamma, U)
-        cs = c_s(self.gamma, p, rho)
+        if self.coords == "cartesian":
+            cs = self.hd.c_s(p, rho)
+        elif self.coords == "polar":
+            cs = self.hd.c_s(X1, X2)
 
         v = u if x1 else v
         return v + cs, v - cs
 
     # returns (alpha_p, alpha_m)
-    def alphas(self, U_L, U_R, x1=True):
-        lambda_L = self.lambdas(U_L, x1=x1)
-        lambda_R = self.lambdas(U_R, x1=x1)
+    def alphas(self, U_L, U_R, X1_L, X1_R, X2_L, X2_R, x1=True):
+        lambda_L = self.lambdas(U_L, X1_L, X2_L, x1=x1)
+        lambda_R = self.lambdas(U_R, X1_R, X2_R, x1=x1)
         # element-wise max()
         alpha_p = np.maximum(0, np.maximum(lambda_L[0], lambda_R[0]))
         alpha_m = np.maximum(0, np.maximum(-lambda_L[1], -lambda_R[1]))
 
         return alpha_p, alpha_m
 
-    def flux(self, F_L, F_R, U_L, U_R, x1=True):
-        a_p, a_m = self.alphas(U_L, U_R, x1=x1)
+    def flux(self, F_L, F_R, U_L, U_R, X1_L, X1_R, X2_L, X2_R, x1=True):
+        a_p, a_m = self.alphas(U_L, U_R, X1_L, X1_R, X2_L, X2_R, x1=x1)
         # add dimension to match F, U arrays
         a_p = np.expand_dims(a_p, axis=-1)
         a_m = np.expand_dims(a_m, axis=-1)

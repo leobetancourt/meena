@@ -116,13 +116,18 @@ class Solver(ABC):
                 du = (u[g:-g, (g):-(g-1)] - u[g:-g, (g-1):-(g)]) / (dy)
         elif self.coords == "polar":
             dR = np.diff(self.x1, prepend=0, append=0)
+            # try making mesh grid and get r from that to use in denominator of theta derivative
             dtheta = self.x2[1] - self.x2[0]
             if x1:
                 du = np.diff(u[(g-1):-(g-1), g:-g], axis=0) / \
                     (dR[:, np.newaxis])
+                du[0, :] = np.zeros(len(self.x2))
+                du[-1, :] = np.zeros(len(self.x2))
             else:
                 du = np.diff(u[g:-g, (g-1):-(g-1)], axis=1) / \
                     (self.x1[:, np.newaxis] * dtheta)
+                du[:, 0] = np.zeros(len(self.x1))
+                du[:, -1] = np.zeros(len(self.x1))
         return du
 
     def viscosity(self, rho, u, v):
@@ -171,7 +176,12 @@ class Solver(ABC):
 
     def interface_flux(self, U):
         g = self.num_g
-        X1, X2 = np.meshgrid(self.x1, self.x2, indexing="ij")
+        # x1 with one ghost layer
+        x1_g = np.pad(self.x1, (1, 1), mode="constant", constant_values=(
+            self.x1[0] - (self.x1_interf[1] - self.x1_interf[0]), self.x1[-1] + (self.x1_interf[-1] - self.x1_interf[-2])))
+        x2_g = np.pad(self.x2, (1, 1), mode="constant", constant_values=(
+            self.x2[0] - (self.x2_interf[1] - self.x2_interf[0]), self.x2[-1] + (self.x2_interf[-1] - self.x2_interf[-2])))
+        X1, X2 = np.meshgrid(x1_g, x2_g, indexing="ij")
         # X1, X2 = X1[:, :, np.newaxis], X2[:, :, np.newaxis]
 
         if self.high_order:
@@ -204,12 +214,12 @@ class Solver(ABC):
             U_L = U[(g-1):-(g+1), g:-g, :]
             U_R = U[(g+1):-(g-1), g:-g, :]
             U_C = U[g:-g, g:-g, :]
-            X1_L = X1
-            X1_R = X1
-            X1_C = X1
-            X2_L = X2
-            X2_R = X2
-            X2_C = X2
+            X1_L = X1[:-2, 1:-1]
+            X1_R = X1[2:, 1:-1]
+            X1_C = X1[1:-1, 1:-1]
+            X2_L = X2[1:-1, :-2]
+            X2_R = X2[1:-1, 2:]
+            X2_C = X2[1:-1, 1:-1]
             # F_(i-1/2)
             F_l = self.flux(F_L, F_C, U_L, U_C, X1_L, X1_C, X2_C, X2_C)
             # F_(i+1/2)
@@ -218,9 +228,11 @@ class Solver(ABC):
             U_L = U[g:-g, (g-1):-(g+1), :]
             U_R = U[g:-g, (g+1):-(g-1), :]
             # G_(i-1/2)
-            G_l = self.flux(G_L, G_C, U_L, U_C, X1_C, X1_C, X2_L, X2_C, x1=False)
+            G_l = self.flux(G_L, G_C, U_L, U_C, X1_C,
+                            X1_C, X2_L, X2_C, x1=False)
             # G_(i+1/2)
-            G_r = self.flux(G_C, G_R, U_C, U_R, X1_C, X1_C, X2_C, X2_R, x1=False)
+            G_r = self.flux(G_C, G_R, U_C, U_R, X1_C,
+                            X1_C, X2_C, X2_R, x1=False)
 
             # add fiscous flux to interface flux
             if self.nu:

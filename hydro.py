@@ -8,11 +8,11 @@ from MHD.MHD import MHD
 
 if __name__ == "__main__":
 
-    sim = Binary(gamma=5/3, coords="polar", resolution=(200, 1200),
+    sim = Binary(gamma=5/3, coords="polar", resolution=(100, 600),
                  x1_range=(1, 10), x2_range=(0, 2 * np.pi), logspace=True)
     sim.set_bcs((Boundary.OUTFLOW, Boundary.OUTFLOW),
                 (Boundary.PERIODIC, Boundary.PERIODIC))
-    sim.run(T=2 * np.pi, filename="binary (lala)", save_interval=0.01)
+    sim.run(T=2 * np.pi, filename="binary (lala)", save_interval=0.04)
 
     # sim = MHD(gamma=2, resolution=(800, 1, 1), xrange=(-1, 1))
     # sim.shock_tube()

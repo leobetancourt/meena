@@ -40,7 +40,7 @@ with h5py.File(PATH, "r") as f:
         data = f[var][...]
         
     if len(data.shape) == 1:
-        plt.scatter(t[t <= 1], data[t <= 1], linewidth=1, s=0.5, c="black")
+        plt.scatter(t[t <= 2 * np.pi] / (2 * np.pi), data[t <= 2 * np.pi], linewidth=1, s=0.5, c="black")
         
     plt.title("Gravitational Torque")
     plt.xlabel("time (orbits)")

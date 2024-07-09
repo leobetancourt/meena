@@ -6,7 +6,7 @@ from HD.helpers import E, cartesian_to_polar, get_prims
 class Binary(HD_2D):
     def __init__(self, gamma=1.4, coords="cartesian", resolution=(100, 100),
                  x1_range=(-5, 5), x2_range=(-5, 5), logspace=False, solver="hll", high_space=False):
-        self.G, self.M = np.pi * np.pi, 1
+        self.G, self.M = 1, 1
         self.mach = 10
         self.a = 1  # binary separation
         self.R_cav = 2.5 * self.a
@@ -14,8 +14,7 @@ class Binary(HD_2D):
         self.delta_0 = 1e-5
         self.Sigma_0 = 1
         self.eps = 0.05 * self.a  # gravitational softening
-        self.period = 1
-        self.omega_B = 2 * np.pi / self.period
+        self.omega_B = 1
         if coords == "cartesian":
             self.bh1_x, self.bh1_y = self.a / 2, 0
             self.bh2_x, self.bh2_y = -self.a / 2, 0
@@ -73,18 +72,6 @@ class Binary(HD_2D):
             self.U[g:-g, g:-g, 1][buff] = rho * u_k
             self.U[g:-g, g:-g, 2][buff] = rho * v_k
             self.U[g:-g, g:-g, 3][buff] = E(self.gamma, rho, p, u_k, v_k)
-        elif self.coords == "polar":  # do i need a buffer in polar coordinates?
-            pass
-            # r, theta = self.grid[:, :, 0], self.grid[:, :, 1]
-            # buff = r >= (0.95 * self.x1_max)
-
-            # v = np.sqrt(self.G * self.M / r[buff])
-            # cs = v / self.mach
-            # rho = self.U[g:-g, g:-g, 0][buff]
-            # p = rho * (cs ** 2) / self.gamma
-
-            # self.U[g:-g, g:-g, 2][buff] = rho * v
-            # self.U[g:-g, g:-g, 3][buff] = E(self.gamma, rho, p, 0, v)
 
     def first_order_step(self, t):
         g = self.num_g
@@ -105,8 +92,8 @@ class Binary(HD_2D):
         # ensure radial velocity at excised boundary is not positive
         if self.coords == "polar":
             rho, vr, vtheta, p = get_prims(self.gamma, self.U)
-            vr = np.minimum(vr[:g, :], 0)
-            self.U[:g, :, 1] = rho[:g, :] * vr
+            vr[:g, :] = np.minimum(vr[:g, :], 0)
+            self.U[:g, :, 1] = rho[:g, :] * vr[:g, :]
 
         self.ts.append(t)
 
@@ -143,16 +130,13 @@ class Binary(HD_2D):
 
         def BH_gravity(U, bh_r, bh_theta):
             # distance from each zone to bh
+            delta_theta = theta - bh_theta
             dist = np.sqrt(r ** 2 + bh_r ** 2 - 2 * r *
-                           bh_r * np.cos(theta - bh_theta))
-            g = - self.G * (self.M / 2) / (dist ** 2 + self.eps ** 2)
+                           bh_r * np.cos(delta_theta))
+            g = -self.G * (self.M / 2) / (dist ** 2 + self.eps ** 2)
 
-            # angle that gravity vector makes from the x axis
-            phi = np.arctan2((r * np.sin(theta) - bh_r * np.sin(bh_theta)),
-                             (r * np.cos(theta) - bh_r * np.cos(bh_theta)))
-
-            g_r = g * np.cos(phi - theta)
-            g_theta = g * np.sin(phi - theta)
+            g_r = g * (r - bh_r * np.cos(delta_theta)) / dist
+            g_theta = g * (bh_r * np.sin(delta_theta)) / dist
 
             S = np.zeros_like(U)
             rho, u, v, p = get_prims(self.gamma, U)
@@ -193,7 +177,7 @@ class Binary(HD_2D):
         def BH_gravity(U, bh_x, bh_y):
             dx, dy = x - bh_x, y - bh_y
             dist = np.sqrt(dx ** 2 + dy ** 2)  # distance from each zone to bh
-            g = - self.G * (self.M / 2) / (dist ** 2 + self.eps ** 2)
+            g = - 2 * np.pi * self.G * (self.M / 2) / (dist ** 2 + self.eps ** 2)
 
             g_x, g_y = (dx / (dist + self.eps)) * \
                 g, (dy / (dist + self.eps)) * g
@@ -281,21 +265,17 @@ class Binary(HD_2D):
         elif self.coords == "polar":
             r, theta = self.grid[:, :, 0], self.grid[:, :, 1]
             bh_r, bh_theta = self.bh1_r, self.bh1_theta
+            delta_theta = theta - bh_theta
             dist = np.sqrt(r ** 2 + bh_r ** 2 - 2 * r *
-                           bh_r * np.cos(theta - bh_theta))
+                           bh_r * np.cos(delta_theta))
             R_interf, _ = np.meshgrid(self.x1_interf, self.x2, indexing="ij")
             x1_l, x1_r = R_interf[:-1, :], R_interf[1:, :]
             dx1 = x1_r - x1_l
             dx2 = self.x2[1] - self.x2[0]
             dA = r * dx1 * dx2  # dA = rdrdtheta
+
             Fg = (self.G * (self.M / 2) / (dist ** 2 + self.eps ** 2)) * rho * dA
-
-            # angle that gravity vector makes from the x axis
-            phi = np.arctan2((r * np.sin(theta) - bh_r * np.sin(bh_theta)),
-                             (r * np.cos(theta) - bh_r * np.cos(bh_theta)))
-
-            # theta-component of the gravitational force
-            Fg_theta = Fg * np.sin(phi - theta)
+            Fg_theta = Fg * (bh_r * np.sin(delta_theta)) / dist 
             T = np.sum((self.a / 2) * Fg_theta)
 
         return T
@@ -321,21 +301,17 @@ class Binary(HD_2D):
         elif self.coords == "polar":
             r, theta = self.grid[:, :, 0], self.grid[:, :, 1]
             bh_r, bh_theta = self.bh2_r, self.bh2_theta
+            delta_theta = theta - bh_theta
             dist = np.sqrt(r ** 2 + bh_r ** 2 - 2 * r *
-                           bh_r * np.cos(theta - bh_theta))
+                           bh_r * np.cos(delta_theta))
             R_interf, _ = np.meshgrid(self.x1_interf, self.x2, indexing="ij")
             x1_l, x1_r = R_interf[:-1, :], R_interf[1:, :]
             dx1 = x1_r - x1_l
             dx2 = self.x2[1] - self.x2[0]
             dA = r * dx1 * dx2  # dA = rdrdtheta
+
             Fg = (self.G * (self.M / 2) / (dist ** 2 + self.eps ** 2)) * rho * dA
-
-            # angle that gravity vector makes from the x axis
-            phi = np.arctan2((r * np.sin(theta) - bh_r * np.sin(bh_theta)),
-                             (r * np.cos(theta) - bh_r * np.cos(bh_theta)))
-
-            # theta-component of the gravitational force
-            Fg_theta = Fg * np.sin(phi - theta)
+            Fg_theta = Fg * (bh_r * np.sin(delta_theta)) / dist 
             T = np.sum((self.a / 2) * Fg_theta)
 
         return T

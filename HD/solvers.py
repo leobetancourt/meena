@@ -13,6 +13,10 @@ class Solver(ABC):
         self.coords = coords
         self.x1, self.x2 = x1, x2
         self.x1_interf, self.x2_interf = x1_interf, x2_interf
+        self.x1_g = np.pad(self.x1, (1, 1), mode="constant", constant_values=(
+            self.x1[0] - (self.x1_interf[1] - self.x1_interf[0]), self.x1[-1] + (self.x1_interf[-1] - self.x1_interf[-2])))
+        self.x2_g = np.pad(self.x2, (1, 1), mode="constant", constant_values=(
+            self.x2[0] - (self.x2_interf[1] - self.x2_interf[0]), self.x2[-1] + (self.x2_interf[-1] - self.x2_interf[-2])))
         self.res_x1, self.res_x2 = res
         self.high_order = high_order
 
@@ -115,19 +119,15 @@ class Solver(ABC):
             else:
                 du = (u[g:-g, (g):-(g-1)] - u[g:-g, (g-1):-(g)]) / (dy)
         elif self.coords == "polar":
-            dR = np.diff(self.x1, prepend=0, append=0)
             # try making mesh grid and get r from that to use in denominator of theta derivative
             dtheta = self.x2[1] - self.x2[0]
             if x1:
-                du = np.diff(u[(g-1):-(g-1), g:-g], axis=0) / \
-                    (dR[:, np.newaxis])
-                du[0, :] = np.zeros(len(self.x2))
-                du[-1, :] = np.zeros(len(self.x2))
+                X1, _ = np.meshgrid(self.x1_g, self.x2, indexing="ij")
+                dR = np.diff(X1, axis=0)
+                du = np.diff(u[(g-1):-(g-1), g:-g], axis=0) / dR
             else:
-                du = np.diff(u[g:-g, (g-1):-(g-1)], axis=1) / \
-                    (self.x1[:, np.newaxis] * dtheta)
-                du[:, 0] = np.zeros(len(self.x1))
-                du[:, -1] = np.zeros(len(self.x1))
+                X1, _ = np.meshgrid(self.x1, self.x2_interf, indexing="ij")
+                du = np.diff(u[g:-g, (g-1):-(g-1)], axis=1) / (X1 * dtheta)
         return du
 
     def viscosity(self, rho, u, v):
@@ -176,13 +176,8 @@ class Solver(ABC):
 
     def interface_flux(self, U):
         g = self.num_g
-        # x1 with one ghost layer
-        x1_g = np.pad(self.x1, (1, 1), mode="constant", constant_values=(
-            self.x1[0] - (self.x1_interf[1] - self.x1_interf[0]), self.x1[-1] + (self.x1_interf[-1] - self.x1_interf[-2])))
-        x2_g = np.pad(self.x2, (1, 1), mode="constant", constant_values=(
-            self.x2[0] - (self.x2_interf[1] - self.x2_interf[0]), self.x2[-1] + (self.x2_interf[-1] - self.x2_interf[-2])))
-        X1, X2 = np.meshgrid(x1_g, x2_g, indexing="ij")
-        # X1, X2 = X1[:, :, np.newaxis], X2[:, :, np.newaxis]
+        
+        X1, X2 = np.meshgrid(self.x1_g, self.x2_g, indexing="ij")
 
         if self.high_order:
             U_ll, U_lr, U_rl, U_rr, F_ll, F_lr, F_rl, F_rr = self.PLM_states(

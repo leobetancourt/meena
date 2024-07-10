@@ -16,19 +16,19 @@ class Binary(HD_2D):
         self.eps = 0.05 * self.a  # gravitational softening
         self.omega_B = 1
         if coords == "cartesian":
-            self.bh1_x, self.bh1_y = self.a / 2, 0
-            self.bh2_x, self.bh2_y = -self.a / 2, 0
+            self.x_bh1, self.y_bh1 = self.a / 2, 0
+            self.x_bh2, self.y_bh2 = -self.a / 2, 0
         elif coords == "polar":
-            self.bh1_r, self.bh1_theta = self.a / 2, 0
-            self.bh2_r, self.bh2_theta = self.a / 2, np.pi
+            self.r_bh1, self.theta_bh1 = self.a / 2, 0
+            self.r_bh2, self.theta_bh2 = self.a / 2, np.pi
         self.ts = []
         self.accr_1 = []
         self.accr_2 = []
-        nu = 1e-3 * self.a ** 2 * self.omega_B
+        nu = 1e-3 * (self.a ** 2) * self.omega_B
 
         super().__init__(gamma, nu=nu, coords=coords, resolution=resolution, x1_range=x1_range,
                          x2_range=x2_range, solver=solver, logspace=logspace, high_space=high_space)
-
+        
         if self.coords == "cartesian":
             self.setup_cartesian()
 
@@ -46,11 +46,12 @@ class Binary(HD_2D):
     def c_s(self, r=None, theta=None):
         if r is None:
             r, theta = self.grid[:, :, 0], self.grid[:, :, 1]
-        dist1 = np.sqrt(r ** 2 + self.bh1_r ** 2 - 2 * r *
-                        self.bh1_r * np.cos(theta - self.bh1_theta))
-        dist2 = np.sqrt(r ** 2 + self.bh2_r ** 2 - 2 * r *
-                        self.bh2_r * np.cos(theta - self.bh2_theta))
-        return np.sqrt((self.G * (self.M / 2) / np.sqrt(dist1 ** 2 + self.eps ** 2) + self.G * (self.M / 2) / np.sqrt(dist2 ** 2 + self.eps ** 2)) / (self.mach ** 2))
+        dist1 = np.sqrt(r ** 2 + self.r_bh1 ** 2 - 2 * r *
+                        self.r_bh1 * np.cos(theta - self.theta_bh1))
+        dist2 = np.sqrt(r ** 2 + self.r_bh2 ** 2 - 2 * r *
+                        self.r_bh2 * np.cos(theta - self.theta_bh2))
+        cs = np.sqrt((self.G * (self.M / 2) / np.sqrt(dist1 ** 2 + self.eps ** 2) + self.G * (self.M / 2) / np.sqrt(dist2 ** 2 + self.eps ** 2)) / (self.mach ** 2))
+        return cs
 
     def gaussian_kernel(self, r):
         A, Delta = 10, self.a / 50
@@ -78,13 +79,13 @@ class Binary(HD_2D):
         # update black hole positions
         delta = np.pi
         if self.coords == "cartesian":
-            self.bh1_x = (self.a / 2) * np.cos(self.omega_B * t)
-            self.bh1_y = (self.a / 2) * np.sin(self.omega_B * t)
-            self.bh2_x = (self.a / 2) * np.cos(self.omega_B * t + delta)
-            self.bh2_y = (self.a / 2) * np.sin(self.omega_B * t + delta)
+            self.x_bh1 = (self.a / 2) * np.cos(self.omega_B * t)
+            self.y_bh1 = (self.a / 2) * np.sin(self.omega_B * t)
+            self.x_bh2 = (self.a / 2) * np.cos(self.omega_B * t + delta)
+            self.y_bh2 = (self.a / 2) * np.sin(self.omega_B * t + delta)
         elif self.coords == "polar":
-            self.bh1_theta = self.omega_B * t
-            self.bh2_theta = self.omega_B * t + delta
+            self.theta_bh1 = (self.omega_B * t) % (2 * np.pi)
+            self.theta_bh2 = (self.omega_B * t + delta) % (2 * np.pi)
 
         # set buffer velocities
         self.buffer()
@@ -119,7 +120,7 @@ class Binary(HD_2D):
         omega = ((omega_naught ** -4) + (self.omega_B ** -4)) ** (-1/4)
         v_theta = omega * r
 
-        p = rho * (self.c_s() ** 2) / self.gamma
+        p = rho * (self.c_s() ** 2)
 
         self.U = np.array([
             rho,
@@ -128,15 +129,16 @@ class Binary(HD_2D):
             E(self.gamma, rho, p, v_r, v_theta)
         ]).transpose((1, 2, 0))
 
-        def BH_gravity(U, bh_r, bh_theta):
+        def BH_gravity(U, r_bh, theta_bh):
             # distance from each zone to bh
-            delta_theta = theta - bh_theta
-            dist = np.sqrt(r ** 2 + bh_r ** 2 - 2 * r *
-                           bh_r * np.cos(delta_theta))
+            delta_theta = theta - theta_bh
+            delta_theta = (delta_theta + np.pi) % (2 * np.pi) - np.pi
+            dist = np.sqrt(r ** 2 + r_bh ** 2 - 2 * r *
+                           r_bh * np.cos(delta_theta))
             g = -self.G * (self.M / 2) / (dist ** 2 + self.eps ** 2)
 
-            g_r = g * (r - bh_r * np.cos(delta_theta)) / dist
-            g_theta = g * (bh_r * np.sin(delta_theta)) / dist
+            g_r = g * (r - r_bh * np.cos(delta_theta)) / dist
+            g_theta = g * (r_bh * np.sin(delta_theta)) / dist
 
             S = np.zeros_like(U)
             rho, u, v, p = get_prims(self.gamma, U)
@@ -148,7 +150,7 @@ class Binary(HD_2D):
             return S
 
         def gravity(U):
-            return BH_gravity(U, self.bh1_r, self.bh1_theta) + BH_gravity(U, self.bh2_r, self.bh2_theta)
+            return BH_gravity(U, self.r_bh1, self.theta_bh1) + BH_gravity(U, self.r_bh2, self.theta_bh2)
 
         self.add_source(gravity)
 
@@ -174,10 +176,11 @@ class Binary(HD_2D):
             E(self.gamma, rho, p, u, v)
         ]).transpose((1, 2, 0))
 
-        def BH_gravity(U, bh_x, bh_y):
-            dx, dy = x - bh_x, y - bh_y
+        def BH_gravity(U, x_bh, y_bh):
+            dx, dy = x - x_bh, y - y_bh
             dist = np.sqrt(dx ** 2 + dy ** 2)  # distance from each zone to bh
-            g = - 2 * np.pi * self.G * (self.M / 2) / (dist ** 2 + self.eps ** 2)
+            g = - 2 * np.pi * self.G * \
+                (self.M / 2) / (dist ** 2 + self.eps ** 2)
 
             g_x, g_y = (dx / (dist + self.eps)) * \
                 g, (dy / (dist + self.eps)) * g
@@ -191,7 +194,7 @@ class Binary(HD_2D):
             return S
 
         def gravity(U):
-            return BH_gravity(U, self.bh1_x, self.bh1_y) + BH_gravity(U, self.bh2_x, self.bh2_y)
+            return BH_gravity(U, self.x_bh1, self.y_bh1) + BH_gravity(U, self.x_bh2, self.y_bh2)
 
         self.add_source(gravity)
 
@@ -205,7 +208,7 @@ class Binary(HD_2D):
             return S
 
         def kernel(U):
-            return BH_kernel(U, self.bh1_x, self.bh1_y) + BH_kernel(U, self.bh2_x, self.bh2_y)
+            return BH_kernel(U, self.x_bh1, self.y_bh1) + BH_kernel(U, self.x_bh2, self.y_bh2)
 
         self.add_source(kernel)
 
@@ -226,7 +229,7 @@ class Binary(HD_2D):
     def get_accr1_rate(self):
         g = self.num_g
         x, y = self.grid[:, :, 0], self.grid[:, :, 1]
-        dx, dy = x - self.bh1_x, y - self.bh1_y
+        dx, dy = x - self.x_bh1, y - self.y_bh1
         r = np.sqrt(dx ** 2 + dy ** 2)
         rho = self.U[:, :, 0]
         rate = np.sum(np.minimum(
@@ -237,7 +240,7 @@ class Binary(HD_2D):
     def get_accr2_rate(self):
         g = self.num_g
         x, y = self.grid[:, :, 0], self.grid[:, :, 1]
-        dx, dy = x - self.bh2_x, y - self.bh2_y
+        dx, dy = x - self.x_bh2, y - self.y_bh2
         r = np.sqrt(dx ** 2 + dy ** 2)
         rho = self.U[:, :, 0]
         rate = np.sum(np.minimum(
@@ -247,12 +250,12 @@ class Binary(HD_2D):
 
     def get_torque1(self):
         g = self.num_g
-        rho = self.U[:, :, 0][g:-g, g:-g]
+        rho = self.U[g:-g, g:-g, 0]
 
         if self.coords == "cartesian":
             x, y = self.grid[:, :, 0], self.grid[:, :, 1]
-            bh_x, bh_y = self.bh1_x, self.bh1_y
-            dx, dy = x - bh_x, y - bh_y
+            x_bh, y_bh = self.x_bh1, self.y_bh1
+            dx, dy = x - x_bh, y - y_bh
             r = np.sqrt(dx ** 2 + dy ** 2)  # distance from each zone to bh
             dA = self.dx1 * self.dx2
             Fg = (self.G * (self.M / 2) / (r ** 2 + self.eps ** 2)) * rho * dA
@@ -264,10 +267,11 @@ class Binary(HD_2D):
             T = np.sum((self.a / 2) * Fg_theta)
         elif self.coords == "polar":
             r, theta = self.grid[:, :, 0], self.grid[:, :, 1]
-            bh_r, bh_theta = self.bh1_r, self.bh1_theta
-            delta_theta = theta - bh_theta
-            dist = np.sqrt(r ** 2 + bh_r ** 2 - 2 * r *
-                           bh_r * np.cos(delta_theta))
+            r_bh, theta_bh = self.r_bh1, self.theta_bh1
+            delta_theta = theta - theta_bh
+            delta_theta = (delta_theta + np.pi) % (2 * np.pi) - np.pi
+            dist = np.sqrt(r ** 2 + r_bh ** 2 - 2 * r *
+                           r_bh * np.cos(delta_theta))
             R_interf, _ = np.meshgrid(self.x1_interf, self.x2, indexing="ij")
             x1_l, x1_r = R_interf[:-1, :], R_interf[1:, :]
             dx1 = x1_r - x1_l
@@ -275,7 +279,7 @@ class Binary(HD_2D):
             dA = r * dx1 * dx2  # dA = rdrdtheta
 
             Fg = (self.G * (self.M / 2) / (dist ** 2 + self.eps ** 2)) * rho * dA
-            Fg_theta = Fg * (bh_r * np.sin(delta_theta)) / dist 
+            Fg_theta = Fg * (r_bh * np.sin(delta_theta)) / dist
             T = np.sum((self.a / 2) * Fg_theta)
 
         return T
@@ -286,8 +290,8 @@ class Binary(HD_2D):
 
         if self.coords == "cartesian":
             x, y = self.grid[:, :, 0], self.grid[:, :, 1]
-            bh_x, bh_y = self.bh2_x, self.bh2_y
-            dx, dy = x - bh_x, y - bh_y
+            x_bh, y_bh = self.x_bh2, self.y_bh2
+            dx, dy = x - x_bh, y - y_bh
             r = np.sqrt(dx ** 2 + dy ** 2)  # distance from each zone to bh
             dA = self.dx1 * self.dx2
             Fg = (self.G * (self.M / 2) / (r ** 2 + self.eps ** 2)) * rho * dA
@@ -300,10 +304,11 @@ class Binary(HD_2D):
             T = np.sum((self.a / 2) * Fg_theta)
         elif self.coords == "polar":
             r, theta = self.grid[:, :, 0], self.grid[:, :, 1]
-            bh_r, bh_theta = self.bh2_r, self.bh2_theta
-            delta_theta = theta - bh_theta
-            dist = np.sqrt(r ** 2 + bh_r ** 2 - 2 * r *
-                           bh_r * np.cos(delta_theta))
+            r_bh, theta_bh = self.r_bh2, self.theta_bh2
+            delta_theta = theta - theta_bh
+            delta_theta = (delta_theta + np.pi) % (2 * np.pi) - np.pi
+            dist = np.sqrt(r ** 2 + r_bh ** 2 - 2 * r *
+                           r_bh * np.cos(delta_theta))
             R_interf, _ = np.meshgrid(self.x1_interf, self.x2, indexing="ij")
             x1_l, x1_r = R_interf[:-1, :], R_interf[1:, :]
             dx1 = x1_r - x1_l
@@ -311,7 +316,30 @@ class Binary(HD_2D):
             dA = r * dx1 * dx2  # dA = rdrdtheta
 
             Fg = (self.G * (self.M / 2) / (dist ** 2 + self.eps ** 2)) * rho * dA
-            Fg_theta = Fg * (bh_r * np.sin(delta_theta)) / dist 
+            Fg_theta = Fg * (r_bh * np.sin(delta_theta)) / dist
             T = np.sum((self.a / 2) * Fg_theta)
 
         return T
+
+    # TODO: cartesian coordinate version
+    def get_eccentricity(self):
+        g = self.num_g
+        rho, vr, vtheta, p = get_prims(self.gamma, self.U[g:-g, g:-g])
+        r, theta = self.grid[:, :, 0], self.grid[:, :, 1]
+        R_interf, _ = np.meshgrid(self.x1_interf, self.x2, indexing="ij")
+        x1_l, x1_r = R_interf[:-1, :], R_interf[1:, :]
+        dx1 = x1_r - x1_l
+        dx2 = self.x2[1] - self.x2[0]
+        dA = r * dx1 * dx2
+        e_x = (r * vr * vtheta / (self.G * self.M)) * np.sin(theta) + \
+            (((r * vtheta ** 2) / self.G * self.M) - 1) * np.cos(theta)
+        e_y = -(r * vr * vtheta / (self.G * self.M)) * np.cos(theta) + \
+            (((r * vtheta ** 2) / self.G * self.M) - 1) * np.sin(theta)
+
+        bounds = r >= self.a & r <= 6 * self.a
+        ec_x = np.sum(e_x[bounds] * rho[bounds] * dA[bounds]) / \
+            (35 * np.pi * self.Sigma_0 * (self.a ** 2))
+        ec_y = np.sum(e_y[bounds] * rho[bounds] * dA[bounds]) / \
+            (35 * np.pi * self.Sigma_0 * (self.a ** 2))
+
+        return (ec_x, ec_y)

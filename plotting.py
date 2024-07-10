@@ -5,8 +5,8 @@ from argparse import ArgumentParser
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-plt.rcParams['figure.dpi'] = 150
-plt.rcParams['savefig.dpi'] = 150
+plt.rcParams['figure.dpi'] = 300
+plt.rcParams['savefig.dpi'] = 300
 
 parser = ArgumentParser(description="Plot data from an .hdf file.")
 
@@ -40,7 +40,7 @@ with h5py.File(PATH, "r") as f:
         data = f[var][...]
         
     if len(data.shape) == 1:
-        plt.scatter(t[t <= 2 * np.pi] / (2 * np.pi), data[t <= 2 * np.pi], linewidth=1, s=0.5, c="black")
+        plt.scatter(t / (2 * np.pi), data, linewidth=1, s=0.5, c="black")
         
     plt.title("Gravitational Torque")
     plt.xlabel("time (orbits)")

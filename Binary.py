@@ -1,6 +1,6 @@
 import numpy as np
 from HD.HD_2D import HD_2D, Boundary
-from HD.helpers import E, cartesian_to_polar, get_prims
+from HD.helpers import cartesian_to_polar
 
 
 class Binary(HD_2D):
@@ -22,13 +22,12 @@ class Binary(HD_2D):
             self.r_bh1, self.theta_bh1 = self.a / 2, 0
             self.r_bh2, self.theta_bh2 = self.a / 2, np.pi
         self.ts = []
-        self.accr_1 = []
-        self.accr_2 = []
-        nu = 1e-3 * (self.a ** 2) * self.omega_B
 
-        super().__init__(gamma, nu=nu, coords=coords, resolution=resolution, x1_range=x1_range,
+        super().__init__(gamma, nu=1e-3 * (self.a ** 2) * self.omega_B, coords=coords, resolution=resolution, x1_range=x1_range,
                          x2_range=x2_range, solver=solver, logspace=logspace, high_space=high_space)
-        
+
+        self.eos = "isothermal"
+
         if self.coords == "cartesian":
             self.setup_cartesian()
 
@@ -43,14 +42,54 @@ class Binary(HD_2D):
             self.add_diagnostic("torque_1", self.get_torque1)
             self.add_diagnostic("torque_2", self.get_torque2)
 
+    def P(self, rho, X1=None, X2=None):
+        return rho * self.c_s(X1, X2) ** 2
+
+    def E(self, rho, u, v, X1=None, X2=None):
+        # specific internal energy = c_s ** 2
+        e_internal = rho * (self.c_s(X1, X2) ** 2)
+        e_kinetic = 0.5 * rho * (u ** 2 + v ** 2)
+        return e_internal + e_kinetic
+
+    def get_prims(self, U=None, X1=None, X2=None):
+        g = self.num_g
+        if U is None:
+            U = self.U[g:-g, g:-g]
+        u = np.copy(U)
+        rho = u[:, :, 0]
+        u, v = u[:, :, 1] / rho, u[:, :, 2] / rho
+        p = self.P(rho, X1, X2)
+        return rho, u, v, p
+
+    def F_from_prim(self, prims, X1=None, X2=None, x1=True):
+        rho, u, v, p = prims
+        e = self.E(rho, u, v, X1, X2)
+        if x1:
+            return np.array([
+                rho * u,
+                rho * (u ** 2) + p,
+                rho * u * v,
+                (e + p) * u
+            ]).transpose((1, 2, 0))
+        else:
+            return np.array([
+                rho * v,
+                rho * u * v,
+                rho * (v ** 2) + p,
+                (e + p) * v
+            ]).transpose((1, 2, 0))
+
     def c_s(self, r=None, theta=None):
         if r is None:
             r, theta = self.grid[:, :, 0], self.grid[:, :, 1]
+
         dist1 = np.sqrt(r ** 2 + self.r_bh1 ** 2 - 2 * r *
                         self.r_bh1 * np.cos(theta - self.theta_bh1))
         dist2 = np.sqrt(r ** 2 + self.r_bh2 ** 2 - 2 * r *
                         self.r_bh2 * np.cos(theta - self.theta_bh2))
-        cs = np.sqrt((self.G * (self.M / 2) / np.sqrt(dist1 ** 2 + self.eps ** 2) + self.G * (self.M / 2) / np.sqrt(dist2 ** 2 + self.eps ** 2)) / (self.mach ** 2))
+
+        cs = np.sqrt(((self.G * (self.M / 2) / np.sqrt(dist1 ** 2 + self.eps ** 2)) +
+                     (self.G * (self.M / 2) / np.sqrt(dist2 ** 2 + self.eps ** 2))) / (self.mach ** 2))
         return cs
 
     def gaussian_kernel(self, r):
@@ -65,14 +104,12 @@ class Binary(HD_2D):
             buff = r >= (0.95 * self.x1_max)
 
             v = np.sqrt(self.G * self.M / r[buff])
-            cs = v / self.mach
             u_k, v_k = - v * np.sin(theta[buff]), v * np.cos(theta[buff])
             rho = self.U[g:-g, g:-g, 0][buff]
-            p = rho * (cs ** 2) / self.gamma
 
             self.U[g:-g, g:-g, 1][buff] = rho * u_k
             self.U[g:-g, g:-g, 2][buff] = rho * v_k
-            self.U[g:-g, g:-g, 3][buff] = E(self.gamma, rho, p, u_k, v_k)
+            self.U[g:-g, g:-g, 3][buff] = self.E(rho, u_k, v_k)
 
     def first_order_step(self, t):
         g = self.num_g
@@ -92,7 +129,8 @@ class Binary(HD_2D):
 
         # ensure radial velocity at excised boundary is not positive
         if self.coords == "polar":
-            rho, vr, vtheta, p = get_prims(self.gamma, self.U)
+            rho = self.U[:, :, 0]
+            vr = self.U[:, :, 1] / rho
             vr[:g, :] = np.minimum(vr[:g, :], 0)
             self.U[:g, :, 1] = rho[:g, :] * vr[:g, :]
 
@@ -120,28 +158,23 @@ class Binary(HD_2D):
         omega = ((omega_naught ** -4) + (self.omega_B ** -4)) ** (-1/4)
         v_theta = omega * r
 
-        p = rho * (self.c_s() ** 2)
-
         self.U = np.array([
             rho,
             rho * v_r,
             rho * v_theta,
-            E(self.gamma, rho, p, v_r, v_theta)
+            self.E(rho, v_r, v_theta, r, theta)
         ]).transpose((1, 2, 0))
 
         def BH_gravity(U, r_bh, theta_bh):
-            # distance from each zone to bh
             delta_theta = theta - theta_bh
-            delta_theta = (delta_theta + np.pi) % (2 * np.pi) - np.pi
             dist = np.sqrt(r ** 2 + r_bh ** 2 - 2 * r *
                            r_bh * np.cos(delta_theta))
-            g = -self.G * (self.M / 2) / (dist ** 2 + self.eps ** 2)
+            g_acc = -self.G * (self.M / 2) / (dist ** 2 + self.eps ** 2)
 
-            g_r = g * (r - r_bh * np.cos(delta_theta)) / dist
-            g_theta = g * (r_bh * np.sin(delta_theta)) / dist
-
+            g_r = g_acc * (r - r_bh * np.cos(delta_theta)) / dist
+            g_theta = g_acc * (r_bh * np.sin(delta_theta)) / dist
             S = np.zeros_like(U)
-            rho, u, v, p = get_prims(self.gamma, U)
+            rho, u, v, p = self.get_prims()
 
             S[:, :, 1] = rho * g_r
             S[:, :, 2] = rho * g_theta
@@ -165,7 +198,6 @@ class Binary(HD_2D):
                                            (r + self.eps)) ** 12) + self.delta_0) * f(r)
         v_k = np.sqrt(self.G * self.M / (r + self.eps))  # keplerian velocity
         cs = v_k / self.mach
-        p = rho * (cs ** 2) / self.gamma
 
         u = - v_k * np.sin(theta)
         v = v_k * np.cos(theta)
@@ -173,19 +205,19 @@ class Binary(HD_2D):
             rho,
             rho * u,
             rho * v,
-            E(self.gamma, rho, p, u, v)
+            self.E(rho, u, v)
         ]).transpose((1, 2, 0))
 
         def BH_gravity(U, x_bh, y_bh):
             dx, dy = x - x_bh, y - y_bh
             dist = np.sqrt(dx ** 2 + dy ** 2)  # distance from each zone to bh
-            g = - 2 * np.pi * self.G * \
+            g = - self.G * \
                 (self.M / 2) / (dist ** 2 + self.eps ** 2)
 
             g_x, g_y = (dx / (dist + self.eps)) * \
                 g, (dy / (dist + self.eps)) * g
             S = np.zeros_like(U)
-            rho, u, v, p = get_prims(self.gamma, U)
+            rho, u, v, p = self.get_prims()
 
             S[:, :, 1] = rho * g_x
             S[:, :, 2] = rho * g_y
@@ -218,7 +250,7 @@ class Binary(HD_2D):
             return self.get_accr1_rate() + self.get_accr2_rate()
         elif self.coords == "polar":
             # calculate amount of mass that will cross excised boundary
-            rho, v_r, v_theta, p = get_prims(self.gamma, self.U[g:-g, g:-g])
+            rho, v_r, v_theta, p = self.get_prims()
             rho_in = rho[0, :]
             v_r_in = v_r[0, :]
             dx1 = self.x1_interf[1] - self.x1_interf[0]
@@ -268,18 +300,18 @@ class Binary(HD_2D):
         elif self.coords == "polar":
             r, theta = self.grid[:, :, 0], self.grid[:, :, 1]
             r_bh, theta_bh = self.r_bh1, self.theta_bh1
-            delta_theta = theta - theta_bh
-            delta_theta = (delta_theta + np.pi) % (2 * np.pi) - np.pi
-            dist = np.sqrt(r ** 2 + r_bh ** 2 - 2 * r *
-                           r_bh * np.cos(delta_theta))
             R_interf, _ = np.meshgrid(self.x1_interf, self.x2, indexing="ij")
             x1_l, x1_r = R_interf[:-1, :], R_interf[1:, :]
             dx1 = x1_r - x1_l
             dx2 = self.x2[1] - self.x2[0]
             dA = r * dx1 * dx2  # dA = rdrdtheta
 
-            Fg = (self.G * (self.M / 2) / (dist ** 2 + self.eps ** 2)) * rho * dA
-            Fg_theta = Fg * (r_bh * np.sin(delta_theta)) / dist
+            delta_theta = theta - theta_bh
+            dist = np.sqrt(r ** 2 + r_bh ** 2 - 2 * r *
+                           r_bh * np.cos(delta_theta))
+            Fg = self.G * (self.M / 2) * rho * dA / \
+                (dist ** 2 + self.eps ** 2)
+            Fg_theta = Fg * (r * np.sin(delta_theta)) / dist
             T = np.sum((self.a / 2) * Fg_theta)
 
         return T
@@ -305,26 +337,25 @@ class Binary(HD_2D):
         elif self.coords == "polar":
             r, theta = self.grid[:, :, 0], self.grid[:, :, 1]
             r_bh, theta_bh = self.r_bh2, self.theta_bh2
-            delta_theta = theta - theta_bh
-            delta_theta = (delta_theta + np.pi) % (2 * np.pi) - np.pi
-            dist = np.sqrt(r ** 2 + r_bh ** 2 - 2 * r *
-                           r_bh * np.cos(delta_theta))
             R_interf, _ = np.meshgrid(self.x1_interf, self.x2, indexing="ij")
             x1_l, x1_r = R_interf[:-1, :], R_interf[1:, :]
             dx1 = x1_r - x1_l
             dx2 = self.x2[1] - self.x2[0]
             dA = r * dx1 * dx2  # dA = rdrdtheta
 
-            Fg = (self.G * (self.M / 2) / (dist ** 2 + self.eps ** 2)) * rho * dA
-            Fg_theta = Fg * (r_bh * np.sin(delta_theta)) / dist
+            delta_theta = theta - theta_bh
+            dist = np.sqrt(r ** 2 + r_bh ** 2 - 2 * r *
+                           r_bh * np.cos(delta_theta))
+            Fg = self.G * (self.M / 2) * rho * dA / \
+                (dist ** 2 + self.eps ** 2)
+            Fg_theta = Fg * (r * np.sin(delta_theta)) / dist
             T = np.sum((self.a / 2) * Fg_theta)
 
         return T
 
     # TODO: cartesian coordinate version
     def get_eccentricity(self):
-        g = self.num_g
-        rho, vr, vtheta, p = get_prims(self.gamma, self.U[g:-g, g:-g])
+        rho, vr, vtheta, p = self.get_prims()
         r, theta = self.grid[:, :, 0], self.grid[:, :, 1]
         R_interf, _ = np.meshgrid(self.x1_interf, self.x2, indexing="ij")
         x1_l, x1_r = R_interf[:-1, :], R_interf[1:, :]

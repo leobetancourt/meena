@@ -1,4 +1,4 @@
-from HD.helpers import E, F_from_prim, U_from_prim, enthalpy, get_prims, minmod, add_ghost_cells
+from HD.helpers import enthalpy, minmod, add_ghost_cells
 
 from abc import ABC, abstractmethod
 import numpy as np
@@ -13,10 +13,20 @@ class Solver(ABC):
         self.coords = coords
         self.x1, self.x2 = x1, x2
         self.x1_interf, self.x2_interf = x1_interf, x2_interf
-        self.x1_g = np.pad(self.x1, (1, 1), mode="constant", constant_values=(
-            self.x1[0] - (self.x1_interf[1] - self.x1_interf[0]), self.x1[-1] + (self.x1_interf[-1] - self.x1_interf[-2])))
-        self.x2_g = np.pad(self.x2, (1, 1), mode="constant", constant_values=(
-            self.x2[0] - (self.x2_interf[1] - self.x2_interf[0]), self.x2[-1] + (self.x2_interf[-1] - self.x2_interf[-2])))
+        self.x1_g = np.concatenate([
+            [self.x1[0] - 2 * (self.x1_interf[1] - self.x1_interf[0]),
+             self.x1[0] - (self.x1_interf[1] - self.x1_interf[0])],
+            self.x1,
+            [self.x1[-1] + (self.x1_interf[-1] - self.x1_interf[-2]),
+                self.x1[-1] + 2 * (self.x1_interf[-1] - self.x1_interf[-2])]
+        ])
+        self.x2_g = np.concatenate([
+            [self.x2[0] - 2 * (self.x2_interf[1] - self.x2_interf[0]),
+             self.x2[0] - (self.x2_interf[1] - self.x2_interf[0])],
+            self.x2,
+            [self.x2[-1] + (self.x2_interf[-1] - self.x2_interf[-2]),
+                self.x2[-1] + 2 * (self.x2_interf[-1] - self.x2_interf[-2])]
+        ])
         self.res_x1, self.res_x2 = res
         self.high_order = high_order
 
@@ -25,8 +35,7 @@ class Solver(ABC):
         pass
 
     def L(self, U, F_l, F_r, G_l, G_r):
-        g = self.num_g
-        rho, u, v, p = get_prims(self.gamma, U[g:-g, g:-g])
+        rho, u, v, p = self.hd.get_prims()
 
         if self.coords == "cartesian":
             dx1, dx2 = self.x1[1] - self.x1[0], self.x2[1] - self.x2[0]
@@ -58,25 +67,21 @@ class Solver(ABC):
         g = self.num_g
         theta = 1.5
 
-        prims_C = np.asarray(get_prims(self.gamma, U[g:-g, g:-g, :]))
+        prims_C = np.asarray(self.hd.get_prims())
         if x1:
             prims_L = np.asarray(
-                get_prims(self.gamma, U[(g-1):-(g+1), g:-g, :]))
-            prims_LL = np.asarray(get_prims(
-                self.gamma, U[(g-2):-(g+2), g:-g, :]))
+                self.hd.get_prims(U[(g-1):-(g+1), g:-g, :]))
+            prims_LL = np.asarray(self.hd.get_prims(U[(g-2):-(g+2), g:-g, :]))
             prims_R = np.asarray(
-                get_prims(self.gamma, U[(g+1):-(g-1), g:-g, :]))
-            prims_RR = np.asarray(get_prims(
-                self.gamma, U[(g+2):, g:-g, :]))
+                self.hd.get_prims(U[(g+1):-(g-1), g:-g, :]))
+            prims_RR = np.asarray(self.hd.get_prims(U[(g+2):, g:-g, :]))
         else:
             prims_L = np.asarray(
-                get_prims(self.gamma, U[g:-g, (g-1):-(g+1), :]))
-            prims_LL = np.asarray(get_prims(
-                self.gamma, U[g:-g, (g-2):-(g+2), :]))
+                self.hd.get_prims(U[g:-g, (g-1):-(g+1), :]))
+            prims_LL = np.asarray(self.hd.get_prims(U[g:-g, (g-2):-(g+2), :]))
             prims_R = np.asarray(
-                get_prims(self.gamma, U[g:-g, (g+1):-(g-1), :]))
-            prims_RR = np.asarray(get_prims(
-                self.gamma, U[g:-g, (g+2):, :]))
+                self.hd.get_prims(U[g:-g, (g+1):-(g-1), :]))
+            prims_RR = np.asarray(self.hd.get_prims(U[g:-g, (g+2):, :]))
 
         # left cell interface (i-1/2)
         # left-biased state
@@ -101,10 +106,10 @@ class Solver(ABC):
                    (prims_RR - prims_C), theta * (prims_RR - prims_R))
 
         # construct F_rl, F_rr, F_ll, F_lr and U_rl, U_rr, U_ll, U_lr
-        F_ll, F_lr, F_rl, F_rr = F_from_prim(self.gamma, prims_ll, x1), F_from_prim(self.gamma, prims_lr, x1), F_from_prim(self.gamma, prims_rl, x1), F_from_prim(
-            self.gamma, prims_rr, x1)
-        U_ll, U_lr, U_rl, U_rr = U_from_prim(self.gamma, prims_ll), U_from_prim(self.gamma, prims_lr), U_from_prim(self.gamma, prims_rl), U_from_prim(
-            self.gamma, prims_rr)
+        F_ll, F_lr, F_rl, F_rr = self.hd.F_from_prim(prims_ll, x1), self.hd.F_from_prim(prims_lr, x1), self.hd.F_from_prim(prims_rl, x1), self.hd.F_from_prim(
+            prims_rr, x1)
+        U_ll, U_lr, U_rl, U_rr = self.hd.U_from_prim(prims_ll), self.hd.U_from_prim(
+            prims_lr), self.hd.U_from_prim(prims_rl), self.hd.U_from_prim(prims_rr)
 
         return U_ll, U_lr, U_rl, U_rr, F_ll, F_lr, F_rl, F_rr
 
@@ -119,10 +124,9 @@ class Solver(ABC):
             else:
                 du = (u[g:-g, (g):-(g-1)] - u[g:-g, (g-1):-(g)]) / (dy)
         elif self.coords == "polar":
-            # try making mesh grid and get r from that to use in denominator of theta derivative
             dtheta = self.x2[1] - self.x2[0]
             if x1:
-                X1, _ = np.meshgrid(self.x1_g, self.x2, indexing="ij")
+                X1, _ = np.meshgrid(self.x1_g[1:-1], self.x2, indexing="ij")
                 dR = np.diff(X1, axis=0)
                 du = np.diff(u[(g-1):-(g-1), g:-g], axis=0) / dR
             else:
@@ -176,7 +180,7 @@ class Solver(ABC):
 
     def interface_flux(self, U):
         g = self.num_g
-        
+
         X1, X2 = np.meshgrid(self.x1_g, self.x2_g, indexing="ij")
 
         if self.high_order:
@@ -194,9 +198,12 @@ class Solver(ABC):
             # G_(i+1/2)
             G_r = self.flux(G_rl, G_rr, U_rl, U_rr, x1=False)
         else:
-            rho, u, v, p = get_prims(self.gamma, U)
-            F = F_from_prim(self.gamma, (rho, u, v, p), x1=True)
-            G = F_from_prim(self.gamma, (rho, u, v, p), x1=False)
+            if self.hd.eos == "ideal":
+                rho, u, v, p = self.hd.get_prims(U)
+            elif self.hd.eos == "isothermal":
+                rho, u, v, p = self.hd.get_prims(U, X1, X2)
+            F = self.hd.F_from_prim((rho, u, v, p), X1, X2, x1=True)
+            G = self.hd.F_from_prim((rho, u, v, p), X1, X2, x1=False)
 
             F_L = F[(g-1):-(g+1), g:-g, :]
             F_R = F[(g+1):-(g-1), g:-g, :]
@@ -209,12 +216,12 @@ class Solver(ABC):
             U_L = U[(g-1):-(g+1), g:-g, :]
             U_R = U[(g+1):-(g-1), g:-g, :]
             U_C = U[g:-g, g:-g, :]
-            X1_L = X1[:-2, 1:-1]
-            X1_R = X1[2:, 1:-1]
-            X1_C = X1[1:-1, 1:-1]
-            X2_L = X2[1:-1, :-2]
-            X2_R = X2[1:-1, 2:]
-            X2_C = X2[1:-1, 1:-1]
+            X1_L = X1[(g-1):-(g+1), g:-g]
+            X1_R = X1[(g+1):-(g-1), g:-g]
+            X1_C = X1[g:-g, g:-g]
+            X2_L = X2[g:-g, (g-1):-(g+1)]
+            X2_R = X2[g:-g, (g+1):-(g-1)]
+            X2_C = X2[g:-g, g:-g]
             # F_(i-1/2)
             F_l = self.flux(F_L, F_C, U_L, U_C, X1_L, X1_C, X2_C, X2_C)
             # F_(i+1/2)
@@ -247,8 +254,8 @@ class Solver(ABC):
 class HLLC(Solver):
 
     def F_star(self, F_k, S_k, S_M, U_k, x1=True):
-        rho_k, vx_k, vy_k, p_k = get_prims(self.gamma, U_k)
-        E_k = E(self.gamma, rho_k, p_k, vx_k, vy_k)
+        rho_k, vx_k, vy_k, p_k = self.hd.get_prims(U_k)
+        E_k = self.hd.E(rho_k, p_k, vx_k, vy_k)
         v_k = vx_k if x1 else vy_k
 
         rho_star = rho_k * (S_k - v_k) / (S_k - S_M)
@@ -269,10 +276,10 @@ class HLLC(Solver):
             HLLC algorithm adapted from Robert Caddy
             https://robertcaddy.com/posts/HLLC-Algorithm/
         """
-        rho_L, vx_L, vy_L, p_L = get_prims(self.gamma, U_L)
-        rho_R, vx_R, vy_R, p_R = get_prims(self.gamma, U_R)
-        E_L, E_R = E(self.gamma, rho_L, p_L, vx_L, vy_L), E(
-            self.gamma, rho_R, p_R, vx_R, vy_R)
+        rho_L, vx_L, vy_L, p_L = self.hd.get_prims(U_L)
+        rho_R, vx_R, vy_R, p_R = self.hd.get_prims(U_R)
+        E_L, E_R = self.hd.E(rho_L, p_L, vx_L, vy_L), self.hd.E(
+            rho_R, p_R, vx_R, vy_R)
         v_L = vx_L if x1 else vy_L
         v_R = vx_R if x1 else vy_R
 
@@ -307,10 +314,10 @@ class HLL(Solver):
 
     # returns (lambda_plus, lambda_minus)
     def lambdas(self, U, X1, X2, x1=True):
-        rho, u, v, p = get_prims(self.gamma, U)
-        if self.coords == "cartesian":
+        rho, u, v, p = self.hd.get_prims(U, X1, X2)
+        if self.hd.eos == "ideal":
             cs = self.hd.c_s(p, rho)
-        elif self.coords == "polar":
+        elif self.hd.eos == "isothermal":
             cs = self.hd.c_s(X1, X2)
 
         v = u if x1 else v

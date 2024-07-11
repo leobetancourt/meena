@@ -1,4 +1,4 @@
-from HD.helpers import E, P, add_ghost_cells, get_prims, cartesian_to_polar, plot_grid, plot_sheer
+from HD.helpers import add_ghost_cells, cartesian_to_polar, plot_grid, print_progress_bar
 from HD.solvers import HLL, HLLC
 
 import numpy as np
@@ -31,6 +31,7 @@ class HD_2D:
                  x1_range=(-1, 1), x2_range=(-1, 1), logspace=False, solver="hll", high_time=False, high_space=False):
         self.gamma = gamma
         self.nu = nu  # viscosity
+        self.eos = "ideal"
 
         self.coords = coords
         # grid initialization
@@ -73,11 +74,54 @@ class HD_2D:
 
         # list of diagnostics, each a tuple (name : string, get : method)
         self.diagnostics = []
-        
-    def c_s(self, p=None, rho=None):
+
+    def E(self, rho, p, u, v):
+        return (p / (self.gamma - 1)) + (0.5 * rho * (u ** 2 + v ** 2))
+
+    def P(self, rho, u, v, E):
+        p = (self.gamma - 1) * (E - (0.5 * rho * (u ** 2 + v ** 2)))
+        return p
+
+    def get_prims(self, U=None):
         g = self.num_g
+        if U == None:
+            U = self.U[g:-g, g:-g]
+        u = np.copy(U)
+        rho = u[:, :, 0]
+        u, v = u[:, :, 1] / rho, u[:, :, 2] / rho
+        E = u[:, :, 3]
+        p = self.P(rho, u, v, E)
+        return rho, u, v, p
+
+    def U_from_prim(self, prims):
+        rho, u, v, p = prims
+        e = self.E(rho, p, u, v)
+        U = np.array([rho, rho * u, rho * v, e]).transpose((1, 2, 0))
+        return U
+
+    def F_from_prim(self, prims, x1=True):
+        rho, u, v, p = prims
+        e = self.E(rho, p, u, v)
+        if x1:
+            F = np.array([
+                rho * u,
+                rho * (u ** 2) + p,
+                rho * u * v,
+                (e + p) * u
+            ]).transpose((1, 2, 0))
+        else:
+            F = np.array([
+                rho * v,
+                rho * u * v,
+                rho * (v ** 2) + p,
+                (e + p) * v
+            ]).transpose((1, 2, 0))
+
+        return F
+
+    def c_s(self, p=None, rho=None):
         if p is None:
-            rho, _, _, p = get_prims(self.gamma, self.U[g:-g, g:-g])
+            rho, _, _, p = self.get_prims()
         return np.sqrt(self.gamma * p / rho)
 
     def set_bcs(self, bc_x1=(Boundary.OUTFLOW, Boundary.OUTFLOW), bc_x2=(Boundary.OUTFLOW, Boundary.OUTFLOW)):
@@ -131,8 +175,7 @@ class HD_2D:
         self.S.append(source)
 
     def compute_timestep(self):
-        g = self.num_g
-        rho, u, v, p = get_prims(self.gamma, self.U[g:-g, g:-g])
+        rho, u, v, p = self.get_prims()
         cs = self.c_s()
         if self.coords == "cartesian":
             dt = self.cfl * \
@@ -149,15 +192,17 @@ class HD_2D:
         return dt
 
     def check_physical(self):
-        rho = self.U[:, :, 0]
-        momx = self.U[:, :, 1]
-        momy = self.U[:, :, 2]
-        En = self.U[:, :, 3]
-        p = P(self.gamma, rho, momx/rho, momy/rho, En)
+        g = self.num_g
+        u = self.U[g:-g, g:-g]
+        rho = u[:, :, 0]
+        momx = u[:, :, 1]
+        momy = u[:, :, 2]
+        En = u[:, :, 3]
+        _, _, _, p = self.get_prims(u)
         invalid = (rho <= 0) | (p <= 0) | (En <= 0)
         momx[invalid] = 1e-12
         momy[invalid] = 1e-12
-        En[invalid] = E(self.gamma, 1e-6, 1e-6, 1e-6, 1e-6)
+        En[invalid] = 1.5e-6
         rho[invalid] = 1e-6
 
     def first_order_step(self, t):
@@ -234,8 +279,8 @@ class HD_2D:
                     None,), chunks=True, dtype="float64")
                 self.diagnostics[i] = (name, get_func, dset)
 
-            rho, u, v, p = get_prims(self.gamma, self.U[g:-g, g:-g])
-            En = E(self.gamma, rho, p, u, v)
+            rho, u, v, p = self.get_prims()
+            En = self.U[g:-g, g:-g, 3]
             vmin, vmax = None, None
             if plot == "density":
                 matrix = rho
@@ -294,10 +339,10 @@ class HD_2D:
                     plt.pause(0.001)
 
                 t = t + self.dt if (t + self.dt <= T) else T
-                self.print_progress_bar(t, T, suffix="complete", length=50)
+                print_progress_bar(t, T, suffix="complete", length=50)
 
-                rho, u, v, p = get_prims(self.gamma, self.U[g:-g, g:-g])
-                En = E(self.gamma, rho, p, u, v)
+                rho, u, v, p = self.get_prims()
+                En = self.U[g:-g, g:-g, 3]
                 if plot == "density":
                     matrix = rho
                 elif plot == "log density":
@@ -323,43 +368,31 @@ class HD_2D:
 
         plt.show()
 
-    def print_progress_bar(self, iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█', printEnd="\r"):
-        percent = ("{0:." + str(decimals) + "f}").format(100 *
-                                                         (iteration / float(total)))
-        filledLength = int(length * iteration // total)
-        bar = fill * filledLength + '-' * (length - filledLength)
-        print(f'\r{prefix} |{bar}| {percent}% {suffix}', end=printEnd)
-        # print new line on complete
-        if iteration == total:
-            print()
-
     def sedov_blast(self, radius=0.1):
         if self.coords == "cartesian":
             r, _ = cartesian_to_polar(self.grid[:, :, 0], self.grid[:, :, 1])
         elif self.coords == "polar":
             r, _ = self.grid[:, :, 0], self.grid[:, :, 1]
         self.U[r < radius] = np.array([1, 0, 0, 10])
-        self.U[r >= radius] = np.array([1, 0, 0, E(self.gamma, 1, 1e-4, 0, 0)])
+        self.U[r >= radius] = np.array([1, 0, 0, self.E(1, 1e-4, 0, 0)])
 
     def implosion(self):
         if self.coords == "cartesian":
             r, _ = cartesian_to_polar(self.grid[:, :, 0], self.grid[:, :, 1])
         elif self.coords == "polar":
             r, _ = self.grid[:, :, 0], self.grid[:, :, 1]
-        self.U[r < 0.2] = np.array([0.125, 0, 0, E(0.125, 0.14, 0, 0)])
-        self.U[r >= 0.2] = np.array([1, 0, 0, E(1, 1, 0, 0)])
+        self.U[r < 0.2] = np.array([0.125, 0, 0, self.E(0.125, 0.14, 0, 0)])
+        self.U[r >= 0.2] = np.array([1, 0, 0, self.E(1, 1, 0, 0)])
 
     def sheer(self):
         x, y = self.grid[:, :, 0], self.grid[:, :, 1]
         mid = (self.x1_max + self.x1_min) / 2
-        print(mid)
-        print(x)
         rho_L, u_L, v_L, p_L = 1, 0, 1, 1
         self.U[x <= -0.5] = np.array(
-            [rho_L, rho_L * u_L, rho_L * v_L, E(self.gamma, rho_L, p_L, u_L, v_L)])
+            [rho_L, rho_L * u_L, rho_L * v_L, self.E(rho_L, p_L, u_L, v_L)])
         rho_R, u_R, v_R, p_R = 1, 0, -1, 1
         self.U[x > -0.5] = np.array(
-            [rho_R, rho_R * u_R, rho_R * v_R, E(self.gamma, rho_R, p_R, u_R, v_R)])
+            [rho_R, rho_R * u_R, rho_R * v_R, self.E(rho_R, p_R, u_R, v_R)])
 
     # case 3 in Liska Wendroff
     def quadrants(self):
@@ -370,13 +403,13 @@ class HD_2D:
         rho_3, u_3, v_3, p_3 = 0.138, 1.206, 1.206, 0.029
         rho_4, u_4, v_4, p_4 = 0.5323, 0, 1.206, 0.3
         self.U[(x < mid) & (y >= mid)] = np.array(
-            [rho_1, rho_1 * u_1, rho_1 * v_1, E(self.gamma, rho_1, p_1, u_1, v_1)])
+            [rho_1, rho_1 * u_1, rho_1 * v_1, self.E(rho_1, p_1, u_1, v_1)])
         self.U[(x >= mid) & (y >= mid)] = np.array(
-            [rho_2, rho_2 * u_2, rho_2 * v_2, E(self.gamma, rho_2, p_2, u_2, v_2)])
+            [rho_2, rho_2 * u_2, rho_2 * v_2, self.E(rho_2, p_2, u_2, v_2)])
         self.U[(x < mid) & (y < mid)] = np.array(
-            [rho_3, rho_3 * u_3, rho_3 * v_3, E(self.gamma, rho_3, p_3, u_3, v_3)])
+            [rho_3, rho_3 * u_3, rho_3 * v_3, self.E(rho_3, p_3, u_3, v_3)])
         self.U[(x >= mid) & (y < mid)] = np.array(
-            [rho_4, rho_4 * u_4, rho_4 * v_4, E(self.gamma, rho_4, p_4, u_4, v_4)])
+            [rho_4, rho_4 * u_4, rho_4 * v_4, self.E(rho_4, p_4, u_4, v_4)])
 
     # initial conditions from Deng, Boivin, Xiao
     # https://hal.science/hal-02100764/document
@@ -396,11 +429,11 @@ class HD_2D:
                 if y >= 0.75:
                     p = 2.5 + g * 2 * (y - 0.75)
                     self.U[i][j] = np.array(
-                        [2, 0, 2 * v, E(self.gamma, 2, p, 0, v)])
+                        [2, 0, 2 * v, self.E(2, p, 0, v)])
                 else:
                     p = 2.5 + g * 1 * (y - 0.75)
                     self.U[i][j] = np.array(
-                        [1, 0, 1 * v, E(self.gamma, 1, p, 0, v)])
+                        [1, 0, 1 * v, self.E(1, p, 0, v)])
 
     def kelvin_helmholtz(self):
         self.U = np.zeros((self.res_x1, self.res_x2, 4))
@@ -417,14 +450,14 @@ class HD_2D:
                                                        (2 * sigma**2)) + np.exp(-(y-0.75)**2/(2*sigma**2)))
                     p = 2.5
                     self.U[i][j] = np.array(
-                        [1, -0.5, 0, E(self.gamma, rho, p, u, v)])
+                        [1, -0.5, 0, self.E(rho, p, u, v)])
                 else:
                     rho, u = 2, 0.5
                     v = w0*np.sin(4*np.pi*x) * (np.exp(-(y-0.25)**2 /
                                                        (2 * sigma**2)) + np.exp(-(y-0.75)**2/(2*sigma**2)))
                     p = 2.5
                     self.U[i][j] = np.array(
-                        [rho, u, v, E(self.gamma, rho, p, u, v)])
+                        [rho, u, v, self.E(rho, p, u, v)])
 
         def gravity(U):
             S = np.zeros_like(U)

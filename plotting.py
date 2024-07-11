@@ -1,4 +1,3 @@
-from HD.helpers import plot_grid, plot_sheer, get_prims, E, P
 import h5py
 import os
 from argparse import ArgumentParser

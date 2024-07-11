@@ -1,4 +1,4 @@
-from HD.helpers import plot_grid, plot_sheer, get_prims, E, P
+from HD.helpers import plot_grid, print_progress_bar
 from MHD.helpers import plot_grid as plot_MHD
 import h5py
 import os
@@ -39,7 +39,6 @@ with h5py.File(PATH, "r") as f:
     
     tc = f["tc"][...] # checkpoint times
     rho, momx1, momx2, En = f["rho"][...], f["momx1"][...], f["momx2"][...], f["E"][...]
-    p = P(gamma, rho, momx1 / rho, momx2 / rho, En)
     momx3, Bx, By, Bz = None, None, None, None
     if "Bx" in f: # MHD
         momx3, Bx, By, Bz = f["momx3"], f["Bx"], f["By"], f["Bz"]
@@ -55,8 +54,6 @@ elif var == "u":
     matrix = momx1 / rho
 elif var == "v":
     matrix = momx2 / rho
-elif var == "pressure":
-    matrix = p
 elif var == "energy":
     matrix = En
 
@@ -99,9 +96,9 @@ with cm:
             matrix = momx1 / rho
         elif var == "v":
             matrix = momx2 / rho
-        elif var == "pressure":
-            matrix = p
         elif var == "energy":
             matrix = En
+        
+        print_progress_bar(i, len(tc), suffix="complete", length=50)
 
 print("Movie saved to", PATH)

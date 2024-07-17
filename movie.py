@@ -73,8 +73,16 @@ if not os.path.exists(PATH):
     os.makedirs(PATH)
 cm = writer.saving(fig, f"{PATH}/{var}.mp4", 300)
 
+tc /= 2 * np.pi
+t_start = 50
+diff_arr = np.absolute(tc - t_start)
+idx_start = diff_arr.argmin()
+t_end = 60
+diff_arr = np.absolute(tc - t_end)
+idx_end = diff_arr.argmin()
+
 with cm:    
-    for i in range(len(tc)): # loop over checkpoints
+    for i in range(idx_start, idx_end): # loop over checkpoints
         if Bx: # MHD
             pass
             # plot_MHD(gamma, U, t=tc[i], plot=var, extent=[x1[0], x1[-1], x2[0], x2[-1]])

@@ -69,7 +69,8 @@ def plot_grid(matrix, label, coords="cartesian", x1=None, x2=None, vmin=None, vm
         ax.set_yticks([])
         ax.set_ylim(0, np.max(x1))
         ax.set_facecolor("black")
-        circle = Circle((0, 0), radius=np.min(x1), transform=ax.transData._b, color='blue', fill=False, linewidth=1)
+        circle_r = np.min(x1) - (x1[1] - x1[0]) / 2
+        circle = Circle((0, 0), radius=circle_r, transform=ax.transData._b, color='blue', fill=False, linewidth=1)
         ax.add_patch(circle)
         R, Theta = np.meshgrid(x1, x2, indexing="ij")
         c = ax.pcolormesh(Theta, R, matrix, shading='auto', cmap="magma", vmin=vmin, vmax=vmax)

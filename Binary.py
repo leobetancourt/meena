@@ -39,8 +39,12 @@ class Binary(HD_2D):
             self.setup_polar()
 
             self.add_diagnostic("accretion_rate", self.get_accr_rate)
+            self.add_diagnostic("angular_mom_rate", self.get_angular_mom_rate)
             self.add_diagnostic("torque_1", self.get_torque1)
             self.add_diagnostic("torque_2", self.get_torque2)
+            self.add_diagnostic("eccentricity_x", self.get_eccentricity_x)
+            self.add_diagnostic("eccentricity_y", self.get_eccentricity_y)
+            self.add_diagnostic("F_l", self.get_F_l)
 
     def P(self, rho, X1=None, X2=None):
         return rho * self.c_s(X1, X2) ** 2
@@ -243,20 +247,27 @@ class Binary(HD_2D):
             return BH_kernel(U, self.x_bh1, self.y_bh1) + BH_kernel(U, self.x_bh2, self.y_bh2)
 
         self.add_source(kernel)
+        
+    def get_F_l(self):
+        if self.solver.F_l is None:
+                return 0
+        else:
+            return np.sum(self.solver.F_l[0, :, 0])
 
     def get_accr_rate(self):
-        g = self.num_g
         if self.coords == "cartesian":
             return self.get_accr1_rate() + self.get_accr2_rate()
         elif self.coords == "polar":
-            # calculate amount of mass that will cross excised boundary
-            rho, v_r, v_theta, p = self.get_prims()
-            rho_in = rho[0, :]
-            v_r_in = v_r[0, :]
-            dx1 = self.x1_interf[1] - self.x1_interf[0]
-            dx2 = self.x2_interf[1] - self.x2_interf[0]
-
-            return np.sum(rho_in[v_r_in < 0] * self.x1_interf[0] * dx1 * dx2)
+            # using flux at excised boundary interface
+            if self.solver.F_l is None:
+                return 0
+            else:
+                dr = self.x1_interf[1] - self.x1_interf[0]
+                dtheta = self.x2_interf[1] - self.x2_interf[0]
+                dA = self.x1[0] * dr * dtheta
+                m_dot = -(self.solver.F_l[0, :, 0] / dr) * dA
+                # print(np.sum(m_dot))
+                return np.sum(m_dot)
 
     def get_accr1_rate(self):
         g = self.num_g
@@ -279,6 +290,19 @@ class Binary(HD_2D):
             rho[g:-g, g:-g], self.gaussian_kernel(r)) * self.dx1 * self.dx2)
 
         return rate
+        
+    def get_angular_mom_rate(self):
+        g = self.num_g
+        if self.coords == "polar":
+            if self.solver.F_l is None:
+                return 0
+            else:
+                dr = self.x1_interf[1] - self.x1_interf[0]
+                dtheta = self.x2_interf[1] - self.x2_interf[0]
+                dA = self.x1[0] * dr * dtheta
+                m_dot = -(self.solver.F_l[0, :, 0] / dr) * dA
+                vtheta = self.U[g, g:-g, 2] / self.U[g, g:-g, 0]
+                return np.sum(m_dot * self.x1[0] * vtheta)
 
     def get_torque1(self):
         g = self.num_g
@@ -353,7 +377,6 @@ class Binary(HD_2D):
 
         return T
 
-    # TODO: cartesian coordinate version
     def get_eccentricity(self):
         rho, vr, vtheta, p = self.get_prims()
         r, theta = self.grid[:, :, 0], self.grid[:, :, 1]
@@ -363,14 +386,20 @@ class Binary(HD_2D):
         dx2 = self.x2[1] - self.x2[0]
         dA = r * dx1 * dx2
         e_x = (r * vr * vtheta / (self.G * self.M)) * np.sin(theta) + \
-            (((r * vtheta ** 2) / self.G * self.M) - 1) * np.cos(theta)
+            (((r * vtheta ** 2) / (self.G * self.M)) - 1) * np.cos(theta)
         e_y = -(r * vr * vtheta / (self.G * self.M)) * np.cos(theta) + \
-            (((r * vtheta ** 2) / self.G * self.M) - 1) * np.sin(theta)
+            (((r * vtheta ** 2) / (self.G * self.M)) - 1) * np.sin(theta)
 
-        bounds = r >= self.a & r <= 6 * self.a
+        bounds = np.logical_and(r >= self.a, r <= 6 * self.a)
         ec_x = np.sum(e_x[bounds] * rho[bounds] * dA[bounds]) / \
             (35 * np.pi * self.Sigma_0 * (self.a ** 2))
         ec_y = np.sum(e_y[bounds] * rho[bounds] * dA[bounds]) / \
             (35 * np.pi * self.Sigma_0 * (self.a ** 2))
 
         return (ec_x, ec_y)
+    
+    def get_eccentricity_x(self):
+        return self.get_eccentricity()[0]
+
+    def get_eccentricity_y(self):
+        return self.get_eccentricity()[1]

@@ -29,6 +29,7 @@ class Solver(ABC):
         ])
         self.res_x1, self.res_x2 = res
         self.high_order = high_order
+        self.F_l, self.F_r, self.G_l, self.G_r = None, None, None, None
 
     @abstractmethod
     def flux(self, F_L, F_R, U_L, U_R, x1=True):
@@ -36,7 +37,8 @@ class Solver(ABC):
 
     def L(self, U, F_l, F_r, G_l, G_r):
         rho, u, v, p = self.hd.get_prims()
-
+        self.F_l, self.F_r, self.G_l, self.G_r = F_l, F_r, G_l, G_r
+        
         if self.coords == "cartesian":
             dx1, dx2 = self.x1[1] - self.x1[0], self.x2[1] - self.x2[0]
             return - ((F_r - F_l) / dx1) - ((G_r - G_l) / dx2)

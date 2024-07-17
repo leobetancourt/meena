@@ -12,7 +12,7 @@ if __name__ == "__main__":
                  x1_range=(1, 10), x2_range=(0, 2 * np.pi), logspace=True)
     sim.set_bcs((Boundary.OUTFLOW, Boundary.OUTFLOW),
                 (Boundary.PERIODIC, Boundary.PERIODIC))
-    sim.run(T= 2 * np.pi, filename="binary_", save_interval=0.2)
+    sim.run(T= 2 * np.pi, out="./output/binary", save_interval=0.2)
 
     # sim = MHD(gamma=2, resolution=(800, 1, 1), xrange=(-1, 1))
     # sim.shock_tube()

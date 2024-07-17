@@ -241,9 +241,9 @@ class HD_2D:
     def add_diagnostic(self, name, get_func):
         self.diagnostics.append((name, get_func))
 
-    def run(self, T, plot=None, filename="out", save_interval=0.1):
+    def run(self, T, plot=None, out="./out", save_interval=0.1):
         t = 0
-        PATH = f"./output/{filename}.hdf"
+        PATH = f"{out}/out.hdf"
         self.U = add_ghost_cells(self.U, self.num_g)
         labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$",
                   "v": r"$v$", "pressure": r"$P$", "energy": r"$E$", }

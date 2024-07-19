@@ -4,10 +4,10 @@ from HD.helpers import cartesian_to_polar
 
 
 class Binary(HD_2D):
-    def __init__(self, gamma=1.4, coords="cartesian", resolution=(100, 100),
+    def __init__(self, gamma=1.4, coords="cartesian", resolution=(100, 100), mach=10, 
                  x1_range=(-5, 5), x2_range=(-5, 5), logspace=False, solver="hll", high_space=False):
         self.G, self.M = 1, 1
-        self.mach = 10
+        self.mach = mach 
         self.a = 1  # binary separation
         self.R_cav = 2.5 * self.a
         self.R_out = 10 * self.a

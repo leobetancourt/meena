@@ -35,7 +35,7 @@ def main():
 
     U = sedov(hydro, lattice, radius=0.1)
 
-    run(hydro, lattice, U, T=1)
+    run(hydro, lattice, U, T=1, plot="density")
 
 
 if __name__ == "__main__":

@@ -3,9 +3,6 @@ cycler==0.12.1
 ffmpeg==1.4
 fonttools==4.52.4
 h5py==3.11.0
-jax==0.4.30
-jax-metal==0.1.0
-jaxlib==0.4.30
 kiwisolver==1.4.5
 llvmlite==0.43.0
 matplotlib==3.9.0

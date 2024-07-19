@@ -238,7 +238,7 @@ class Solver(ABC):
             G_r = self.flux(G_C, G_R, U_C, U_R, X1_C,
                             X1_C, X2_C, X2_R, x1=False)
 
-            # add fiscous flux to interface flux
+            # add viscous flux to interface flux
             if self.nu:
                 Fv_l, Fv_r, Gv_l, Gv_r = self.viscosity(rho, u, v)
                 F_l += Fv_l

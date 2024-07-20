@@ -10,10 +10,10 @@ plt.rcParams['figure.dpi'] = 300
 plt.rcParams['savefig.dpi'] = 300
 
 
-parser = ArgumentParser(description="Create a movie from a .hdf file.")
+parser = ArgumentParser(description="Create a movie from a .h5 file.")
 
 parser.add_argument('-f', '--file', type=str, required=True,
-                    help='The path to the .hdf file (required)')
+                    help='The path to the .h5 file (required)')
 
 parser.add_argument('-o', '--output', type=str, required=True,
                     choices=['density', 'log density', 'u', 'v', 'w', 'pressure', 'energy', 'Bx', 'By', 'Bz', 'div'],
@@ -22,8 +22,8 @@ parser.add_argument('-o', '--output', type=str, required=True,
 args = parser.parse_args()
 
 # validate the file argument
-if not args.file.endswith('.hdf'):
-    parser.error("The file name must end with '.hdf'")
+if not args.file.endswith('.h5'):
+    parser.error("The file name must end with '.h5'")
 
 PATH = args.file
 var = args.output
@@ -73,11 +73,11 @@ if not os.path.exists(PATH):
     os.makedirs(PATH)
 cm = writer.saving(fig, f"{PATH}/{var}.mp4", 300)
 
-tc /= 2 * np.pi
-t_start = 50
+# tc /= 2 * np.pi
+t_start = 0
 diff_arr = np.absolute(tc - t_start)
 idx_start = diff_arr.argmin()
-t_end = 60
+t_end = 1
 diff_arr = np.absolute(tc - t_end)
 idx_end = diff_arr.argmin()
 

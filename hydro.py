@@ -8,11 +8,12 @@ from MHD.MHD import MHD
 
 if __name__ == "__main__":
 
-    sim = Binary(coords="polar", resolution=(150, 900),
+    sim = Binary(coords="polar", resolution=(100, 600),
                  x1_range=(1, 10), x2_range=(0, 2 * np.pi), logspace=True)
     sim.set_bcs((Boundary.OUTFLOW, Boundary.OUTFLOW),
                 (Boundary.PERIODIC, Boundary.PERIODIC))
-    sim.run(T= 2 * np.pi, out="./output/binary", save_interval=0.2)
+    sim.run(T=10 * 2 * np.pi, dt=0.0024,
+            out="./output/binary", save_interval=0.2)
 
     # sim = MHD(gamma=2, resolution=(800, 1, 1), xrange=(-1, 1))
     # sim.shock_tube()
@@ -38,9 +39,9 @@ if __name__ == "__main__":
     # sim.sheer()
     # sim.run(T=1, plot="v", filename="sheer1", save_interval=0.01)
 
-    # sim = HD_2D(gamma=5/3, nu=1e-3, coords="polar", resolution=(100, 200),
+    # sim = HD_2D(gamma=5/3, nu=1e-3, coords="polar", resolution=(100, 600),
     #             x1_range=(0.05, 1), x2_range=(0, 2 * np.pi), logspace=True, solver="hll")
     # sim.set_bcs((Boundary.OUTFLOW, Boundary.OUTFLOW),
     #             (Boundary.PERIODIC, Boundary.PERIODIC))
     # sim.sedov_blast(radius=0.1)
-    # sim.run(T=1, plot="density", filename="sedov (polar)", save_interval=0.01)
+    # sim.run(T=1, out="./output", save_interval=0.01)

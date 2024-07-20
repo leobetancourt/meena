@@ -62,7 +62,7 @@ class HD_2D:
         self.high_time = high_time
         self.high_space = high_space
         self.dt = self.dx1
-        self.cfl = 0.5
+        self.cfl = 0.4
         if solver == "hll":
             self.solver = HLL(self, gamma, self.nu, self.num_g, coords, resolution, self.x1,
                               self.x2, self.x1_interf, self.x2_interf, high_order=self.high_space)
@@ -84,12 +84,12 @@ class HD_2D:
 
     def get_prims(self, U=None):
         g = self.num_g
-        if U == None:
-            U = self.U[g:-g, g:-g]
-        u = np.copy(U)
-        rho = u[:, :, 0]
-        u, v = u[:, :, 1] / rho, u[:, :, 2] / rho
-        E = u[:, :, 3]
+        if U is None:
+            U = self.U[g:-g, g:-g, :]
+        U_ = np.copy(U)
+        rho = U_[:, :, 0]
+        u, v = U_[:, :, 1] / rho, U_[:, :, 2] / rho
+        E = U_[:, :, 3]
         p = self.P(rho, u, v, E)
         return rho, u, v, p
 
@@ -207,7 +207,6 @@ class HD_2D:
 
     def first_order_step(self, t):
         g = self.num_g
-        self.dt = self.compute_timestep()
 
         L = self.solver.solve(self.U)
         u = self.U[g:-g, g:-g, :]
@@ -221,7 +220,6 @@ class HD_2D:
         """
         Third-order Runge-Kutta method
         """
-        self.dt = self.compute_timestep()
         L = self.solver.solve(self.U)
         U_1 = np.add(self.U, L * self.dt)
 
@@ -241,7 +239,7 @@ class HD_2D:
     def add_diagnostic(self, name, get_func):
         self.diagnostics.append((name, get_func))
 
-    def run(self, T, plot=None, out="./out", save_interval=0.1):
+    def run(self, T, dt=None, plot=None, out="./out", save_interval=0.1):
         t = 0
         PATH = f"{out}/out.hdf"
         self.U = add_ghost_cells(self.U, self.num_g)
@@ -250,6 +248,8 @@ class HD_2D:
 
         next_checkpoint = 0
         g = self.num_g
+        if dt:
+            self.dt = dt
 
         # open HDF5 file to save U state at each checkpoint
         with h5py.File(PATH, "w") as f:
@@ -261,6 +261,8 @@ class HD_2D:
 
             # create h5 datasets for time, conserved variables and diagnostics
             max_shape = (None, self.res_x1, self.res_x2)
+            dset_dt = f.create_dataset("dt", (0,), maxshape=(
+                None,), chunks=True, dtype="float64")
             dset_t = f.create_dataset("t", (0,), maxshape=(
                 None,), chunks=True, dtype="float64")  # simulation times
             dset_tc = f.create_dataset("tc", (0,), maxshape=(
@@ -303,6 +305,7 @@ class HD_2D:
 
             while t < T:
                 # at each timestep, save diagnostics
+                self.save_to_dset(dset_dt, self.dt)
                 self.save_to_dset(dset_t, t)
                 for tup in self.diagnostics:
                     name, get_val, dset = tup
@@ -320,11 +323,14 @@ class HD_2D:
 
                 self.apply_bcs()
 
+                if dt is None:
+                    self.dt = self.compute_timestep()
                 if self.high_time:
                     self.high_order_step(t)
                 else:
                     self.first_order_step(t)
 
+                print(self.dt)
                 self.check_physical()
 
                 if plot:
@@ -359,6 +365,8 @@ class HD_2D:
             for tup in self.diagnostics:
                 name, get_val, dset = tup
                 self.save_to_dset(dset, get_val())
+                
+            self.save_to_dset(dset_dt, self.dt)
             self.save_to_dset(dset_t, t)
             self.save_to_dset(dset_tc, t)
             self.save_to_dset(dset_rho, self.U[g:-g, g:-g, 0])

@@ -25,17 +25,16 @@ def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, lengt
         print()
 
 
-def plot_grid(lattice, matrix, label, vmin=None, vmax=None):
-    x1, x2 = lattice.x1, lattice.x2
+def plot_grid(matrix, label, coords, x1, x2, vmin=None, vmax=None):
     extent = [x1[0], x1[-1], x2[0], x2[-1]]
 
-    if lattice.coords == Coords.CARTESIAN:
+    if coords == Coords.CARTESIAN:
         fig, ax = plt.subplots()
         if vmin is None:
             vmin, vmax = np.min(matrix), np.max(matrix)
         c = ax.imshow(np.transpose(matrix), cmap="magma", interpolation='nearest',
                       origin='lower', extent=extent, vmin=vmin, vmax=vmax)
-    elif lattice.coords == Coords.POLAR:
+    elif coords == Coords.POLAR:
         fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
         if vmin is None:
             vmin, vmax = np.min(matrix), np.max(matrix)

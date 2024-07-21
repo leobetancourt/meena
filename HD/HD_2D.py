@@ -330,7 +330,6 @@ class HD_2D:
                 else:
                     self.first_order_step(t)
 
-                print(self.dt)
                 self.check_physical()
 
                 if plot:

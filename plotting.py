@@ -10,7 +10,7 @@ plt.rcParams['savefig.dpi'] = 300
 parser = ArgumentParser(description="Plot data from an .hdf file.")
 
 parser.add_argument('-f', '--file', type=str, required=True,
-                    help='The path to the .hdf file (required)')
+                    help='The path to the .h5 file (required)')
 
 parser.add_argument('-o', '--output', type=str, required=True,
                     choices=["accretion_rate", "accretion_rate_1", "accretion_rate_2", "torque", "torque_1", "torque_2", "ecc_mag", "ecc_phase", "angular_mom_rate"],
@@ -19,8 +19,8 @@ parser.add_argument('-o', '--output', type=str, required=True,
 args = parser.parse_args()
 
 # validate the file argument
-if not args.file.endswith('.hdf'):
-    parser.error("The file name must end with '.hdf'")
+if not args.file.endswith('.h5'):
+    parser.error("The file name must end with '.h5'")
 
 PATH = args.file
 var = args.output
@@ -95,4 +95,3 @@ with h5py.File(PATH, "r") as f:
     plt.ylabel(r"Torque [$\Sigma_0 Gma$]")
     plt.savefig(f"./visual/{var}.png", bbox_inches="tight")
     plt.show()
-    

@@ -8,7 +8,8 @@ class Boundary:
     OUTFLOW = "outflow"
     REFLECTIVE = "reflective"
     PERIODIC = "periodic"
-    
+
+
 class Coords:
     CARTESIAN = "cartesian"
     POLAR = "polar"
@@ -41,7 +42,8 @@ def plot_grid(matrix, label, coords, x1, x2, vmin=None, vmax=None):
         ax.grid(False)
         ax.set_xticks([])
         ax.set_yticks([])
-        ax.set_ylim(0, np.max(x1))
+        # ax.set_ylim(0, np.max(x1))
+        ax.set_ylim(0, 5)
         ax.set_facecolor("black")
         circle_r = np.min(x1) - (x1[1] - x1[0]) / 2
         circle = Circle((0, 0), radius=circle_r, transform=ax.transData._b,
@@ -129,23 +131,23 @@ def apply_bcs(lattice, U):
     return U
 
 
-def get_prims(hydro, U, X1, X2):
+def get_prims(hydro, U, X1, X2, t):
     rho = U[:, :, 0]
     u, v = U[:, :, 1] / rho, U[:, :, 2] / rho
     e = U[:, :, 3]
-    p = hydro.P((rho, u, v, e), X1, X2)
+    p = hydro.P((rho, u, v, e), X1, X2, t)
     return rho, u, v, p
 
 
-def U_from_prim(hydro, lattice, prims):
-    rho, u, v, p = prims
-    e = hydro.E(prims, lattice.X1, lattice.X2)
-    return jnp.array([rho, rho * u, rho * v, e]).transpose((1, 2, 0))
+# def U_from_prim(hydro, lattice, prims):
+#     rho, u, v, p = prims
+#     e = hydro.E(prims, lattice.X1, lattice.X2)
+#     return jnp.array([rho, rho * u, rho * v, e]).transpose((1, 2, 0))
 
 
-def F_from_prim(hydro, lattice, prims):
+def F_from_prim(hydro, prims, X1, X2, t):
     rho, u, v, p = prims
-    e = hydro.E(prims, lattice.X1, lattice.X2)
+    e = hydro.E(prims, X1, X2, t)
     return jnp.array([
         rho * u,
         rho * (u ** 2) + p,
@@ -154,9 +156,9 @@ def F_from_prim(hydro, lattice, prims):
     ]).transpose((1, 2, 0))
 
 
-def G_from_prim(hydro, lattice, prims):
+def G_from_prim(hydro, prims, X1, X2, t):
     rho, u, v, p = prims
-    e = hydro.E(prims, lattice.X1, lattice.X2)
+    e = hydro.E(prims, X1, X2, t)
     return jnp.array([
         rho * v,
         rho * u * v,

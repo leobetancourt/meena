@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 from jax import Array
 
-from hydro import Hydro, IdealGas, Lattice, Coords, run
+from hydro import Hydro, Lattice, Coords, run
 from helpers import Boundary, cartesian_to_polar
 
 # jax.config.update('jax_log_compiles', True)
@@ -19,14 +19,13 @@ def sedov(hydro: Hydro, lattice: Lattice, radius: float = 0.1) -> Array:
 
 
 def main():
-    hydro = IdealGas(gamma=5/3, nu=1e-3, cfl=0.4)
+    hydro = Hydro(gamma=5/3, nu=1e-3, cfl=0.4, coords="polar")
     lattice = Lattice(
         coords="polar",
-        num_g=2,
         bc_x1=(Boundary.OUTFLOW, Boundary.OUTFLOW),
         bc_x2=(Boundary.PERIODIC, Boundary.PERIODIC),
-        nx1=300,
-        nx2=1800,
+        nx1=50,
+        nx2=300,
         x1_range=(0.05, 1),
         x2_range=(0, 2 * jnp.pi),
         log_x1=True

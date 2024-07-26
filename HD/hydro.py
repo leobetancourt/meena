@@ -8,10 +8,8 @@ from abc import ABC, abstractmethod
 
 import os
 import matplotlib.pyplot as plt
-import h5py
-import csv
 
-from helpers import Coords, get_prims, linspace_cells, logspace_cells, print_progress_bar, plot_grid
+from helpers import Coords, get_prims, linspace_cells, logspace_cells, print_progress_bar, plot_grid, append_diagnostics, create_diagnostics_file, save_to_h5
 from flux import interface_flux
 
 type Primitives = tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike]
@@ -145,39 +143,6 @@ def first_order_step(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> 
     U = U + L * dt + hydro.source(U, lattice.X1, lattice.X2, t) * dt
     # U = hydro.check_U(U)
     return U, flux, dt
-
-
-def save_to_h5(filename, t, U, coords, gamma, x1, x2):
-    rho, momx1, momx2, E = U[..., 0], U[..., 1], U[..., 2], U[..., 3]
-    with h5py.File(filename, "w") as f:
-        # metadata
-        f.attrs["coords"] = coords
-        f.attrs["gamma"] = gamma
-        f.attrs["x1"] = x1
-        f.attrs["x2"] = x2
-        f.attrs["t"] = t
-
-        # create h5 datasets for conserved variables
-        f.create_dataset("rho", data=rho, dtype="float64")
-        f.create_dataset("momx1", data=momx1, dtype="float64")
-        f.create_dataset("momx2", data=momx2, dtype="float64")
-        f.create_dataset("E", data=E, dtype="float64")
-
-
-def create_diagnostics_file(diagnostics, filename):
-    with open(filename, 'w', newline='') as file:
-        writer = csv.writer(file)
-        headers = ["t", "dt"]
-        headers.extend([name for name, _ in diagnostics])
-        writer.writerow(headers)
-
-
-def append_diagnostics(filename, t, dt, values):
-    with open(filename, 'a', newline='') as file:
-        writer = csv.writer(file)
-        row = [t, dt]
-        row.extend(values)
-        writer.writerow(row)
 
 
 def run(hydro, lattice, U, t=0, T=1, plot=None, out="./out", save_interval=0.1, diagnostics: ArrayLike = []):

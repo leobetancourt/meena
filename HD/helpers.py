@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import jax.numpy as jnp
 import h5py
+import csv
 
 
 class Boundary:
@@ -25,6 +26,39 @@ def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, lengt
     # print new line on complete
     if iteration == total:
         print()
+
+
+def save_to_h5(filename, t, U, coords, gamma, x1, x2):
+    rho, momx1, momx2, E = U[..., 0], U[..., 1], U[..., 2], U[..., 3]
+    with h5py.File(filename, "w") as f:
+        # metadata
+        f.attrs["coords"] = coords
+        f.attrs["gamma"] = gamma
+        f.attrs["x1"] = x1
+        f.attrs["x2"] = x2
+        f.attrs["t"] = t
+
+        # create h5 datasets for conserved variables
+        f.create_dataset("rho", data=rho, dtype="float64")
+        f.create_dataset("momx1", data=momx1, dtype="float64")
+        f.create_dataset("momx2", data=momx2, dtype="float64")
+        f.create_dataset("E", data=E, dtype="float64")
+
+
+def create_diagnostics_file(diagnostics, filename):
+    with open(filename, 'w', newline='') as file:
+        writer = csv.writer(file)
+        headers = ["t", "dt"]
+        headers.extend([name for name, _ in diagnostics])
+        writer.writerow(headers)
+
+
+def append_diagnostics(filename, t, dt, values):
+    with open(filename, 'a', newline='') as file:
+        writer = csv.writer(file)
+        row = [t, dt]
+        row.extend(values)
+        writer.writerow(row)
 
 
 def load_U(file):

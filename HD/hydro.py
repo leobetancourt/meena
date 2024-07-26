@@ -53,6 +53,7 @@ class Hydro(ABC):
     gamma: float = 5/3
     nu: float = 1e-3
     cfl: float = 0.4
+    dt: float = None
     coords: str = "cartesian"
 
     def E(self, prims: Primitives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
@@ -68,6 +69,9 @@ class Hydro(ABC):
 
     def source(self, U: ArrayLike, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
         return jnp.zeros_like(U)
+
+    def check_U(self, lattice: Lattice, U: ArrayLike) -> Array:
+        return U
 
 
 def cartesian_timestep(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> float:
@@ -133,9 +137,13 @@ def solve(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> tuple[Array
 
 @partial(jit, static_argnames=["hydro", "lattice"])
 def first_order_step(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> tuple[Array, float]:
-    dt = compute_timestep(hydro, lattice, U, t)
+    if hydro.dt is None:
+        dt = compute_timestep(hydro, lattice, U, t)
+    else:
+        dt = hydro.dt
     L, flux = solve(hydro, lattice, U, t)
     U = U + L * dt + hydro.source(U, lattice.X1, lattice.X2, t) * dt
+    # U = hydro.check_U(U)
     return U, flux, dt
 
 
@@ -172,15 +180,15 @@ def append_diagnostics(filename, t, dt, values):
         writer.writerow(row)
 
 
-def run(hydro, lattice, U, T=1, plot=None, out="./out", save_interval=0.1, diagnostics: ArrayLike = []):
+def run(hydro, lattice, U, t=0, T=1, plot=None, out="./out", save_interval=0.1, diagnostics: ArrayLike = []):
     labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$",
               "v": r"$v$", "pressure": r"$P$", "energy": r"$E$", }
 
     os.makedirs(f"{out}/checkpoints", exist_ok=True)
     diag_file = f"{out}/diagnostics.csv"
-    create_diagnostics_file(diagnostics, diag_file)
+    if not os.path.isfile(diag_file):
+        create_diagnostics_file(diagnostics, diag_file)
 
-    t = 0
     next_checkpoint = 0
 
     if plot:

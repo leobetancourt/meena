@@ -137,6 +137,7 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
     U = add_ghost_cells(U, g, axis=1)
     U = add_ghost_cells(U, g, axis=0)
     U = apply_bcs(lattice, U)
+    U = hydro.check_U(lattice, U)
 
     prims = get_prims(hydro, U, X1, X2, t)
     F = F_from_prim(hydro, prims, X1, X2, t)

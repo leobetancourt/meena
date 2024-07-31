@@ -4,6 +4,7 @@ from jax.typing import ArrayLike
 from jax import Array, jit
 import matplotlib.pyplot as plt
 
+import time
 from dataclasses import dataclass
 
 from hydro import Hydro, Lattice, Coords, run
@@ -72,7 +73,12 @@ def main():
     U = hydro.setup(lattice.X1, lattice.X2)
 
     OUT_PATH = f"./output/RT"
+    start_time = time.time()
     run(hydro, lattice, U, N=100, out=OUT_PATH, save_interval=(0.1))
+    end_time = time.time()
+    
+    elapsed = end_time - start_time
+    print(f"Elapsed time: {elapsed:.2f} seconds")
 
 if __name__ == "__main__":
     main()

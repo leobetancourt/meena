@@ -1,10 +1,10 @@
 import jax.numpy as jnp
 from jax.typing import ArrayLike
-from jax import jit, lax, Array
+from jax import jit, Array
 
 from functools import partial
 from dataclasses import dataclass
-from abc import ABC, abstractmethod
+from abc import ABC
 
 import os
 import matplotlib.pyplot as plt

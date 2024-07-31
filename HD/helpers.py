@@ -1,6 +1,5 @@
 from matplotlib.patches import Circle
 import matplotlib.pyplot as plt
-import numpy as np
 import jax.numpy as jnp
 import h5py
 import csv
@@ -82,24 +81,24 @@ def plot_grid(matrix, label, coords, x1, x2, vmin=None, vmax=None):
     if coords == Coords.CARTESIAN:
         fig, ax = plt.subplots()
         if vmin is None:
-            vmin, vmax = np.min(matrix), np.max(matrix)
-        c = ax.imshow(np.transpose(matrix), cmap="magma", interpolation='nearest',
+            vmin, vmax = jnp.min(matrix), jnp.max(matrix)
+        c = ax.imshow(jnp.transpose(matrix), cmap="magma", interpolation='nearest',
                       origin='lower', extent=extent, vmin=vmin, vmax=vmax)
     elif coords == Coords.POLAR:
         fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
         if vmin is None:
-            vmin, vmax = np.min(matrix), np.max(matrix)
+            vmin, vmax = jnp.min(matrix), jnp.max(matrix)
         ax.grid(False)
         ax.set_xticks([])
         ax.set_yticks([])
-        # ax.set_ylim(0, np.max(x1))
+        # ax.set_ylim(0, jnp.max(x1))
         ax.set_ylim(0, 5)
         ax.set_facecolor("black")
-        circle_r = np.min(x1) - (x1[1] - x1[0]) / 2
+        circle_r = jnp.min(x1) - (x1[1] - x1[0]) / 2
         circle = Circle((0, 0), radius=circle_r, transform=ax.transData._b,
                         color='blue', fill=False, linewidth=1)
         ax.add_patch(circle)
-        R, Theta = np.meshgrid(x1, x2, indexing="ij")
+        R, Theta = jnp.meshgrid(x1, x2, indexing="ij")
         c = ax.pcolormesh(Theta, R, matrix, shading='auto',
                           cmap="magma", vmin=vmin, vmax=vmax)
 

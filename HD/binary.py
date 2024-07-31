@@ -1,10 +1,8 @@
 import jax.numpy as jnp
 from jax.typing import ArrayLike
 from jax import Array, jit
-import matplotlib.pyplot as plt
 from functools import partial
-from dataclasses import dataclass, field
-from typing import Any, Tuple
+from dataclasses import dataclass
 
 from hydro import Hydro, Lattice, Coords, run, Primitives, Conservatives
 from helpers import Boundary, cartesian_to_polar, load_U

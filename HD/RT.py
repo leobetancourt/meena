@@ -4,9 +4,11 @@ from jax.typing import ArrayLike
 from jax import Array, jit
 
 from dataclasses import dataclass
+import time
+import argparse
 
 from hydro import Hydro, Lattice, Coords, run
-from helpers import Boundary, cartesian_to_polar
+from helpers import Boundary, cartesian_to_polar, create_csv_file, append_row_csv
 
 
 @dataclass(frozen=True)
@@ -21,8 +23,8 @@ class RT(Hydro):
         return jnp.array([
             zero,
             zero,
-            rho * self.g,
-            rho * (self.g * v)
+            rho * g,
+            rho * (g * v)
         ]).transpose((1, 2, 0))
         
     def setup(self, X1: ArrayLike, X2: ArrayLike):
@@ -34,11 +36,11 @@ class RT(Hydro):
         rho = jnp.zeros_like(x)
         rho.at[y >= 0.75].set(2)
         rho.at[y < 0.75].set(1)
-        p = 2.5 + self.g * rho * (y - 0.75)
+        p = 2.5 + g * rho * (y - 0.75)
         
         return jnp.array([
             rho,
-            jnp.zeros_like(x),
+            np.zeros_like(x),
             rho * v,
             self.E((rho, 0, v, p), X1, X2, t)
         ]).transpose((1, 2, 0))
@@ -56,21 +58,43 @@ def sedov(hydro: Hydro, lattice: Lattice, radius: float = 0.1) -> Array:
 
 
 def main():
+    parser = argparse.ArgumentParser("Hydro")
+    parser.add_argument("index", help="Index", type=int)
+    args = parser.parse_args()
+    i = args.index
+    
+    nx1s = jnp.linspace(100, 500, num=10)
+    nx1, nx2 = nx1s[i], nx1s[i] * 3
     hydro = RT(gamma=5/3, nu=0, cfl=0.4, coords=Coords.CARTESIAN)
     lattice = Lattice(
         coords=Coords.CARTESIAN,
         bc_x1=(Boundary.PERIODIC, Boundary.PERIODIC),
         bc_x2=(Boundary.REFLECTIVE, Boundary.REFLECTIVE),
-        nx1=300,
-        nx2=900,
+        nx1=nx1,
+        nx2=nx2,
         x1_range=(0, 0.5),
         x2_range=(0, 1.5)
     )
 
     U = hydro.setup(lattice.X1, lattice.X2)
 
-    OUT_PATH = f"./RT"
-    run(hydro, lattice, U, T=18, out=OUT_PATH, save_interval=(1 / 24))
+    OUT_PATH = f"./RT_tests/{i}"
+    iters = 100
+    start_time = time.time()
+    run(hydro, lattice, U, N=iters, out=OUT_PATH, save_interval=(1 / 24))
+    end_time = time.time()
+    
+    
+    STATS_FILE = f"./RT_tests/stats.csv"
+    if not os.path.isfile(STATS_FILE):
+        create_csv_file(STATS_FILE, ["index", "iters", "n_zones", "elapsed", "M_zones_per_sec"])
+    elapsed = end_time - start_time
+    print("Elapsed:", elapsed)
+    n_zones = nx1 * nx2
+    M_zones_per_sec = n_zones * iters / (elapsed * 1e6)
+    append_row_csv(STATS_FILE, [i, iters, n_zones, elapsed, M_zones_per_sec])
+    print("Mzones per second:", M_zones_per_sec)
+
 
 if __name__ == "__main__":
     main()

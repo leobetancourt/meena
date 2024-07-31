@@ -8,7 +8,7 @@ import scipy.signal as signal
 from scipy.ndimage import gaussian_filter1d
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from helpers import print_progress_bar
+from helpers import print_progress_bar, read_csv
 from jax import vmap, jit
 plt.rcParams['figure.dpi'] = 300
 plt.rcParams['savefig.dpi'] = 300
@@ -99,16 +99,27 @@ def m_dot_lombscargle(diagnostics, label=""):
 
 
 def m_dot_periodogram(diagnostics, label=""):
-    m_dot = diagnostics["m_dot"]
+    t = diagnostics["t"]
+    t_min = 0 * 2 * np.pi
+    t_max = 300 * 2 * np.pi
+    m_dot = diagnostics["m_dot"][(t <= t_max) & (t > t_min)]
     dt = diagnostics["dt"][0]
+    N = len(m_dot)
     # Compute the periodogram
-    frequencies, power = signal.periodogram(m_dot, 1/(dt / (2 * np.pi)))
-    power = power / max(power)
+    frequencies, power = signal.periodogram(m_dot, 1 / (dt / (2 * np.pi)))
+    # ft = np.fft.fft(m_dot)
+    # power = np.abs(ft) ** 2
+    # freq = np.fft.fftfreq(N, dt)
+    # freq_orbits = freq * (2 * np.pi)
+    
+    x_min, xmax = 0.1, 2.5
+    power = power / max(power[(frequencies >= x_min) & (frequencies <= xmax)])
     plt.plot(frequencies, power, label=label)
     plt.xlabel(r'Variability Frequency (Orbits$^{-1}$)')
     plt.ylabel("Power")
     plt.title(r"$\dot{M}$ Periodogram (fixed timestep)")
-    plt.xlim(0, 5)  # Optionally, limit the x-axis
+    plt.ylim(0, 1)
+    plt.xlim(0, xmax)  # Optionally, limit the x-axis
 
 
 def a_dot(diagnostics, label=""):
@@ -151,52 +162,33 @@ def eccentricity_phase(diagnostics, label=""):
     plt.title("Eccentriticy Phase (Radians)")
     plt.xlabel(r"Time (Orbits)")
     plt.legend()
+    
+def growth_rate(diagnostics, label=""):
+    t = diagnostics["t"] / (2 * np.pi)
+    e_x = diagnostics["e_x"]
+    e_y = diagnostics["e_y"]
+    e_x_dot = np.gradient(e_x, varargs=[t])
+    e_y_dot = np.gradient(e_y, varargs=[t])
+    
+    growth_rate = (e_x_dot * e_x + e_y_dot * e_y) / (e_x ** 2 + e_y ** 2)
+    precession_rate = (e_y_dot * e_x - e_x_dot * e_y) / (e_x ** 2 + e_y ** 2)
+    
+    omega_B = 1
 
+# diagnostics_high = read_csv("./500x3000/diagnostics.csv", compress=True)
+# diagnostics_mid = read_csv("./300x1800/diagnostics.csv", compress=True)
+# diagnostics_low = read_csv("./100x600/diagnostics.csv", compress=True)
 
-def read_csv(path, compress=None):
-    # Read the CSV file using pandas
-    df = pd.read_csv(path)
+# m_dot_lombscargle(diagnostics_high, label=r"$500 (r) x 3000 (\theta)$")
+# m_dot_lombscargle(diagnostics_mid, label=r"$300 (r) x 1800 (\theta)$")
+# m_dot_lombscargle(diagnostics_low, label=r"$100 (r) x 600 (\theta)$")
 
-    # Initialize a dictionary to store the numpy arrays
-    numpy_arrays = {}
+# torque(diagnostics_high, label=r"$500 (r) x 3000 (\theta)$")
+# torque(diagnostics_mid, label=r"$300 (r) x 1800 (\theta)$")
+# torque(diagnostics_low, label=r"$100 (r) x 600 (\theta)$")
 
-    # Iterate over each column in the dataframe and save it as a numpy array
-    for column in df.columns:
-        if compress is None:
-            numpy_arrays[column] = df[column].values
-        else:
-            numpy_arrays[column] = df[column].values[::compress]
-
-    numpy_arrays["torque"] = numpy_arrays["torque_1"] + numpy_arrays["torque_2"]
-
-    return numpy_arrays
-
-
-# Example usage
-# replace with your CSV file path
-# diagnostics_10 = read_csv('/Volumes/T7/research/mach=10/diagnostics.csv')
-# diagnostics_40 = read_csv('/Volumes/T7/research/mach=40/diagnostics.csv')
-# diagnostics_40["t"] = diagnostics_40["t"][::2]
-# diagnostics_40["m_dot"] = diagnostics_40["m_dot"][::2]
-# diagnostics_40["L_dot"] = diagnostics_40["L_dot"][::2]
-# diagnostics_40["torque"] = diagnostics_40["torque"][::2]
-# torque(diagnostics_10, label=r"$\mathcal{M}=10$")
-# a_dot(diagnostics_40, label=r"$\mathcal{M}=40$")
-
-# diagnostics_10_fixed = read_csv(
-#     '/Volumes/T7/research/mach=10_fixed/diagnostics.csv')
-# m_dot_periodogram(diagnostics_10_fixed, label=r"$\mathcal{M} = 10$")
-
-# diagnostics_40 = read_csv('/Volumes/T7/research/mach=40/diagnostics.csv')
-# m_dot_lombscargle(diagnostics_40, label=r"$\mathcal{M} = 40$")
-
-diagnostics_low = read_csv("./output/100x600/diagnostics.csv")
-diagnostics_mid = read_csv("./output/300x1800/diagnostics.csv")
-diagnostics_high = read_csv("./output/500x3000/diagnostics.csv")
-
-a_dot(diagnostics_low, label=r"$100 (r) x 600(\theta)$")
-a_dot(diagnostics_mid, label=r"$300 (r) x 1800(\theta)$")
-a_dot(diagnostics_high, label=r"$500 (r) x 3000(\theta)$")
+diagnostics = read_csv("./500x3000_fixed/diagnostics.csv")
+m_dot_periodogram(diagnostics)
 
 
 plt.savefig(f"./visual/fig.png", bbox_inches="tight")

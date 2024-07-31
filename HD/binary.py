@@ -125,7 +125,7 @@ class Binary(Hydro):
         if self.coords == Coords.POLAR:
             rho = U[:, :, 0]
             vr = U[:, :, 1] / rho
-            vr.at[:g, :].set(jnp.minimum(vr[:g, :], 0))
+            vr = vr.at[:g, :].set(jnp.minimum(vr[:g, :], 0))
             U.at[:g, :, 1].set(rho[:g, :] * vr[:g, :])
         return U
 

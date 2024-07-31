@@ -56,7 +56,7 @@ class Hydro(ABC):
 
     def E(self, prims: Primitives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
         rho, u, v, p = prims
-        return jnp.sqrt(self.gamma * p / rho)
+        return (p / (self.gamma - 1)) + (0.5 * rho * (u ** 2 + v ** 2))
 
     def c_s(self, prims: Primitives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
         rho, u, v, p = prims
@@ -142,7 +142,7 @@ def first_order_step(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> 
         dt = hydro.dt
     L, flux = solve(hydro, lattice, U, t)
     U = U + L * dt + hydro.source(U, lattice.X1, lattice.X2, t) * dt
-    # U = hydro.check_U(U)
+    U = hydro.check_U(lattice, U)
     return U, flux, dt
 
 
@@ -177,13 +177,11 @@ def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, out="./out", save_interv
             matrix = p
         elif plot == "energy":
             matrix = e
-        fig, ax, c, cb = plot_grid(
-            matrix, label=labels[plot], coords=lattice.coords, x1=lattice.x1, x2=lattice.x2, vmin=vmin, vmax=vmax)
+        fig, ax, c, cb = plot_grid(matrix, label=labels[plot], coords=lattice.coords, x1=lattice.x1, x2=lattice.x2, vmin=vmin, vmax=vmax)
         ax.set_title(f"t = {t:.2f}")
 
     while (N is None and t < T) or (N is not None and n < N):
         U_, flux, dt = first_order_step(hydro, lattice, U, t)
-
         # save diagnostics
         diag_values = [get_val(hydro, lattice, U, flux, t)
                        for _, get_val in diagnostics]
@@ -218,7 +216,7 @@ def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, out="./out", save_interv
             elif plot == "energy":
                 matrix = e
             if lattice.coords == "cartesian":
-                c.set_data(matrix)
+                c.set_data(jnp.transpose(matrix))
             elif lattice.coords == "polar":
                 c.set_array(matrix.ravel())
             if vmin is None:
@@ -228,7 +226,6 @@ def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, out="./out", save_interv
             ax.set_title(f"t = {t:.2f}")
             fig.canvas.draw()
             plt.pause(0.001)
-
         t = t + dt if (t + dt <= T) else T
         n = n + 1
         

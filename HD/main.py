@@ -2,6 +2,7 @@ import jax.numpy as jnp
 from jax import Array
 from jax.typing import ArrayLike
 from jax import Array, jit
+import matplotlib.pyplot as plt
 
 from dataclasses import dataclass
 
@@ -18,12 +19,13 @@ class RT(Hydro):
         u, v = U[..., 1] / rho, U[..., 2] / rho
         zero = jnp.zeros_like(rho)
         
-        return jnp.array([
-            zero,
-            zero,
-            rho * self.g,
-            rho * (self.g * v)
-        ]).transpose((1, 2, 0))
+        # return jnp.array([
+        #     zero,
+        #     zero,
+        #     rho * self.g,
+        #     rho * (self.g * v)
+        # ]).transpose((1, 2, 0))
+        return jnp.zeros_like(U)
         
     def setup(self, X1: ArrayLike, X2: ArrayLike):
         t = 0
@@ -32,8 +34,8 @@ class RT(Hydro):
         # velocity perturbation is 5% of characteristic sound speed
         v = (cs * 0.05) * (1 - jnp.cos(4 * jnp.pi * x)) * (1 - jnp.cos(4 * jnp.pi * y / 3))
         rho = jnp.zeros_like(x)
-        rho.at[y >= 0.75].set(2)
-        rho.at[y < 0.75].set(1)
+        rho = rho.at[y >= 0.75].set(2)
+        rho = rho.at[y < 0.75].set(1)
         p = 2.5 + self.g * rho * (y - 0.75)
         
         return jnp.array([
@@ -69,8 +71,8 @@ def main():
 
     U = hydro.setup(lattice.X1, lattice.X2)
 
-    OUT_PATH = f"./RT"
-    run(hydro, lattice, U, T=18, out=OUT_PATH, save_interval=(1 / 24))
+    OUT_PATH = f"./output/RT"
+    run(hydro, lattice, U, N=100, out=OUT_PATH, save_interval=(0.1))
 
 if __name__ == "__main__":
     main()

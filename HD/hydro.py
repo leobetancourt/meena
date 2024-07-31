@@ -146,16 +146,21 @@ def first_order_step(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> 
     return U, flux, dt
 
 
-def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, out="./out", save_interval=0.1, diagnostics: ArrayLike = []):
+def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, out="./out", save_interval=None, diagnostics: ArrayLike = []):
     labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$",
               "v": r"$v$", "pressure": r"$P$", "energy": r"$E$", }
+    
+    saving = save_interval is not None
 
-    os.makedirs(f"{out}/checkpoints", exist_ok=True)
-    diag_file = f"{out}/diagnostics.csv"
-    if not os.path.isfile(diag_file):
-        headers = ["t", "dt"]
-        headers.extend([name for name, _ in diagnostics])
-        create_csv_file(diag_file, headers)
+    if saving:
+        os.makedirs(f"{out}/checkpoints", exist_ok=True)
+    
+    if len(diagnostics) > 0:
+        diag_file = f"{out}/diagnostics.csv"
+        if not os.path.isfile(diag_file):
+            headers = ["t", "dt"]
+            headers.extend([name for name, _ in diagnostics])
+            create_csv_file(diag_file, headers)
 
     n = 0
     next_checkpoint = 0
@@ -182,15 +187,17 @@ def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, out="./out", save_interv
 
     while (N is None and t < T) or (N is not None and n < N):
         U_, flux, dt = first_order_step(hydro, lattice, U, t)
-        # save diagnostics
-        diag_values = [get_val(hydro, lattice, U, flux, t)
-                       for _, get_val in diagnostics]
-        values = [t, dt]
-        values.extend(diag_values)
-        append_row_csv(diag_file, values)
+        
+        if len(diagnostics) > 0:
+            # save diagnostics
+            diag_values = [get_val(hydro, lattice, U, flux, t)
+                        for _, get_val in diagnostics]
+            values = [t, dt]
+            values.extend(diag_values)
+            append_row_csv(diag_file, values)
 
         # at each checkpoint, save the conserved variables in every zone
-        if t >= next_checkpoint:
+        if saving and t >= next_checkpoint:
             filename = f"{out}/checkpoints/out_{t:.2f}.h5"
             save_to_h5(filename, t, U, lattice.coords,
                        hydro.gamma, lattice.x1, lattice.x2)

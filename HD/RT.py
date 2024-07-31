@@ -78,14 +78,12 @@ def main():
 
         U = hydro.setup(lattice.X1, lattice.X2)
 
-        OUT_PATH = f"./output/RT_tests/{i}"
         iters = 100
         start_time = time.time()
-        run(hydro, lattice, U, N=iters, out=OUT_PATH, save_interval=(1 / 24))
+        run(hydro, lattice, U, N=iters)
         end_time = time.time()
         
-        
-        STATS_FILE = f"./stats.csv"
+        STATS_FILE = f"./RT/stats.csv"
         if not os.path.isfile(STATS_FILE):
             create_csv_file(STATS_FILE, ["index", "iters", "n_zones", "elapsed", "M_zones_per_sec"])
         elapsed = end_time - start_time

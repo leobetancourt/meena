@@ -1,6 +1,7 @@
 from matplotlib.patches import Circle
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import jax.numpy as jnp
 import h5py
 import csv
@@ -27,6 +28,21 @@ def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, lengt
     if iteration == total:
         print()
 
+def read_csv(path, compress=False):
+    # Read the CSV file using pandas
+    df = pd.read_csv(path)
+
+    # Initialize a dictionary to store the numpy arrays
+    numpy_arrays = {}
+
+    # Iterate over each column in the dataframe and save it as a numpy array
+    for column in df.columns:
+        if compress:
+            numpy_arrays[column] = df[column].values[::2]
+        else:
+            numpy_arrays[column] = df[column].values
+
+    return numpy_arrays
 
 def save_to_h5(filename, t, U, coords, gamma, x1, x2):
     rho, momx1, momx2, E = U[..., 0], U[..., 1], U[..., 2], U[..., 3]
@@ -45,19 +61,15 @@ def save_to_h5(filename, t, U, coords, gamma, x1, x2):
         f.create_dataset("E", data=E, dtype="float64")
 
 
-def create_diagnostics_file(diagnostics, filename):
+def create_csv_file(filename, headers):
     with open(filename, 'w', newline='') as file:
         writer = csv.writer(file)
-        headers = ["t", "dt"]
-        headers.extend([name for name, _ in diagnostics])
         writer.writerow(headers)
 
 
-def append_diagnostics(filename, t, dt, values):
+def append_row_csv(filename, row):
     with open(filename, 'a', newline='') as file:
         writer = csv.writer(file)
-        row = [t, dt]
-        row.extend(values)
         writer.writerow(row)
 
 
@@ -187,13 +199,6 @@ def get_prims(hydro, U, X1, X2, t):
     e = U[:, :, 3]
     p = hydro.P((rho, u, v, e), X1, X2, t)
     return rho, u, v, p
-
-
-# def U_from_prim(hydro, lattice, prims):
-#     rho, u, v, p = prims
-#     e = hydro.E(prims, lattice.X1, lattice.X2)
-#     return jnp.array([rho, rho * u, rho * v, e]).transpose((1, 2, 0))
-
 
 def F_from_prim(hydro, prims, X1, X2, t):
     rho, u, v, p = prims

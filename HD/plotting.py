@@ -8,7 +8,7 @@ import scipy.signal as signal
 from scipy.ndimage import gaussian_filter1d
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-from helpers import print_progress_bar
+from helpers import print_progress_bar, read_csv
 from jax import vmap, jit
 plt.rcParams['figure.dpi'] = 300
 plt.rcParams['savefig.dpi'] = 300
@@ -43,6 +43,7 @@ def gaussian_smooth(timeseries, values, sigma=2, truncate=3.0):
     smoothed_values = np.zeros_like(values)
 
     for i, t in enumerate(timeseries):
+        print(i / len(timeseries))
         # Select points within the window_radius
         distances = np.abs(timeseries - t)
         within_window = distances <= window_radius
@@ -62,8 +63,9 @@ def gaussian_smooth(timeseries, values, sigma=2, truncate=3.0):
 
 def torque(diagnostics, label=""):
     t = diagnostics["t"] / (2 * np.pi)
+    torque = diagnostics["torque_1"] + diagnostics["torque_2"]
     torque = gaussian_smooth(
-        t, diagnostics["torque"], sigma=2, truncate=3.0)
+        t, torque, sigma=2, truncate=3.0)
     plt.plot(t, torque, linewidth=1, label=label)
     plt.axhline(linewidth=1, color="black")
     plt.title("Excised Torque")
@@ -99,21 +101,33 @@ def m_dot_lombscargle(diagnostics, label=""):
 
 
 def m_dot_periodogram(diagnostics, label=""):
-    m_dot = diagnostics["m_dot"]
+    t = diagnostics["t"]
+    t_min = 0 * 2 * np.pi
+    t_max = 300 * 2 * np.pi
+    m_dot = diagnostics["m_dot"][(t <= t_max) & (t > t_min)]
     dt = diagnostics["dt"][0]
+    N = len(m_dot)
     # Compute the periodogram
-    frequencies, power = signal.periodogram(m_dot, 1/(dt / (2 * np.pi)))
-    power = power / max(power)
+    frequencies, power = signal.periodogram(m_dot, 1 / (dt / (2 * np.pi)))
+    # ft = np.fft.fft(m_dot)
+    # power = np.abs(ft) ** 2
+    # freq = np.fft.fftfreq(N, dt)
+    # freq_orbits = freq * (2 * np.pi)
+    
+    x_min, xmax = 0.1, 2.5
+    power = power / max(power[(frequencies >= x_min) & (frequencies <= xmax)])
     plt.plot(frequencies, power, label=label)
     plt.xlabel(r'Variability Frequency (Orbits$^{-1}$)')
     plt.ylabel("Power")
     plt.title(r"$\dot{M}$ Periodogram (fixed timestep)")
-    plt.xlim(0, 5)  # Optionally, limit the x-axis
+    plt.ylim(0, 1)
+    plt.xlim(0, xmax)  # Optionally, limit the x-axis
 
 
 def a_dot(diagnostics, label=""):
     t = diagnostics["t"] / (2 * np.pi)
-    torque = gaussian_smooth(t, diagnostics["torque"], sigma=2, truncate=4)
+    torque = diagnostics["torque_1"] + diagnostics["torque_2"]
+    torque = gaussian_smooth(t, torque, sigma=2, truncate=4)
     mu = (0.5 * 0.5)
     a_dot_torque = 2 * torque / mu
 
@@ -151,41 +165,34 @@ def eccentricity_phase(diagnostics, label=""):
     plt.title("Eccentriticy Phase (Radians)")
     plt.xlabel(r"Time (Orbits)")
     plt.legend()
+    
+def growth_rate(diagnostics, label=""):
+    t = diagnostics["t"] / (2 * np.pi)
+    e_x = diagnostics["e_x"]
+    e_y = diagnostics["e_y"]
+    e_x_dot = np.gradient(e_x, varargs=[t])
+    e_y_dot = np.gradient(e_y, varargs=[t])
+    
+    growth_rate = (e_x_dot * e_x + e_y_dot * e_y) / (e_x ** 2 + e_y ** 2)
+    precession_rate = (e_y_dot * e_x - e_x_dot * e_y) / (e_x ** 2 + e_y ** 2)
+    
+    omega_B = 1
 
 
-def read_csv(path):
-    # Read the CSV file using pandas
-    df = pd.read_csv(path)
+# diagnostics_high = read_csv("./500x3000/diagnostics.csv", compress=True)
+# diagnostics_mid = read_csv("./300x1800/diagnostics.csv", compress=True)
+# diagnostics_low = read_csv("./100x600/diagnostics.csv", compress=True)
 
-    # Initialize a dictionary to store the numpy arrays
-    numpy_arrays = {}
+# m_dot_lombscargle(diagnostics_high, label=r"$500 (r) x 3000 (\theta)$")
+# m_dot_lombscargle(diagnostics_mid, label=r"$300 (r) x 1800 (\theta)$")
+# m_dot_lombscargle(diagnostics_low, label=r"$100 (r) x 600 (\theta)$")
 
-    # Iterate over each column in the dataframe and save it as a numpy array
-    for column in df.columns:
-        numpy_arrays[column] = df[column].values
+# torque(diagnostics_high, label=r"$500 (r) x 3000 (\theta)$")
+# torque(diagnostics_mid, label=r"$300 (r) x 1800 (\theta)$")
+# torque(diagnostics_low, label=r"$100 (r) x 600 (\theta)$")
 
-    numpy_arrays["torque"] = df["torque_1"].values + df["torque_2"].values
-
-    return numpy_arrays
-
-
-# Example usage
-# replace with your CSV file path
-# diagnostics_10 = read_csv('/Volumes/T7/research/mach=10/diagnostics.csv')
-# diagnostics_40 = read_csv('/Volumes/T7/research/mach=40/diagnostics.csv')
-# diagnostics_40["t"] = diagnostics_40["t"][::2]
-# diagnostics_40["m_dot"] = diagnostics_40["m_dot"][::2]
-# diagnostics_40["L_dot"] = diagnostics_40["L_dot"][::2]
-# diagnostics_40["torque"] = diagnostics_40["torque"][::2]
-# torque(diagnostics_10, label=r"$\mathcal{M}=10$")
-# a_dot(diagnostics_40, label=r"$\mathcal{M}=40$")
-
-diagnostics_10_fixed = read_csv(
-    '/Volumes/T7/research/mach=10_fixed/diagnostics.csv')
-m_dot_periodogram(diagnostics_10_fixed, label=r"$\mathcal{M} = 10$")
-
-diagnostics_40 = read_csv('/Volumes/T7/research/mach=40/diagnostics.csv')
-m_dot_lombscargle(diagnostics_40, label=r"$\mathcal{M} = 40$")
+diagnostics = read_csv("./500x3000_fixed/diagnostics.csv")
+m_dot_periodogram(diagnostics)
 
 
 plt.savefig(f"./visual/fig.png", bbox_inches="tight")

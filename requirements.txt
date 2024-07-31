@@ -4,7 +4,6 @@ ffmpeg==1.4
 fonttools==4.52.4
 h5py==3.11.0
 jax==0.4.26
-jax-metal==0.1.0
 jaxlib==0.4.26
 kiwisolver==1.4.5
 llvmlite==0.43.0

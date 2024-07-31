@@ -61,12 +61,12 @@ def process_h5_files(file_list):
                 writer.grab_frame()
 
                 print_progress_bar(i, len(file_list),
-                                   suffix="complete", length=50)
+                                   suffix="complete", length=25)
 
 
-PATH = "/Volumes/T7/research/mach=40/checkpoints"
-t_min = 0 * 2 * np.pi
-t_max = 10 * 2 * np.pi
+PATH = "./500x3000/checkpoints"
+t_min = 290 * 2 * np.pi
+t_max = 300 * 2 * np.pi
 
 files = get_h5_files_in_range(PATH, t_min, t_max)
 process_h5_files(files)

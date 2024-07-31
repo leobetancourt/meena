@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 import os
 import matplotlib.pyplot as plt
 
-from helpers import Coords, get_prims, linspace_cells, logspace_cells, print_progress_bar, plot_grid, append_diagnostics, create_diagnostics_file, save_to_h5
+from helpers import Coords, get_prims, linspace_cells, logspace_cells, print_progress_bar, plot_grid, append_row_csv, create_csv_file, save_to_h5
 from flux import interface_flux
 
 type Primitives = tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike]
@@ -59,7 +59,8 @@ class Hydro(ABC):
         return jnp.sqrt(self.gamma * p / rho)
 
     def c_s(self, prims: Primitives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
-        pass
+        rho, u, v, p = prims
+        return jnp.sqrt(self.gamma * p / rho)
 
     def P(self, cons: Conservatives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
         rho, u, v, e = cons
@@ -145,15 +146,18 @@ def first_order_step(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> 
     return U, flux, dt
 
 
-def run(hydro, lattice, U, t=0, T=1, plot=None, out="./out", save_interval=0.1, diagnostics: ArrayLike = []):
+def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, out="./out", save_interval=0.1, diagnostics: ArrayLike = []):
     labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$",
               "v": r"$v$", "pressure": r"$P$", "energy": r"$E$", }
 
     os.makedirs(f"{out}/checkpoints", exist_ok=True)
     diag_file = f"{out}/diagnostics.csv"
     if not os.path.isfile(diag_file):
-        create_diagnostics_file(diagnostics, diag_file)
+        headers = ["t", "dt"]
+        headers.extend([name for name, _ in diagnostics])
+        create_csv_file(diag_file, headers)
 
+    n = 0
     next_checkpoint = 0
 
     if plot:
@@ -177,13 +181,15 @@ def run(hydro, lattice, U, t=0, T=1, plot=None, out="./out", save_interval=0.1, 
             matrix, label=labels[plot], coords=lattice.coords, x1=lattice.x1, x2=lattice.x2, vmin=vmin, vmax=vmax)
         ax.set_title(f"t = {t:.2f}")
 
-    while t < T:
+    while (N is None and t < T) or (N is not None and n < N):
         U_, flux, dt = first_order_step(hydro, lattice, U, t)
 
         # save diagnostics
         diag_values = [get_val(hydro, lattice, U, flux, t)
                        for _, get_val in diagnostics]
-        append_diagnostics(diag_file, t, dt, diag_values)
+        values = [t, dt]
+        values.extend(diag_values)
+        append_row_csv(diag_file, values)
 
         # at each checkpoint, save the conserved variables in every zone
         if t >= next_checkpoint:
@@ -224,5 +230,9 @@ def run(hydro, lattice, U, t=0, T=1, plot=None, out="./out", save_interval=0.1, 
             plt.pause(0.001)
 
         t = t + dt if (t + dt <= T) else T
-
-        print_progress_bar(t, T, suffix="complete", length=50)
+        n = n + 1
+        
+        if N is None:
+            print_progress_bar(t, T, suffix="complete", length=50)
+        else:
+            print_progress_bar(n, N, suffix="complete", length=50)

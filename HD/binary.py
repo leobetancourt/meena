@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Tuple
 
 from hydro import Hydro, Lattice, Coords, run, Primitives, Conservatives
-from helpers import Boundary, cartesian_to_polar, load_U
+from helpers import Boundary, cartesian_to_polar, load_U, read_csv
 
 
 @dataclass(frozen=True)
@@ -234,19 +234,23 @@ def get_eccentricity_y(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple
 
 
 if __name__ == "__main__":
-    binary = Binary(coords=Coords.POLAR, mach=10, dt=0.00249)
+    # get smallest timestep from diagnostics
+    diagnostics_high = read_csv("./500x3000/diagnostics.csv")
+    min_dt = min(diagnostics_high["dt"])
+    
+    binary = Binary(coords=Coords.POLAR, mach=10, dt=min_dt)
     lattice = Lattice(
         coords=Coords.POLAR,
         bc_x1=(Boundary.OUTFLOW, Boundary.OUTFLOW),
         bc_x2=(Boundary.PERIODIC, Boundary.PERIODIC),
-        nx1=100,
-        nx2=600,
+        nx1=500,
+        nx2=3000,
         x1_range=(1, 30),
         x2_range=(0, 2 * jnp.pi),
         log_x1=True
     )
 
-    OUT_PATH = "/Volumes/T7/research/mach=10_fixed"
+    OUT_PATH = "./500x3000_fixed"
 
     U = binary.setup(lattice.X1, lattice.X2)
     t = 0

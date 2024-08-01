@@ -6,8 +6,10 @@ import numpy as np
 import pandas as pd
 import scipy.signal as signal
 from scipy.ndimage import gaussian_filter1d
+import matplotlib.ticker
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+from matplotlib.ticker import MultipleLocator, AutoMinorLocator
 from helpers import print_progress_bar, read_csv
 from jax import vmap, jit
 plt.rcParams['figure.dpi'] = 300
@@ -100,11 +102,10 @@ def m_dot_lombscargle(diagnostics, label=""):
 
 def m_dot_periodogram(diagnostics, label=""):
     t = diagnostics["t"]
-    t_min = 0 * 2 * np.pi
+    t_min = 200 * 2 * np.pi
     t_max = 300 * 2 * np.pi
     m_dot = diagnostics["m_dot"][(t <= t_max) & (t > t_min)]
     dt = diagnostics["dt"][0]
-    N = len(m_dot)
     # Compute the periodogram
     frequencies, power = signal.periodogram(m_dot, 1 / (dt / (2 * np.pi)))
     # ft = np.fft.fft(m_dot)
@@ -112,14 +113,16 @@ def m_dot_periodogram(diagnostics, label=""):
     # freq = np.fft.fftfreq(N, dt)
     # freq_orbits = freq * (2 * np.pi)
     
-    x_min, xmax = 0.1, 2.5
-    power = power / max(power[(frequencies >= x_min) & (frequencies <= xmax)])
+    x_min, x_max = 0.1, 2.5
+    power = power / max(power[(frequencies >= x_min) & (frequencies <= x_max)])
+    fig, ax = plt.subplots()
     plt.plot(frequencies, power, label=label)
     plt.xlabel(r'Variability Frequency (Orbits$^{-1}$)')
     plt.ylabel("Power")
     plt.title(r"$\dot{M}$ Periodogram (fixed timestep)")
     plt.ylim(0, 1)
-    plt.xlim(0, xmax)  # Optionally, limit the x-axis
+    plt.xlim(0, x_max)
+    ax.xaxis.set_minor_locator(AutoMinorLocator(5))
 
 
 def a_dot(diagnostics, label=""):
@@ -163,21 +166,72 @@ def eccentricity_phase(diagnostics, label=""):
     plt.xlabel(r"Time (Orbits)")
     plt.legend()
     
-def growth_rate(diagnostics, label=""):
+def smoothed_derivative(times, x, index, window_size):
+    # Ensure the window size is positive and within bounds
+    if window_size < 1:
+        raise ValueError("Window size must be at least 1.")
+    
+    # Define the start and end indices for the window
+    start = max(index - window_size, 0)
+    end = min(index + window_size + 1, len(times))
+
+    # Slice the arrays for the window
+    times_window = times[start:end]
+    x_window = x[start:end]
+
+    # Calculate the differences in eccentricity and time
+    delta_x = np.diff(x_window)
+    delta_time = np.diff(times_window)
+
+    # Compute the local derivatives
+    local_derivatives = delta_x / delta_time
+
+    # Compute the smoothed derivative by averaging
+    smoothed_derivative = np.mean(local_derivatives)
+
+    return smoothed_derivative
+
+    
+def instability_growth_rate(diagnostics, dx):
     t = diagnostics["t"] / (2 * np.pi)
     e_x = diagnostics["e_x"]
     e_y = diagnostics["e_y"]
-    e_x_dot = np.gradient(e_x, varargs=[t])
-    e_y_dot = np.gradient(e_y, varargs=[t])
+    e = e_x ** 2 + e_y ** 2
+    idx = np.argmax(e > 3e-3)
     
-    growth_rate = (e_x_dot * e_x + e_y_dot * e_y) / (e_x ** 2 + e_y ** 2)
+    # e_dot = smoothed_derivative(t, e, idx, 1000)
+    dist = 5
+    e_dot = (e[idx + dist] - e[idx - dist]) / (t[idx + dist] - t[idx - dist])
+
+    growth_rate = e_dot / e[idx]
+    
+    fig, ax = plt.subplots()
+    print(growth_rate)
+    plt.scatter(dx, growth_rate, s=3, c="black")
+    plt.ylim((0, 0.02))
+    plt.xscale("log")
+    ax.set_xticks([0.01, 0.1])
+    ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
+    plt.xlim((0.005, 1))
+    plt.title("Instability Growth Rate")
+    plt.xlabel(r"Resolution ($dx/a$)")
+    plt.ylabel(r"$\Gamma_c / \Omega_B$")
+
+def cavity_precession_rate(diagnostics, label=""):
+    t = diagnostics["t"] / (2 * np.pi)
+    e_x = diagnostics["e_x"]
+    e_y = diagnostics["e_y"]
+    e_x_dot = np.gradient(e_x, t)
+    e_y_dot = np.gradient(e_y, t)
+    
     precession_rate = (e_y_dot * e_x - e_x_dot * e_y) / (e_x ** 2 + e_y ** 2)
     
     omega_B = 1
+    
 
-# diagnostics_high = read_csv("./500x3000/diagnostics.csv", compress=True)
-# diagnostics_mid = read_csv("./300x1800/diagnostics.csv", compress=True)
-# diagnostics_low = read_csv("./100x600/diagnostics.csv", compress=True)
+# diagnostics_high = read_csv("./500x3000/diagnostics.csv")
+# diagnostics_mid = read_csv("./300x1800/diagnostics.csv")
+# diagnostics_low = read_csv("./100x600/diagnostics.csv")
 
 # m_dot_lombscargle(diagnostics_high, label=r"$500 (r) x 3000 (\theta)$")
 # m_dot_lombscargle(diagnostics_mid, label=r"$300 (r) x 1800 (\theta)$")
@@ -187,9 +241,18 @@ def growth_rate(diagnostics, label=""):
 # torque(diagnostics_mid, label=r"$300 (r) x 1800 (\theta)$")
 # torque(diagnostics_low, label=r"$100 (r) x 600 (\theta)$")
 
+# instability_growth_rate(diagnostics_low, dx=(30/100))
+# instability_growth_rate(diagnostics_mid, dx=(30/300))
+# instability_growth_rate(diagnostics_high, dx=(30/500))
+
 diagnostics = read_csv("./500x3000_fixed/diagnostics.csv")
 m_dot_periodogram(diagnostics)
-
+# stats = read_csv("./RT/stats.csv")
+# print(stats["n_zones"])
+# plt.scatter(stats["n_zones"], stats["M_zones_per_sec"], s=1, c="black")
+# plt.title("Resolution vs. Speed (V100)")
+# plt.xlabel("number of zones")
+# plt.ylabel("million zone updates/second")
 
 plt.savefig(f"./visual/fig.png", bbox_inches="tight")
 plt.show()

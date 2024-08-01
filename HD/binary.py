@@ -248,7 +248,7 @@ if __name__ == "__main__":
         log_x1=True
     )
 
-    OUT_PATH = "./500x3000_fixed"
+    OUT_PATH = "./500x3000_inflow"
 
     U = binary.setup(lattice.X1, lattice.X2)
     t = 0

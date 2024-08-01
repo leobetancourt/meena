@@ -61,7 +61,7 @@ def sedov(hydro: Hydro, lattice: Lattice, radius: float = 0.1) -> Array:
 
 def main():
     hydro = RT(gamma=5/3, nu=0, cfl=0.4, coords=Coords.CARTESIAN)
-    zone_space = jnp.linspace(30000, 1000000, num=10).astype(int)
+    zone_space = jnp.linspace(300000, 10000000, num=100).astype(int)
     nx1s = jnp.sqrt(zone_space / 3).astype(int)
     
     for i in range(len(nx1s)):
@@ -83,14 +83,16 @@ def main():
         run(hydro, lattice, U, N=iters)
         end_time = time.time()
         
-        STATS_FILE = f"./RT/stats.csv"
-        if not os.path.isfile(STATS_FILE):
-            create_csv_file(STATS_FILE, ["index", "iters", "n_zones", "elapsed", "M_zones_per_sec"])
+        OUT_PATH = f"./RT"
+        os.makedirs(OUT_PATH, exist_ok=True)
+        FILE_PATH = f"{OUT_PATH}/stats.csv"
+        if not os.path.isfile(FILE_PATH):
+            create_csv_file(FILE_PATH, ["index", "iters", "n_zones", "elapsed", "M_zones_per_sec"])
         elapsed = end_time - start_time
         print("Elapsed:", elapsed)
         n_zones = nx1 * nx2
         M_zones_per_sec = n_zones * iters / (elapsed * 1e6)
-        append_row_csv(STATS_FILE, [i, iters, n_zones, elapsed, M_zones_per_sec])
+        append_row_csv(FILE_PATH, [i, iters, n_zones, elapsed, M_zones_per_sec])
         print("Mzones per second:", M_zones_per_sec)
 
 

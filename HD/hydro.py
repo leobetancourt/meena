@@ -142,7 +142,6 @@ def first_order_step(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> 
         dt = hydro.dt
     L, flux = solve(hydro, lattice, U, t)
     U = U + L * dt + hydro.source(U, lattice.X1, lattice.X2, t) * dt
-    U = hydro.check_U(lattice, U)
     return U, flux, dt
 
 

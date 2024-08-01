@@ -210,7 +210,6 @@ def F_from_prim(hydro, prims, X1, X2, t):
         (e + p) * u
     ]).transpose((1, 2, 0))
 
-
 def G_from_prim(hydro, prims, X1, X2, t):
     rho, u, v, p = prims
     e = hydro.E(prims, X1, X2, t)

@@ -8,7 +8,6 @@ from helpers import F_from_prim, G_from_prim, get_prims, add_ghost_cells, apply_
 def lambdas(v: ArrayLike, c_s: ArrayLike) -> tuple[Array, Array]:
     return v + c_s, v - c_s
 
-
 def alphas(v_L: ArrayLike, v_R: ArrayLike, c_s_L: ArrayLike, c_s_R: ArrayLike) -> tuple[Array, Array]:
     lambda_L = lambdas(v_L, c_s_L)
     lambda_R = lambdas(v_R, c_s_R)

@@ -233,22 +233,22 @@ def get_eccentricity_y(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple
 
 if __name__ == "__main__":
     # get smallest timestep from diagnostics
-    diagnostics_high = read_csv("./500x3000/diagnostics.csv")
-    min_dt = min(diagnostics_high["dt"])
+    # diagnostics_high = read_csv("./500x3000/diagnostics.csv")
+    # min_dt = min(diagnostics_high["dt"])
     
-    binary = Binary(coords=Coords.POLAR, mach=10, dt=min_dt)
+    binary = Binary(coords=Coords.POLAR, mach=10)
     lattice = Lattice(
         coords=Coords.POLAR,
         bc_x1=(Boundary.OUTFLOW, Boundary.OUTFLOW),
         bc_x2=(Boundary.PERIODIC, Boundary.PERIODIC),
-        nx1=500,
-        nx2=3000,
+        nx1=100,
+        nx2=600,
         x1_range=(1, 30),
         x2_range=(0, 2 * jnp.pi),
         log_x1=True
     )
 
-    OUT_PATH = "./500x3000_inflow"
+    OUT_PATH = "./output/500x3000_inflow"
 
     U = binary.setup(lattice.X1, lattice.X2)
     t = 0

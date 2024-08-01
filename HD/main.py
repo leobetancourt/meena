@@ -73,12 +73,7 @@ def main():
     U = hydro.setup(lattice.X1, lattice.X2)
 
     OUT_PATH = f"./output/RT"
-    start_time = time.time()
-    run(hydro, lattice, U, N=100, out=OUT_PATH, save_interval=(0.1))
-    end_time = time.time()
-    
-    elapsed = end_time - start_time
-    print(f"Elapsed time: {elapsed:.2f} seconds")
+    run(hydro, lattice, U, T=0.3, out=OUT_PATH, save_interval=(0.1))
 
 if __name__ == "__main__":
     main()

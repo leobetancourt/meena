@@ -6,9 +6,12 @@ from functools import partial
 from dataclasses import dataclass
 from abc import ABC
 
+import time
+import datetime
 import os
 import matplotlib.pyplot as plt
 
+from log import Logger
 from helpers import Coords, get_prims, linspace_cells, logspace_cells, print_progress_bar, plot_grid, append_row_csv, create_csv_file, save_to_h5
 from flux import interface_flux
 
@@ -145,15 +148,33 @@ def first_order_step(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> 
     return U, flux, dt
 
 
+def get_matrix_to_plot(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float, plot: str):
+    rho, u, v, p = get_prims(hydro, U, lattice.X1, lattice.X2, t)
+    e = U[:, :, 3]
+    if plot == "density":
+        matrix = rho
+    elif plot == "log density":
+        matrix = jnp.log10(rho)
+    elif plot == "u":
+        matrix = u
+    elif plot == "v":
+        matrix = v
+    elif plot == "pressure":
+        matrix = p
+    elif plot == "energy":
+        matrix = e
+
+    return matrix
+
 def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, out="./out", save_interval=None, diagnostics: ArrayLike = []):
     labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$",
               "v": r"$v$", "pressure": r"$P$", "energy": r"$E$", }
-    
+
     saving = save_interval is not None
 
     if saving:
         os.makedirs(f"{out}/checkpoints", exist_ok=True)
-    
+
     if len(diagnostics) > 0:
         diag_file = f"{out}/diagnostics.csv"
         if not os.path.isfile(diag_file):
@@ -161,81 +182,50 @@ def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, out="./out", save_interv
             headers.extend([name for name, _ in diagnostics])
             create_csv_file(diag_file, headers)
 
-    n = 0
-    next_checkpoint = 0
-
     if plot:
-        rho, u, v, p = get_prims(hydro, U, lattice.X1, lattice.X2, t)
-        e = U[:, :, 3]
-        vmin, vmax = None, None
-        if plot == "density":
-            matrix = rho
-        elif plot == "log density":
-            matrix = jnp.log10(rho)
-            vmin, vmax = -3, 0.5
-        elif plot == "u":
-            matrix = u
-        elif plot == "v":
-            matrix = v
-        elif plot == "pressure":
-            matrix = p
-        elif plot == "energy":
-            matrix = e
-        fig, ax, c, cb = plot_grid(matrix, label=labels[plot], coords=lattice.coords, x1=lattice.x1, x2=lattice.x2, vmin=vmin, vmax=vmax)
+        get_matrix_to_plot(hydro, lattice, U, plot, t)
+        fig, ax, c, cb = plot_grid(
+            matrix, label=labels[plot], coords=lattice.coords, x1=lattice.x1, x2=lattice.x2, vmin=vmin, vmax=vmax)
         ax.set_title(f"t = {t:.2f}")
 
-    while (N is None and t < T) or (N is not None and n < N):
-        U_, flux, dt = first_order_step(hydro, lattice, U, t)
-        
-        if len(diagnostics) > 0:
-            # save diagnostics
-            diag_values = [get_val(hydro, lattice, U, flux, t)
-                        for _, get_val in diagnostics]
-            values = [t, dt]
-            values.extend(diag_values)
-            append_row_csv(diag_file, values)
+    with Logger() as logger:
+        n = 1
+        next_checkpoint = 0
+        while (N is None and t < T) or (N is not None and n < N):
+            U_, flux, dt = first_order_step(hydro, lattice, U, t)
 
-        # at each checkpoint, save the conserved variables in every zone
-        if saving and t >= next_checkpoint:
-            filename = f"{out}/checkpoints/out_{t:.2f}.h5"
-            save_to_h5(filename, t, U, lattice.coords,
-                       hydro.gamma, lattice.x1, lattice.x2)
-            next_checkpoint += save_interval
+            if len(diagnostics) > 0:
+                # save diagnostics
+                diag_values = [get_val(hydro, lattice, U, flux, t)
+                            for _, get_val in diagnostics]
+                values = [t, dt]
+                values.extend(diag_values)
+                append_row_csv(diag_file, values)
 
-        U = U_
+            # at each checkpoint, save the conserved variables in every zone
+            if saving and t >= next_checkpoint:
+                filename = f"{out}/checkpoints/out_{t:.2f}.h5"
+                save_to_h5(filename, t, U, lattice.coords,
+                        hydro.gamma, lattice.x1, lattice.x2)
+                next_checkpoint += save_interval
+                
 
-        if plot:
-            rho, u, v, p = get_prims(hydro, U, lattice.X1, lattice.X2, t)
-            e = U[:, :, 3]
-            vmin, vmax = None, None
-            if plot == "density":
-                matrix = rho
-            elif plot == "log density":
-                matrix = jnp.log10(rho)
-                vmin, vmax = -3, 0.5
-            elif plot == "u":
-                matrix = u
-            elif plot == "v":
-                matrix = v
-            elif plot == "pressure":
-                matrix = p
-            elif plot == "energy":
-                matrix = e
-            if lattice.coords == "cartesian":
-                c.set_data(jnp.transpose(matrix))
-            elif lattice.coords == "polar":
-                c.set_array(matrix.ravel())
-            if vmin is None:
+            U = U_
+
+            if plot:
+                matrix = get_matrix_to_plot(hydro, lattice, U, plot, t)
                 vmin, vmax = jnp.min(matrix), jnp.max(matrix)
-            c.set_clim(vmin=vmin, vmax=vmax)
-            cb.update_normal(c)
-            ax.set_title(f"t = {t:.2f}")
-            fig.canvas.draw()
-            plt.pause(0.001)
-        t = t + dt if (t + dt <= T) else T
-        n = n + 1
-        
-        if N is None:
-            print_progress_bar(t, T, suffix="complete", length=50)
-        else:
-            print_progress_bar(n, N, suffix="complete", length=50)
+                if lattice.coords == "cartesian":
+                    c.set_data(jnp.transpose(matrix))
+                elif lattice.coords == "polar":
+                    c.set_array(matrix.ravel())
+                c.set_clim(vmin=vmin, vmax=vmax)
+                cb.update_normal(c)
+                ax.set_title(f"t = {t:.2f}")
+                fig.canvas.draw()
+                plt.pause(0.001)
+            
+            t = t + dt if (t + dt <= T) else T
+            n = n + 1
+            
+            logger.update_logs(lattice, n, t, dt)    

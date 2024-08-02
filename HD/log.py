@@ -3,6 +3,7 @@ import time
 import jax.numpy as jnp
 
 from rich.console import Console
+from rich.theme import Theme
 from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table, Column
@@ -16,14 +17,14 @@ class Logger(Live):
             table_column=Column(justify="left"))
         bar_column = BarColumn(
             bar_width=None, table_column=Column(justify="right"))
-        self.progress = Progress(complete_column, bar_column, expand=True)
+        self.progress = Progress(bar_column, complete_column, expand=True)
         self.task = self.progress.add_task("", total=self.log_freq)
         self.n_start = 1
         self.min_dt = 1
         self.run_start = time.time()
         self.log_start = time.time()
         
-        super().__init__(console=Console(), refresh_per_second=4)
+        super().__init__(console=Console(theme=Theme({"bar.complete": "red"})), refresh_per_second=4)
         
     def panel(self, lattice, n, t):
         elapsed = time.time() - self.log_start
@@ -47,7 +48,7 @@ class Logger(Live):
         grid = Table.grid(expand=True)
         grid.add_row(self.progress)
         grid.add_row(stats_grid)
-        return Panel(grid, title=f"timesteps {self.n_start}-{self.n_start + (self.log_freq - 1)}", border_style="red")
+        return Panel(grid, title=f"timesteps {self.n_start}-{self.n_start + (self.log_freq - 1)}", border_style="grey50")
 
     def update_logs(self, lattice, n, t, dt):
         self.min_dt = jnp.minimum(self.min_dt, dt)

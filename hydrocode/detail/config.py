@@ -15,9 +15,9 @@ class Coords:
     CARTESIAN = "cartesian"
     POLAR = "polar"
 
-type Primitives = tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike]
-type Conservatives = tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike]
-type BoundaryCondition = tuple[str, str]
+Primitives = tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike]
+Conservatives = tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike]
+BoundaryCondition = tuple[str, str]
 
 class Lattice:
     def __init__(self, coords: str, bc_x1: BoundaryCondition, bc_x2: BoundaryCondition, nx1: int, nx2: int, x1_range: tuple[float, float], x2_range: tuple[float, float], num_g: int = 2, log_x1: bool = False, log_x2: bool = False):

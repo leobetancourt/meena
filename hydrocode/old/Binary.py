@@ -1,6 +1,6 @@
 import numpy as np
 from HD.HD_2D import HD_2D, Boundary
-from HD.helpers import cartesian_to_polar
+from common.helpers import cartesian_to_polar
 
 
 class Binary(HD_2D):

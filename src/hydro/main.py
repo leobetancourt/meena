@@ -1,79 +1,22 @@
+from __future__ import annotations
+
+from functools import partial
+import os
+
 import jax.numpy as jnp
 from jax.typing import ArrayLike
 from jax import jit, Array
-
-from functools import partial
-from dataclasses import dataclass
-from abc import ABC
-
-import time
-import datetime
-import os
 import matplotlib.pyplot as plt
 
-from log import Logger
-from helpers import Coords, get_prims, linspace_cells, logspace_cells, print_progress_bar, plot_grid, append_row_csv, create_csv_file, save_to_h5
-from flux import interface_flux
 
-type Primitives = tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike]
-type Conservatives = tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike]
-type BoundaryCondition = tuple[str, str]
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from hydrocode import Hydro, Lattice
+    
+from ..common.log import Logger
 
-
-class Lattice:
-    def __init__(self, coords: str, bc_x1: BoundaryCondition, bc_x2: BoundaryCondition, nx1: int, nx2: int, x1_range: tuple[float, float], x2_range: tuple[float, float], num_g: int = 2, log_x1: bool = False, log_x2: bool = False):
-        self.coords = coords
-        self.num_g = num_g
-        self.bc_x1 = bc_x1
-        self.bc_x2 = bc_x2
-        self.nx1, self.nx2 = nx1, nx2
-        self.x1_min, self.x1_max = x1_range
-        self.x2_min, self.x2_max = x2_range
-
-        if log_x1:
-            self.x1, self.x1_intf = logspace_cells(
-                self.x1_min, self.x1_max, num=nx1)
-        else:
-            self.x1, self.x1_intf = linspace_cells(
-                self.x1_min, self.x1_max, num=nx1)
-        if log_x2:
-            self.x2, self.x2_intf = logspace_cells(
-                self.x2_min, self.x2_max, num=nx2)
-        else:
-            self.x2, self.x2_intf = linspace_cells(
-                self.x2_min, self.x2_max, num=nx2)
-        self.X1, self.X2 = jnp.meshgrid(self.x1, self.x2, indexing="ij")
-        self.X1_INTF, _ = jnp.meshgrid(self.x1_intf, self.x2, indexing="ij")
-        _, self.X2_INTF = jnp.meshgrid(self.x1, self.x2_intf, indexing="ij")
-        self.dX1 = self.X1_INTF[1:, :] - self.X1_INTF[:-1, :]
-        self.dX2 = self.X2_INTF[:, 1:] - self.X2_INTF[:, :-1]
-
-
-@dataclass(frozen=True)
-class Hydro(ABC):
-    gamma: float = 5/3
-    nu: float = 1e-3
-    cfl: float = 0.4
-    dt: float = None
-    coords: str = "cartesian"
-
-    def E(self, prims: Primitives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
-        rho, u, v, p = prims
-        return (p / (self.gamma - 1)) + (0.5 * rho * (u ** 2 + v ** 2))
-
-    def c_s(self, prims: Primitives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
-        rho, u, v, p = prims
-        return jnp.sqrt(self.gamma * p / rho)
-
-    def P(self, cons: Conservatives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
-        rho, u, v, e = cons
-        return (self.gamma - 1) * (e - (0.5 * rho * (u ** 2 + v ** 2)))
-
-    def source(self, U: ArrayLike, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
-        return jnp.zeros_like(U)
-
-    def check_U(self, lattice: Lattice, U: ArrayLike) -> Array:
-        return U
+from ..common.helpers import get_prims, plot_grid, append_row_csv, create_csv_file, save_to_h5
+from .flux import interface_flux
 
 
 def cartesian_timestep(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> float:
@@ -81,7 +24,7 @@ def cartesian_timestep(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -
     c_s = hydro.c_s((rho, u, v, p), lattice.X1, lattice.X2, t)
     dt1 = jnp.min(lattice.dX1 / (jnp.abs(u) + c_s))
     dt2 = jnp.min(lattice.dX2 / (jnp.abs(v) + c_s))
-    return hydro.cfl * jnp.minimum(dt1, dt2)
+    return hydro.cfl() * jnp.minimum(dt1, dt2)
 
 
 def polar_timestep(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> float:
@@ -89,13 +32,13 @@ def polar_timestep(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> fl
     c_s = hydro.c_s((rho, u, v, p), lattice.X1, lattice.X2, t)
     dt1 = jnp.min(lattice.dX1 / (jnp.abs(u) + c_s))
     dt2 = jnp.min(lattice.X1 * lattice.dX2 / (jnp.abs(v) + c_s))
-    return hydro.cfl * jnp.minimum(dt1, dt2)
+    return hydro.cfl() * jnp.minimum(dt1, dt2)
 
 
 def compute_timestep(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> float:
-    if lattice.coords == Coords.CARTESIAN:
+    if lattice.coords == "cartesian":
         return cartesian_timestep(hydro, lattice, U, t)
-    elif lattice.coords == Coords.POLAR:
+    elif lattice.coords == "polar":
         return polar_timestep(hydro, lattice, U, t)
 
 
@@ -131,18 +74,18 @@ def solve_polar(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> tuple
 
 
 def solve(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> tuple[Array, Array, Array, Array]:
-    if lattice.coords == Coords.CARTESIAN:
+    if lattice.coords == "cartesian":
         return solve_cartesian(hydro, lattice, U, t)
-    elif lattice.coords == Coords.POLAR:
+    elif lattice.coords == "polar":
         return solve_polar(hydro, lattice, U, t)
 
 
 @partial(jit, static_argnames=["hydro", "lattice"])
 def first_order_step(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> tuple[Array, float]:
-    if hydro.dt is None:
+    if hydro.timestep() is None:
         dt = compute_timestep(hydro, lattice, U, t)
     else:
-        dt = hydro.dt
+        dt = hydro.timestep()
     L, flux = solve(hydro, lattice, U, t)
     U = U + L * dt + hydro.source(U, lattice.X1, lattice.X2, t) * dt
     return U, flux, dt
@@ -163,7 +106,7 @@ def get_matrix_to_plot(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float, p
         matrix = p
     elif plot == "energy":
         matrix = e
-
+        
     return matrix
 
 def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, out="./out", save_interval=None, diagnostics: ArrayLike = []):
@@ -171,6 +114,9 @@ def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, out="./out", save_interv
               "v": r"$v$", "pressure": r"$P$", "energy": r"$E$", }
 
     saving = save_interval is not None
+
+    if saving or len(diagnostics) > 0:
+        os.makedirs(out, exist_ok=True)
 
     if saving:
         os.makedirs(f"{out}/checkpoints", exist_ok=True)
@@ -183,9 +129,9 @@ def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, out="./out", save_interv
             create_csv_file(diag_file, headers)
 
     if plot:
-        get_matrix_to_plot(hydro, lattice, U, plot, t)
+        matrix = get_matrix_to_plot(hydro, lattice, U, t, plot)
         fig, ax, c, cb = plot_grid(
-            matrix, label=labels[plot], coords=lattice.coords, x1=lattice.x1, x2=lattice.x2, vmin=vmin, vmax=vmax)
+            matrix, label=labels[plot], coords=lattice.coords, x1=lattice.x1, x2=lattice.x2, vmin=None, vmax=None)
         ax.set_title(f"t = {t:.2f}")
 
     with Logger() as logger:
@@ -197,7 +143,7 @@ def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, out="./out", save_interv
             if len(diagnostics) > 0:
                 # save diagnostics
                 diag_values = [get_val(hydro, lattice, U, flux, t)
-                            for _, get_val in diagnostics]
+                               for _, get_val in diagnostics]
                 values = [t, dt]
                 values.extend(diag_values)
                 append_row_csv(diag_file, values)
@@ -206,14 +152,13 @@ def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, out="./out", save_interv
             if saving and t >= next_checkpoint:
                 filename = f"{out}/checkpoints/out_{t:.2f}.h5"
                 save_to_h5(filename, t, U, lattice.coords,
-                        hydro.gamma, lattice.x1, lattice.x2)
+                           hydro.gamma(), lattice.x1, lattice.x2)
                 next_checkpoint += save_interval
-                
 
             U = U_
 
             if plot:
-                matrix = get_matrix_to_plot(hydro, lattice, U, plot, t)
+                matrix = get_matrix_to_plot(hydro, lattice, U, t, plot)
                 vmin, vmax = jnp.min(matrix), jnp.max(matrix)
                 if lattice.coords == "cartesian":
                     c.set_data(jnp.transpose(matrix))
@@ -224,8 +169,8 @@ def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, out="./out", save_interv
                 ax.set_title(f"t = {t:.2f}")
                 fig.canvas.draw()
                 plt.pause(0.001)
-            
+
             t = t + dt if (t + dt <= T) else T
             n = n + 1
-            
-            logger.update_logs(lattice, n, t, dt)    
+
+            logger.update_logs(lattice, n, t, dt)

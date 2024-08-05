@@ -1,4 +1,4 @@
-from HD.helpers import add_ghost_cells, cartesian_to_polar, plot_grid, print_progress_bar
+from common.helpers import add_ghost_cells, cartesian_to_polar, plot_grid, print_progress_bar
 from HD.solvers import HLL, HLLC
 
 import numpy as np

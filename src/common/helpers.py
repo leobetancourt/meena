@@ -1,22 +1,27 @@
 from matplotlib.patches import Circle
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 import jax.numpy as jnp
 import h5py
 import csv
 
 
-class Boundary:
-    OUTFLOW = "outflow"
-    REFLECTIVE = "reflective"
-    PERIODIC = "periodic"
+def linspace_cells(min, max, num):
+    interfaces = jnp.linspace(min, max, num + 1)
+    centers = (interfaces[:-1] + interfaces[1:]) / 2
 
+    return centers, interfaces
 
-class Coords:
-    CARTESIAN = "cartesian"
-    POLAR = "polar"
+def logspace_cells(min, max, num):
+    interfaces = jnp.logspace(jnp.log10(min), jnp.log10(max), num + 1)
+    centers = (interfaces[:-1] + interfaces[1:]) / 2
 
+    return centers, interfaces
+
+def cartesian_to_polar(x, y):
+    r = jnp.sqrt(x ** 2 + y ** 2)
+    theta = jnp.arctan2(y, x)
+    return r, theta
 
 def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█', printEnd="\r"):
     percent = ("{0:." + str(decimals) + "f}").format(100 *
@@ -91,13 +96,13 @@ def load_U(file):
 def plot_grid(matrix, label, coords, x1, x2, vmin=None, vmax=None):
     extent = [x1[0], x1[-1], x2[0], x2[-1]]
 
-    if coords == Coords.CARTESIAN:
+    if coords == "cartesian":
         fig, ax = plt.subplots()
         if vmin is None:
             vmin, vmax = jnp.min(matrix), jnp.max(matrix)
         c = ax.imshow(jnp.transpose(matrix), cmap="magma", interpolation='nearest',
                       origin='lower', extent=extent, vmin=vmin, vmax=vmax)
-    elif coords == Coords.POLAR:
+    elif coords == "polar":
         fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
         if vmin is None:
             vmin, vmax = jnp.min(matrix), jnp.max(matrix)
@@ -126,20 +131,6 @@ def cartesian_to_polar(x, y):
     return r, theta
 
 
-def linspace_cells(min, max, num):
-    interfaces = jnp.linspace(min, max, num + 1)
-    centers = (interfaces[:-1] + interfaces[1:]) / 2
-
-    return centers, interfaces
-
-
-def logspace_cells(min, max, num):
-    interfaces = jnp.logspace(jnp.log10(min), jnp.log10(max), num + 1)
-    centers = (interfaces[:-1] + interfaces[1:]) / 2
-
-    return centers, interfaces
-
-
 def add_ghost_cells(arr, num_g, axis=0):
     if axis == 0:
         # add ghost cells to the first coordinate direction
@@ -154,40 +145,40 @@ def add_ghost_cells(arr, num_g, axis=0):
 def apply_bcs(lattice, U):
     g = lattice.num_g
     bc_x1, bc_x2 = lattice.bc_x1, lattice.bc_x2
-    if bc_x1[0] == Boundary.OUTFLOW:
+    if bc_x1[0] == "outflow":
         U = U.at[:g, :, :].set(U[g:(g+1), :, :])
-    elif bc_x1[0] == Boundary.REFLECTIVE:
+    elif bc_x1[0] == "reflective":
         U = U.at[:g, :, :].set(jnp.flip(U[g:(2*g), :, :], axis=0))
         # invert x1 momentum
         U = U.at[:g, :, 1].set(-jnp.flip(U[g:(2*g), : 1], axis=0))
-    elif bc_x1[0] == Boundary.PERIODIC:
+    elif bc_x1[0] == "periodic":
         U = U.at[:g, :, :].set(U[(-2*g):(-g), :, :])
 
-    if bc_x1[1] == Boundary.OUTFLOW:
+    if bc_x1[1] == "outflow":
         U = U.at[-g:, :, :].set(U[-(g+1):-g, :, :])
-    elif bc_x1[1] == Boundary.REFLECTIVE:
+    elif bc_x1[1] == "reflective":
         U = U.at[-g:, :, :].set(jnp.flip(U[-(2*g):-g, :, :], axis=0))
         # invert x1 momentum
         U = U.at[-g:, :, 1].set(-jnp.flip(U[-(2*g):-g, : 1], axis=0))
-    elif bc_x1[1] == Boundary.PERIODIC:
+    elif bc_x1[1] == "periodic":
         U = U.at[-g:, :, :].set(U[g:(2*g), :, :])
 
-    if bc_x2[0] == Boundary.OUTFLOW:
+    if bc_x2[0] == "outflow":
         U = U.at[:, :g, :].set(U[:, g:(g+1), :])
-    elif bc_x2[0] == Boundary.REFLECTIVE:
+    elif bc_x2[0] == "reflective":
         U = U.at[:, :g, :].set(jnp.flip(U[:, g:(2*g), :], axis=1))
         # invert x2 momentum
         U = U.at[:, :g, 2].set(-jnp.flip(U[:, g:(2*g), 2], axis=1))
-    elif bc_x2[0] == Boundary.PERIODIC:
+    elif bc_x2[0] == "periodic":
         U = U.at[:, :g, :].set(U[:, (-2*g):(-g), :])
 
-    if bc_x2[1] == Boundary.OUTFLOW:
+    if bc_x2[1] == "outflow":
         U = U.at[:, -g:, :].set(U[:, -(g+1):-g, :])
-    elif bc_x2[1] == Boundary.REFLECTIVE:
+    elif bc_x2[1] == "reflective":
         U = U.at[:, -g:, :].set(jnp.flip(U[:, -(2*g):-g, :], axis=1))
         # invert x2 momentum
         U = U.at[:, -g:, 2].set(-jnp.flip(U[:, -(2*g):-g, 2], axis=1))
-    elif bc_x2[1] == Boundary.PERIODIC:
+    elif bc_x2[1] == "periodic":
         U = U.at[:, -g:, :].set(U[:, g:(2*g), :])
 
     return U

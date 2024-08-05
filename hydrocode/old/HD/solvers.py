@@ -1,4 +1,4 @@
-from HD.helpers import enthalpy, minmod, add_ghost_cells
+from common.helpers import enthalpy, minmod, add_ghost_cells
 
 from abc import ABC, abstractmethod
 import numpy as np

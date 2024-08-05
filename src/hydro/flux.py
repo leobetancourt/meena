@@ -1,8 +1,7 @@
 import jax.numpy as jnp
-from functools import partial
-from jax import vmap, jit, Array
+from jax import vmap, Array
 from jax.typing import ArrayLike
-from helpers import F_from_prim, G_from_prim, get_prims, add_ghost_cells, apply_bcs
+from ..common.helpers import F_from_prim, G_from_prim, get_prims, add_ghost_cells, apply_bcs
 
 
 def lambdas(v: ArrayLike, c_s: ArrayLike) -> tuple[Array, Array]:
@@ -78,14 +77,14 @@ def viscosity(hydro, lattice, U: ArrayLike, x1_g: ArrayLike, x2_g: ArrayLike) ->
 
     rho_l = (rho[(g-1):-(g+1), g:-g] + rho[g:-g, g:-g]) / 2
     rho_r = (rho[g:-g, g:-g] + rho[(g+1):-(g-1), g:-g]) / 2
-    Fv_l = -hydro.nu * jnp.array([
+    Fv_l = -hydro.nu() * jnp.array([
         zero,
         rho_l * dudx[:-1, :],
         rho_l * dvdx[:-1, :],
         zero
     ]).transpose((1, 2, 0))
 
-    Fv_r = -hydro.nu * jnp.array([
+    Fv_r = -hydro.nu() * jnp.array([
         zero,
         rho_r * dudx[1:, :],
         rho_r * dvdx[1:, :],
@@ -94,14 +93,14 @@ def viscosity(hydro, lattice, U: ArrayLike, x1_g: ArrayLike, x2_g: ArrayLike) ->
 
     rho_l = (rho[g:-g, (g-1):-(g+1)] + rho[g:-g, g:-g]) / 2
     rho_r = (rho[g:-g, g:-g] + rho[g:-g, (g+1):-(g-1)]) / 2
-    Gv_l = -hydro.nu * jnp.array([
+    Gv_l = -hydro.nu() * jnp.array([
         zero,
         rho_l * dudy[:, :-1],
         rho_l * dvdy[:, :-1],
         zero
     ]).transpose((1, 2, 0))
 
-    Gv_r = -hydro.nu * jnp.array([
+    Gv_r = -hydro.nu() * jnp.array([
         zero,
         rho_r * dudy[:, 1:],
         rho_r * dvdy[:, 1:],
@@ -182,11 +181,12 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
     G_l = hll_flux_x2(G_L, G_C, U_L, U_C, c_s_L, c_s_C)
     # F_(i+1/2)
     G_r = hll_flux_x2(G_C, G_R, U_C, U_R, c_s_C, c_s_R)
-
-    Fv_l, Fv_r, Gv_l, Gv_r = viscosity(hydro, lattice, U, x1_g, x2_g)
-    F_l += Fv_l
-    F_r += Fv_r
-    G_l += Gv_l
-    G_r += Gv_r
+    
+    if hydro.nu():
+        Fv_l, Fv_r, Gv_l, Gv_r = viscosity(hydro, lattice, U, x1_g, x2_g)
+        F_l += Fv_l
+        F_r += Fv_r
+        G_l += Gv_l
+        G_r += Gv_r
 
     return F_l, F_r, G_l, G_r

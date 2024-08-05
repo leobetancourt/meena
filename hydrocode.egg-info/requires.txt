@@ -1,0 +1,10 @@
+Click
+numpy
+jax
+jaxlib
+matplotlib
+scipy
+tqdm
+rich
+pandas
+h5py

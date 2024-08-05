@@ -10,7 +10,7 @@ import matplotlib.ticker
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from matplotlib.ticker import MultipleLocator, AutoMinorLocator
-from helpers import print_progress_bar, read_csv
+from common.helpers import print_progress_bar, read_csv
 from jax import vmap, jit
 plt.rcParams['figure.dpi'] = 300
 plt.rcParams['savefig.dpi'] = 300

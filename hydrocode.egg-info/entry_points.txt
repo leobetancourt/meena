@@ -1,0 +1,2 @@
+[console_scripts]
+hydrocode = hydrocode.cli:cli

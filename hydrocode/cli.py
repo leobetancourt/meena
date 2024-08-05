@@ -8,8 +8,9 @@ def cli():
 @click.command()
 @click.argument("config_file", type=click.Path(exists=True))
 @click.option("--plot", type=click.Choice(["density", "log density", "u", "v", "pressure", "energy"]))
-def run(config_file, plot):
-    run_config(config_file, plot)
+@click.option("--output_dir", type=click.Path())
+def run(config_file, plot, output_dir):
+    run_config(config_file, plot, output_dir)
 
 
 @click.command()

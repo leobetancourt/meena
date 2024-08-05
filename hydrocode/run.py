@@ -5,7 +5,7 @@ from pathlib import Path
 from .detail import Hydro, Lattice
 from src import run
 
-def run_config(config_file, plot):
+def run_config(config_file, plot, output_dir):
     config_path = Path(config_file)
     sys.path.append(str(config_path.parent.parent / 'configs'))
     config_name = config_path.stem
@@ -31,6 +31,8 @@ def run_config(config_file, plot):
                 
                 U = hydro.initialize(lattice.X1, lattice.X2)
                 
+                out = output_dir if output_dir else f"./output/{config_name}"
+                
                 run(
                     hydro, 
                     lattice, 
@@ -39,7 +41,7 @@ def run_config(config_file, plot):
                     T=hydro.t_end(), 
                     N=None, 
                     plot=plot, 
-                    out=f"./output/{config_name}", 
+                    out=out, 
                     save_interval=hydro.save_interval(), 
                     diagnostics=hydro.diagnostics()
                 )

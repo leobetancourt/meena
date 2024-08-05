@@ -6,5 +6,5 @@ venv/
 output/
 test.py
 hpc/
-hydrocode.egg-info
+hydrocode.egg-info/
 build/

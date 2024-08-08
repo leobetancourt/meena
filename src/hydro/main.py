@@ -142,7 +142,7 @@ def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, out="./out", save_interv
 
             if len(diagnostics) > 0:
                 # save diagnostics
-                diag_values = [get_val(hydro, lattice, U, flux, t)
+                diag_values = [get_val(hydro, lattice, U, flux, t, dt)
                                for _, get_val in diagnostics]
                 values = [t, dt]
                 values.extend(diag_values)

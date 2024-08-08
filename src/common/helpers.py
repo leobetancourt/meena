@@ -100,6 +100,8 @@ def plot_grid(matrix, label, coords, x1, x2, vmin=None, vmax=None):
         fig, ax = plt.subplots()
         if vmin is None:
             vmin, vmax = jnp.min(matrix), jnp.max(matrix)
+        ax.set_xlim(-5, 5)
+        ax.set_ylim(-5, 5)
         c = ax.imshow(jnp.transpose(matrix), cmap="magma", interpolation='nearest',
                       origin='lower', extent=extent, vmin=vmin, vmax=vmax)
     elif coords == "polar":

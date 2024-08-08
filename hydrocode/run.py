@@ -26,7 +26,10 @@ def run_config(config_file, plot, output_dir):
                     nx1=hydro.resolution()[0],
                     nx2=hydro.resolution()[1],
                     x1_range=hydro.range()[0],
-                    x2_range=hydro.range()[1]
+                    x2_range=hydro.range()[1],
+                    num_g = hydro.num_g(),
+                    log_x1 = hydro.log_x1(),
+                    log_x2 = hydro.log_x2()
                 )
                 
                 U = hydro.initialize(lattice.X1, lattice.X2)

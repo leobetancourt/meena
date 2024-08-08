@@ -72,6 +72,9 @@ class Hydro(ABC):
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
         return ((0, 1), (0, 1))
     
+    def num_g(self) -> int:
+        return 2
+    
     def log_x1(self) -> bool:
         return False
     
@@ -114,7 +117,7 @@ class Hydro(ABC):
     def source(self, U: ArrayLike, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
         return jnp.zeros_like(U)
 
-    def check_U(self, lattice: Lattice, U: ArrayLike) -> Array:
+    def check_U(self, lattice: Lattice, U: ArrayLike, t: float) -> Array:
         return U
     
     def diagnostics(self):

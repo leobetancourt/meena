@@ -5,12 +5,10 @@ from jax.typing import ArrayLike
 from jax import Array, jit
 import jax.numpy as jnp
 
-from hydrocode import Hydro, Lattice, Primitives, Conservatives, BoundaryCondition, Coords
-from src.common.helpers import cartesian_to_polar
-
+from hydrocode import Hydro, Lattice, Primitives, Conservatives, BoundaryCondition
 
 @partial(jit, static_argnames=["hydro", "lattice"])
-def get_accr_rate(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
+def get_accr_rate(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float, dt: float) -> float:
     dr = lattice.x1_intf[1] - lattice.x1_intf[0]
     dtheta = lattice.x2_intf[1] - lattice.x2_intf[0]
     dA = lattice.x1[0] * dr * dtheta
@@ -20,7 +18,7 @@ def get_accr_rate(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[Arra
 
 
 @partial(jit, static_argnames=["hydro", "lattice"])
-def get_angular_mom_rate(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
+def get_angular_mom_rate(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float, dt: float) -> float:
     dr = lattice.x1_intf[1] - lattice.x1_intf[0]
     dtheta = lattice.x2_intf[1] - lattice.x2_intf[0]
     dA = lattice.x1[0] * dr * dtheta
@@ -31,7 +29,7 @@ def get_angular_mom_rate(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tup
 
 
 @partial(jit, static_argnames=["hydro", "lattice"])
-def get_torque1(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
+def get_torque1(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float, dt: float) -> float:
     x1_1, x2_1, x1_2, x2_2 = hydro.get_positions(t)
     rho = U[..., 0]
     r, theta = lattice.X1, lattice.X2
@@ -40,8 +38,8 @@ def get_torque1(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayL
     x1_l, x1_r = R_interf[:-1, :], R_interf[1:, :]
     dx1 = x1_r - x1_l
     dx2 = lattice.x2[1] - lattice.x2[0]
-    dA = r * dx1 * dx2  # dA = rdrdtheta
-
+    dA = r * dx1 * dx2
+    
     delta_theta = theta - theta_bh
     dist = jnp.sqrt(r ** 2 + r_bh ** 2 - 2 * r *
                     r_bh * jnp.cos(delta_theta))
@@ -53,7 +51,7 @@ def get_torque1(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayL
 
 
 @partial(jit, static_argnames=["hydro", "lattice"])
-def get_torque2(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
+def get_torque2(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float, dt: float) -> float:
     x1_1, x2_1, x1_2, x2_2 = hydro.get_positions(t)
     rho = U[..., 0]
     r, theta = lattice.X1, lattice.X2
@@ -75,7 +73,7 @@ def get_torque2(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayL
     return T
 
 
-def get_eccentricity(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
+def get_eccentricity(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float, dt: float):
     rho = U[..., 0]
     vr, vtheta = U[..., 1] / rho, U[..., 2] / rho
     r, theta = lattice.X1, lattice.X2
@@ -98,20 +96,20 @@ def get_eccentricity(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[A
 
 
 @partial(jit, static_argnames=["hydro", "lattice"])
-def get_eccentricity_x(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
-    return get_eccentricity(hydro, lattice, U, flux, t)[0]
+def get_eccentricity_x(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float, dt: float):
+    return get_eccentricity(hydro, lattice, U, flux, t, dt)[0]
 
 
 @partial(jit, static_argnames=["hydro", "lattice"])
-def get_eccentricity_y(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
-    return get_eccentricity(hydro, lattice, U, flux, t)[1]
+def get_eccentricity_y(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float, dt: float):
+    return get_eccentricity(hydro, lattice, U, flux, t, dt)[1]
 
 
 @dataclass(frozen=True)
 class GaussianBinary(Hydro):
     G: float = 1
     M: float = 1
-    mach: float = 10
+    mach: float = 40
     a: float = 1
     R_cav: float = 2.5 * a
     R_out: float = 10 * a
@@ -119,21 +117,23 @@ class GaussianBinary(Hydro):
     Sigma_0: float = 1
     eps: float = 0.05 * a
     omega_B: float = 1
+    R_ring: float = 5 * a
 
     def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
         t = 0
         r, theta = X1, X2
 
         # surface density
-        gaussian = jnp.exp(- ((r - self.a) ** 2) / (2 * ((0.2 * self.a) ** 2)))
-        rho = jnp.maximum(0.14, gaussian)
+        gaussian = jnp.exp(- ((r - self.R_ring) ** 2) / (2 * ((0.2 * self.a) ** 2)))
+        floor = 0.01
+        rho = jnp.maximum(floor, gaussian)
 
         v_r = jnp.zeros_like(rho)
-        # angular frequency of gas in the disk
-        omega_naught = jnp.sqrt((self.G * self.M / (r ** 3))
-                                * (1 - (1 / (self.mach ** 2))))
-        omega = ((omega_naught ** -4) + (self.omega_B ** -4)) ** (-1/4)
-        v_theta = omega * r
+        # # angular frequency of gas in the disk
+        # omega_naught = jnp.sqrt((self.G * self.M / (r ** 3))
+        #                         * (1 - (1 / (self.mach ** 2))))
+        # omega = ((omega_naught ** -4) + (self.omega_B ** -4)) ** (-1/4)
+        v_theta = jnp.sqrt(self.G * self.M / (r + self.eps))
 
         return jnp.array([
             rho,
@@ -143,16 +143,22 @@ class GaussianBinary(Hydro):
         ]).transpose((1, 2, 0))
 
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
-        return ((0.6 * self.a, 10), (0, 2 * jnp.pi))
+        return ((0.6 * self.a, 20), (0, 2 * jnp.pi))
 
     def log_x1(self) -> bool:
         return True
 
     def resolution(self) -> tuple[int, int]:
-        return (300, 1800)
+        return (200, 1200)
 
     def t_end(self) -> float:
-        return 300 * 2 * jnp.pi
+        return 1500 * 2 * jnp.pi
+    
+    def cfl(self) -> float:
+        return 0.1
+    
+    def nu(self) -> float:
+        return 1e-2
 
     def coords(self) -> str:
         return "polar"
@@ -164,7 +170,7 @@ class GaussianBinary(Hydro):
         return ("periodic", "periodic")
 
     def nu(self) -> float:
-        return 1e-3 * (self.a ** 2) * self.omega_B
+        return 1e-3
 
     def E(self, prims: Primitives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
         rho, u, v, p = prims
@@ -245,4 +251,4 @@ class GaussianBinary(Hydro):
         return diagnostics
 
     def save_interval(self):
-        return (2 * jnp.pi) / 24
+        return (2 * jnp.pi) / 10

@@ -1,7 +1,7 @@
 from matplotlib.patches import Circle
 import matplotlib.pyplot as plt
-import pandas as pd
 import jax.numpy as jnp
+import pandas as pd
 import h5py
 import csv
 
@@ -112,7 +112,7 @@ def plot_grid(matrix, label, coords, x1, x2, vmin=None, vmax=None):
         ax.set_xticks([])
         ax.set_yticks([])
         # ax.set_ylim(0, jnp.max(x1))
-        ax.set_ylim(0, 5)
+        ax.set_ylim(0, 10)
         ax.set_facecolor("black")
         circle_r = jnp.min(x1) - (x1[1] - x1[0]) / 2
         circle = Circle((0, 0), radius=circle_r, transform=ax.transData._b,

@@ -1,17 +1,12 @@
-from functools import partial
+import h5py
 import os
 import jax.numpy as jnp
-from jax import vmap, jit
 import numpy as np
-import pandas as pd
 import scipy.signal as signal
-from scipy.ndimage import gaussian_filter1d
 import matplotlib.ticker
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-from matplotlib.ticker import MultipleLocator, AutoMinorLocator
-from common.helpers import print_progress_bar, read_csv
-from jax import vmap, jit
+from matplotlib.ticker import AutoMinorLocator
+from src.common.helpers import print_progress_bar, read_csv
 plt.rcParams['figure.dpi'] = 300
 plt.rcParams['savefig.dpi'] = 300
 
@@ -61,24 +56,26 @@ def gaussian_smooth(timeseries, values, output_times, sigma=2, truncate=3.0):
     return smoothed_values
 
 
-def torque(diagnostics, label=""):
+def torque(diagnostics, label="", color="black"):
+    torque = diagnostics["torque_1"] + diagnostics["torque_2"]
     t = diagnostics["t"] / (2 * np.pi)
     output_t = np.linspace(t[0], t[-1], 500)
-    torque = gaussian_smooth(t, diagnostics["torque"], output_t, sigma=2, truncate=3.0)
-    plt.plot(output_t, torque, linewidth=1, label=label)
+    torque = gaussian_smooth(t, torque, output_t, sigma=2, truncate=3.0)
+    plt.plot(output_t, torque, linewidth=1, color=color, label=label)
+    plt.ylim(-0.0025, 0.0025)
     plt.axhline(linewidth=1, color="black")
     plt.title("Excised Torque")
     plt.xlabel(r"Time (Orbits)")
-    plt.ylabel(r"Torque [$\Sigma_0 Gma]")
-    plt.ylim(-0.015, 0.015)
+    plt.ylabel(r"Torque [$\Sigma_0 GMa$]")
     plt.legend()
 
 
-def m_dot(diagnostics, label=""):
+def m_dot(diagnostics, label="", color="black"):
     t = diagnostics["t"] / (2 * np.pi)
     output_t = np.linspace(t[0], t[-1], 500)
     m_dot = gaussian_smooth(t, diagnostics["m_dot"], output_t, sigma=2, truncate=3.0)
-    plt.plot(output_t, m_dot, linewidth=1, label=label)
+    plt.plot(output_t, m_dot, linewidth=1, color=color, label=label)
+    plt.ylim(0, 0.005)
     plt.axhline(linewidth=1, color="black")
     plt.title(r"$\dot{M}$")
     plt.xlabel(r"Time (Orbits)")
@@ -228,6 +225,29 @@ def cavity_precession_rate(diagnostics, label=""):
     
     omega_B = 1
     
+def radial_density():
+    R, nu = 1, 1e-3
+    t_visc = (R**2) / nu
+    ts = np.array([0, 0.5, 1]) * t_visc
+    colors = ["black", "darkred", "indianred"]
+    labels = [r"$t=0$", r"$t=0.5t_{visc}$", r"$t=t_{visc}$"]
+    
+    for i, t in enumerate(ts):
+        sim_t = t * 2 * np.pi
+        print(sim_t)
+        file_path = f"./mach_40/checkpoints/out_{sim_t:.2f}.h5"
+        with h5py.File(file_path, "r") as f:
+            x1, x2 = f.attrs["x1"], f.attrs["x2"]
+            t = f.attrs["t"] / (2 * np.pi)
+            rho = f["rho"]
+            
+            sigma_r = np.mean(rho, axis=1)
+            plt.plot(x1, sigma_r, color=colors[i], label=labels[i])
+
+    plt.xlabel("r")
+    plt.ylabel(r"$\Sigma_r$")
+    plt.legend()
+    plt.title(r"$\mathcal{M}=40$")
 
 # diagnostics_high = read_csv("./500x3000/diagnostics.csv")
 # diagnostics_mid = read_csv("./300x1800/diagnostics.csv")
@@ -245,8 +265,7 @@ def cavity_precession_rate(diagnostics, label=""):
 # instability_growth_rate(diagnostics_mid, dx=(30/300))
 # instability_growth_rate(diagnostics_high, dx=(30/500))
 
-diagnostics = read_csv("./500x3000_fixed/diagnostics.csv")
-m_dot_periodogram(diagnostics)
+
 # stats = read_csv("./RT/stats.csv")
 # print(stats["n_zones"])
 # plt.scatter(stats["n_zones"], stats["M_zones_per_sec"], s=1, c="black")
@@ -254,5 +273,16 @@ m_dot_periodogram(diagnostics)
 # plt.xlabel("number of zones")
 # plt.ylabel("million zone updates/second")
 
-plt.savefig(f"./visual/fig.png", bbox_inches="tight")
+
+# diagnostics_10 = read_csv("./mach_10/diagnostics.csv")
+# diagnostics_40 = read_csv("./mach_40/diagnostics.csv")
+# torque(diagnostics_10, label=r"$\mathcal{M}=10$", color="black")
+# torque(diagnostics_40, label=r"$\mathcal{M}=40$", color="red")
+
+# m_dot(diagnostics_10, label=r"$\mathcal{M}=10$", color="black")
+# m_dot(diagnostics_40, label=r"$\mathcal{M}=40$", color="red")
+
+radial_density()
+
+plt.savefig(f"./mach_10/sigma_r.png", bbox_inches="tight")
 plt.show()

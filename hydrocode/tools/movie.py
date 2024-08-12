@@ -1,4 +1,4 @@
-from common.helpers import plot_grid, print_progress_bar
+from src.common.helpers import plot_grid, print_progress_bar
 import os
 import h5py
 import re
@@ -35,11 +35,14 @@ def process_h5_files(file_list):
         x2 = f.attrs["x2"]
         t = f.attrs["t"] / (2 * np.pi)
         matrix = np.log10(f["rho"][...])
+        # matrix = np.array(f["rho"][...])
 
-    vmin, vmax = -3, 0.5
+    # vmin, vmax = -3, 0.5
+    vmin, vmax = -6, -1
     fig, ax, c, cb = plot_grid(
         matrix, r"$\log_{10} \Sigma$", coords=coords, x1=x1, x2=x2, vmin=vmin, vmax=vmax)
-    ax.set_title(f"t = {t:.2f}")
+    title = f"t = {t:.2f}" + r", $\mathcal{M}=10$"
+    ax.set_title(title)
     fps = 24
     FFMpegWriter = animation.writers['ffmpeg']
     writer = FFMpegWriter(fps=fps)
@@ -54,9 +57,11 @@ def process_h5_files(file_list):
             with h5py.File(file_path, 'r') as f:
                 t = f.attrs["t"] / (2 * np.pi)
                 matrix = np.log10(f["rho"][...])
+                # matrix = np.array(f["rho"][...])
                 c.set_array(matrix.ravel())
                 cb.update_normal(c)
-                ax.set_title(f"t = {t:.2f}")
+                title = f"t = {t:.2f}" + r", $\mathcal{M}=10$"
+                ax.set_title(title)
                 fig.canvas.draw()
                 writer.grab_frame()
 
@@ -64,7 +69,7 @@ def process_h5_files(file_list):
                                    suffix="complete", length=25)
 
 
-PATH = "./500x3000/checkpoints"
+PATH = "./gaussian_10/checkpoints"
 t_min = 290 * 2 * np.pi
 t_max = 300 * 2 * np.pi
 

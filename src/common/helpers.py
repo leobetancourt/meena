@@ -49,14 +49,14 @@ def read_csv(path, compress=False):
 
     return numpy_arrays
 
-def save_to_h5(filename, t, U, coords, gamma, x1, x2):
+def save_to_h5(filename, t, U, hydro, lattice):
     rho, momx1, momx2, E = U[..., 0], U[..., 1], U[..., 2], U[..., 3]
     with h5py.File(filename, "w") as f:
         # metadata
-        f.attrs["coords"] = coords
-        f.attrs["gamma"] = gamma
-        f.attrs["x1"] = x1
-        f.attrs["x2"] = x2
+        f.attrs["coords"] = lattice.coords
+        f.attrs["gamma"] = hydro.gamma()
+        f.attrs["x1"] = lattice.x1
+        f.attrs["x2"] = lattice.x2
         f.attrs["t"] = t
 
         # create h5 datasets for conserved variables

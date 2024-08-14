@@ -19,7 +19,9 @@ def alphas(v_L: ArrayLike, v_R: ArrayLike, c_s_L: ArrayLike, c_s_R: ArrayLike) -
 
 @vmap
 @vmap
-def hll_flux_x1(F_L: ArrayLike, F_R: ArrayLike, U_L: ArrayLike, U_R: ArrayLike, c_s_L: ArrayLike, c_s_R: ArrayLike) -> Array:
+def hll_flux_x1(F_L: ArrayLike, F_R: ArrayLike, 
+                U_L: ArrayLike, U_R: ArrayLike, 
+                c_s_L: ArrayLike, c_s_R: ArrayLike) -> Array:
     rho_L, rho_R = U_L[0], U_R[0]
     v_L, v_R = U_L[1] / rho_L, U_R[1] / rho_R
 

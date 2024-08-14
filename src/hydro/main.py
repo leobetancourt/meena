@@ -81,10 +81,7 @@ def solve(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> tuple[Array
 
 @partial(jit, static_argnames=["hydro", "lattice"])
 def first_order_step(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> tuple[Array, float]:
-    if hydro.timestep() is None:
-        dt = compute_timestep(hydro, lattice, U, t)
-    else:
-        dt = hydro.timestep()
+    dt = compute_timestep(hydro, lattice, U, t)
     L, flux = solve(hydro, lattice, U, t)
     U = U + L * dt + hydro.source(U, lattice.X1, lattice.X2, t) * dt
     return U, flux, dt
@@ -132,10 +129,10 @@ def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, out="./out", save_interv
         fig, ax, c, cb = plot_grid(
             matrix, label=labels[plot], coords=lattice.coords, x1=lattice.x1, x2=lattice.x2, vmin=None, vmax=None)
         ax.set_title(f"t = {t:.2f}")
-
+        
     with Logger() as logger:
         n = 1
-        next_checkpoint = 0
+        next_checkpoint = t
         while (N is None and t < T) or (N is not None and n < N):
             U_, flux, dt = first_order_step(hydro, lattice, U, t)
 
@@ -146,12 +143,11 @@ def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, out="./out", save_interv
                 values = [t, dt]
                 values.extend(diag_values)
                 append_row_csv(diag_file, values)
-
+    
             # at each checkpoint, save the conserved variables in every zone
             if saving and t >= next_checkpoint:
                 filename = f"{out}/checkpoints/out_{t:.2f}.h5"
-                save_to_h5(filename, t, U, lattice.coords,
-                           hydro.gamma(), lattice.x1, lattice.x2)
+                save_to_h5(filename, t, U, hydro, lattice)
                 next_checkpoint += save_interval
 
             U = U_

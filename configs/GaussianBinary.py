@@ -1,11 +1,13 @@
 from dataclasses import dataclass
 from functools import partial
 
+import h5py
 from jax.typing import ArrayLike
 from jax import Array, jit
 import jax.numpy as jnp
 
 from hydrocode import Hydro, Lattice, Primitives, Conservatives, BoundaryCondition
+from src.common.helpers import load_U
 
 @partial(jit, static_argnames=["hydro", "lattice"])
 def get_accr_rate(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float, dt: float) -> float:
@@ -134,7 +136,7 @@ class GaussianBinary(Hydro):
         #                         * (1 - (1 / (self.mach ** 2))))
         # omega = ((omega_naught ** -4) + (self.omega_B ** -4)) ** (-1/4)
         v_theta = jnp.sqrt(self.G * self.M / (r + self.eps))
-
+        
         return jnp.array([
             rho,
             rho * v_r,
@@ -149,10 +151,10 @@ class GaussianBinary(Hydro):
         return True
 
     def resolution(self) -> tuple[int, int]:
-        return (200, 1200)
+        return (300, 1800)
 
     def t_end(self) -> float:
-        return 1500 * 2 * jnp.pi
+        return 3000 * 2 * jnp.pi
     
     def cfl(self) -> float:
         return 0.1
@@ -232,12 +234,12 @@ class GaussianBinary(Hydro):
 
     # assumes U with ghost cells
     def check_U(self, lattice: Lattice, U: ArrayLike, t: float) -> Array:
-        g = lattice.num_g
-        # prevent inflow from inner boundary
-        rho = U[:, :, 0]
-        vr = U[:, :, 1] / rho
-        vr = vr.at[:g, :].set(jnp.minimum(vr[:g, :], 0))
-        U.at[:g, :, 1].set(rho[:g, :] * vr[:g, :])
+        # g = lattice.num_g
+        # # prevent inflow from inner boundary
+        # rho = U[:, :, 0]
+        # vr = U[:, :, 1] / rho
+        # vr = vr.at[:g, :].set(jnp.minimum(vr[:g, :], 0))
+        # U.at[:g, :, 1].set(rho[:g, :] * vr[:g, :])
         return U
 
     def diagnostics(self):

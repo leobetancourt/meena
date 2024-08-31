@@ -105,7 +105,7 @@ def get_matrix_to_plot(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float, p
         
     return matrix
 
-def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, out="./out", save_interval=None, diagnostics: ArrayLike = []):
+def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, plot_range=None, out="./out", save_interval=None, diagnostics: ArrayLike = []):
     labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$",
               "v": r"$v$", "pressure": r"$P$", "energy": r"$E$", }
 
@@ -138,7 +138,7 @@ def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, out="./out", save_interv
 
             if len(diagnostics) > 0:
                 # save diagnostics
-                diag_values = [get_val(hydro, lattice, U, flux, t, dt)
+                diag_values = [get_val(hydro, lattice, U, flux, t)
                                for _, get_val in diagnostics]
                 values = [t, dt]
                 values.extend(diag_values)
@@ -154,7 +154,10 @@ def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, out="./out", save_interv
 
             if plot:
                 matrix = get_matrix_to_plot(hydro, lattice, U, t, plot)
-                vmin, vmax = jnp.min(matrix), jnp.max(matrix)
+                if plot_range:
+                    vmin, vmax = plot_range[0], plot_range[1]
+                else:
+                    vmin, vmax = jnp.min(matrix), jnp.max(matrix)
                 if lattice.coords == "cartesian":
                     c.set_data(jnp.transpose(matrix))
                 elif lattice.coords == "polar":

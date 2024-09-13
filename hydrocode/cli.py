@@ -17,9 +17,10 @@ class DynamicCommand(click.Command):
 
         # Load the config class
         config_class = load_config(config_file)
+        self.original_names = {}
         for name, value in vars(config_class()).items():
             self.params.append(click.Option([f"--{name}"], default=value))
-        
+            self.original_names[name.lower()] = name
         return super().parse_args(ctx, args)
 
 @click.command(cls=DynamicCommand)
@@ -29,7 +30,14 @@ class DynamicCommand(click.Command):
 @click.option("--plot-range", type=(float, float))
 @click.option("--output-dir", type=click.Path())
 def run(config_file, checkpoint, plot, plot_range, output_dir, **kwargs):
-    run_config(config_file, checkpoint, plot, plot_range, output_dir, **kwargs)
+    ctx = click.get_current_context()
+    dynamic_command = ctx.command
+    # Recover original variable names
+    original_kwargs = {}
+    for k, v in kwargs.items():
+        original_key = dynamic_command.original_names[k]
+        original_kwargs[original_key] = v
+    run_config(config_file, checkpoint, plot, plot_range, output_dir, **original_kwargs)
 
 @click.command()
 @click.argument("checkpoint_file", type=click.Path(exists=True))

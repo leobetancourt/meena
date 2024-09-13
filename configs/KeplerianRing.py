@@ -124,7 +124,7 @@ class KeplerianRing(Hydro):
 
         # surface density
         gaussian = self.Sigma_0 * jnp.exp(- ((r - self.R_0) ** 2) / (2 * ((0.2 * self.a) ** 2)))
-        floor = 0
+        floor = 0.01
         rho = jnp.maximum(floor, gaussian)
 
         v_r = jnp.zeros_like(rho)

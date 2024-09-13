@@ -6,7 +6,7 @@ from jax.typing import ArrayLike
 from jax import Array, jit
 import jax.numpy as jnp
 
-from hydrocode import Hydro, Lattice, Primitives, Conservatives, BoundaryCondition
+from hydrocode import Hydro, Lattice, Primitives, Conservatives, BoundaryCondition, Coords
 from src.common.helpers import load_U
 
 @partial(jit, static_argnames=["hydro", "lattice"])
@@ -111,7 +111,7 @@ def get_eccentricity_y(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple
 class KeplerianRing(Hydro):
     G: float = 1
     M: float = 1
-    mach: float = 40
+    mach: float = 10
     a: float = 1
     Sigma_0: float = 1
     eps: float = 0.05 * a
@@ -119,41 +119,33 @@ class KeplerianRing(Hydro):
     R_0: float = 4 * a
 
     def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
-        # t = 0
-        # r, theta = X1, X2
+        t = 0
+        r, theta = X1, X2
 
-        # # surface density
-        # gaussian = self.Sigma_0 * jnp.exp(- ((r - self.R_0) ** 2) / (2 * ((0.2 * self.a) ** 2)))
-        # floor = 0.01
-        # rho = jnp.maximum(floor, gaussian)
+        # surface density
+        gaussian = self.Sigma_0 * jnp.exp(- ((r - self.R_0) ** 2) / (2 * ((0.2 * self.a) ** 2)))
+        floor = 0
+        rho = jnp.maximum(floor, gaussian)
 
-        # v_r = jnp.zeros_like(rho)
-        # # keplerian velocity
-        # v_theta = jnp.sqrt(self.G * self.M / r)
+        v_r = jnp.zeros_like(rho)
+        # keplerian velocity
+        v_theta = jnp.sqrt(self.G * self.M / r)
         
-        # return jnp.array([
-        #     rho,
-        #     rho * v_r,
-        #     rho * v_theta,
-        #     self.E((rho, v_r, v_theta, jnp.zeros_like(rho)), X1, X2, t)
-        # ]).transpose((1, 2, 0))
-        
-        U, t = load_U("./Ring_R=4a_M=40_Binary/checkpoints/out_1333.00.h5")
-        
-        return U
-
+        return jnp.array([
+            rho,
+            rho * v_r,
+            rho * v_theta,
+            self.E((rho, v_r, v_theta, jnp.zeros_like(rho)), X1, X2, t)
+        ]).transpose((1, 2, 0))
+                
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
-        return ((0.6 * self.a, 20), (0, 2 * jnp.pi))
+        return ((0.6 * self.a, 10), (0, 2 * jnp.pi))
 
     def log_x1(self) -> bool:
         return True
 
     def resolution(self) -> tuple[int, int]:
-        return (150, 900)
-    
-    def t_start(self) -> float:
-        U, t = load_U("./Ring_R=4a_M=40_Binary/checkpoints/out_1333.00.h5")
-        return t
+        return (300, 1800)
 
     def t_end(self) -> float:
         tau_end = 2
@@ -226,20 +218,22 @@ class KeplerianRing(Hydro):
 
     def get_positions(self, t):
         delta = jnp.pi
-        x1_1, x2_1 = (self.a / 2), (self.omega_B * t) % (2 * jnp.pi)
-        x1_2, x2_2 = (self.a / 2), (self.omega_B *
-                                    t + delta) % (2 * jnp.pi)
+        # x1_1, x2_1 = (self.a / 2), (self.omega_B * t) % (2 * jnp.pi)
+        # x1_2, x2_2 = (self.a / 2), (self.omega_B *
+        #                             t + delta) % (2 * jnp.pi)
+        x1_1, x2_1 = 0, 0
+        x1_2, x2_2 = 0, 0
 
         return x1_1, x2_1, x1_2, x2_2
 
     # assumes U with ghost cells
     def check_U(self, lattice: Lattice, U: ArrayLike, t: float) -> Array:
-        # g = lattice.num_g
-        # # prevent inflow from inner boundary
-        # rho = U[:, :, 0]
-        # vr = U[:, :, 1] / rho
-        # vr = vr.at[:g, :].set(jnp.minimum(vr[:g, :], 0))
-        # U.at[:g, :, 1].set(rho[:g, :] * vr[:g, :])
+        g = lattice.num_g
+        if self.coords == Coords.POLAR: # prevent outflow from inner boundary
+            rho = U[:, :, 0]
+            vr = U[:, :, 1] / rho
+            vr = vr.at[:g, :].set(jnp.minimum(vr[:g, :], 0))
+            U = U.at[:g, :, 1].set(rho[:g, :] * vr[:g, :])
         return U
 
     def diagnostics(self):

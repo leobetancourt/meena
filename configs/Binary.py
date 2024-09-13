@@ -209,7 +209,7 @@ class Binary(Hydro):
     def source(self, U: ArrayLike, X1, X2, t: float) -> Array:
         S = jnp.zeros_like(U)
         x1_1, x2_1, x1_2, x2_2 = self.get_positions(t)
-
+ 
         # gravity
         S += self.BH_gravity(U, X1, X2, x1_1, x2_1) + \
             self.BH_gravity(U, X1, X2, x1_2, x2_2)

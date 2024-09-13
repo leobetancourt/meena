@@ -153,7 +153,7 @@ class ExcisedBinary(Hydro):
         return True
         
     def resolution(self) -> tuple[int, int]:
-        return (500, 3000)
+        return (100, 600)
     
     def t_end(self) -> float:
         return 300 * 2 * jnp.pi

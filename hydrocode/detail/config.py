@@ -49,6 +49,11 @@ class Lattice:
 
 
 class Hydro(ABC):
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            print(key, value)
+            setattr(self, key, value)
+    
     @abstractmethod
     def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
         pass

@@ -5,22 +5,22 @@ from jax.typing import ArrayLike
 from jax import Array, jit
 import jax.numpy as jnp
 
-from hydrocode import Hydro, Lattice, Primitives, Conservatives, BoundaryCondition, Coords
+from hydrocode import Hydro, Lattice, Primitives, Conservatives, BoundaryCondition
 from src.common.helpers import cartesian_to_polar, get_prims
 
 
 @partial(jit, static_argnames=["hydro", "lattice"])
-def get_accr_rate(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float, dt: float) -> float:
+def get_accr_rate(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
     dA = lattice.dX1 * lattice.dX2
     x1_1, x2_1, x1_2, x2_2 = hydro.get_positions(t)
     sink_source = hydro.BH_sink(U, lattice.X1, lattice.X2, x1_1, x2_1) + \
             hydro.BH_sink(U, lattice.X1, lattice.X2, x1_2, x2_2)
-    m_dot = (sink_source[..., 0] * dA) / dt
+    m_dot = (sink_source[..., 0] * dA)
     return jnp.sum(m_dot)
 
 
 @partial(jit, static_argnames=["hydro", "lattice"])
-def get_torque1(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float, dt: float) -> float:
+def get_torque1(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
     x1_1, x2_1, x1_2, x2_2 = hydro.get_positions(t)
     rho = U[..., 0]
     x_bh, y_bh = x1_1, x2_1
@@ -39,7 +39,7 @@ def get_torque1(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayL
 
 
 @partial(jit, static_argnames=["hydro", "lattice"])
-def get_torque2(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float, dt: float) -> float:
+def get_torque2(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
     x1_1, x2_1, x1_2, x2_2 = hydro.get_positions(t)
     rho = U[..., 0]
     x_bh, y_bh = x1_2, x2_2
@@ -57,7 +57,7 @@ def get_torque2(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayL
     return T
 
 
-def get_eccentricity(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float, dt: float):
+def get_eccentricity(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
     x, y = lattice.X1, lattice.X2
     r = jnp.sqrt(x ** 2 + y ** 2)
 
@@ -76,13 +76,13 @@ def get_eccentricity(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[A
 
 
 @partial(jit, static_argnames=["hydro", "lattice"])
-def get_eccentricity_x(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float, dt: float):
-    return get_eccentricity(hydro, lattice, U, flux, t, dt)[0]
+def get_eccentricity_x(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
+    return get_eccentricity(hydro, lattice, U, flux, t)[0]
 
 
 @partial(jit, static_argnames=["hydro", "lattice"])
-def get_eccentricity_y(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float, dt: float):
-    return get_eccentricity(hydro, lattice, U, flux, t, dt)[1]
+def get_eccentricity_y(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
+    return get_eccentricity(hydro, lattice, U, flux, t)[1]
 
 
 @dataclass(frozen=True)
@@ -119,12 +119,16 @@ class Binary(Hydro):
                                 * (1 - (1 / (self.mach ** 2))))
         omega = ((omega_naught ** -4) + (self.omega_B ** -4)) ** (-1/4)
         v_theta = omega * r
+        
+        u = v_r * jnp.cos(theta) - v_theta * jnp.sin(theta)
+        v = v_r * jnp.sin(theta) + v_theta * jnp.cos(theta)
+
 
         return jnp.array([
             rho,
-            rho * v_r,
-            rho * v_theta,
-            self.E((rho, v_r, v_theta, jnp.zeros_like(rho)), X1, X2, t)
+            rho * u,
+            rho * v,
+            self.E((rho, u, v, jnp.zeros_like(rho)), X1, X2, t)
         ]).transpose((1, 2, 0))
 
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
@@ -132,10 +136,10 @@ class Binary(Hydro):
         return ((-size, size), (-size, size))
 
     def resolution(self) -> tuple[int, int]:
-        return (2000, 2000)
+        return (1000, 1000)
 
     def t_end(self) -> float:
-        return 300 * 2 * jnp.pi
+        return 10 * 2 * jnp.pi
 
     def coords(self) -> str:
         return "cartesian"
@@ -175,34 +179,32 @@ class Binary(Hydro):
         return rho * self.c_s(cons, X1, X2, t) ** 2
 
     def BH_gravity(self, U, x, y, x_bh, y_bh):
-        r, theta = cartesian_to_polar(x, y)
-        r_bh, theta_bh = jnp.sqrt(
-            x_bh ** 2 + y_bh ** 2), jnp.arctan2(y_bh, x_bh)
-
-        delta_theta = theta - theta_bh
-        dist = jnp.sqrt(r ** 2 + r_bh ** 2 - 2 * r *
-                        r_bh * jnp.cos(delta_theta))
-        g_acc = -self.G * (self.M / 2) / (dist ** 2 + self.eps ** 2)
-
-        g_r = g_acc * (r - r_bh * jnp.cos(delta_theta)) / dist
-        g_theta = g_acc * (r_bh * jnp.sin(delta_theta)) / dist
+        dx, dy = x - x_bh, y - y_bh
+        r = jnp.sqrt(dx ** 2 + dy ** 2)
+        
+        
+        g_acc = - self.G * (self.M / 2) / (r ** 2 + self.eps ** 2)
+        g_x, g_y = g_acc * dx / (r + self.eps), g_acc * dy / (r + self.eps)
         rho = U[..., 0]
         u, v = U[..., 1] / rho, U[..., 2] / rho
 
         return jnp.array([
             jnp.zeros_like(rho),
-            rho * g_r,
-            rho * g_theta,
-            rho * (u * g_r + v * g_theta)
+            rho * g_x,
+            rho * g_y,
+            rho * (u * g_x + v * g_y)
         ]).transpose((1, 2, 0))
 
     def BH_sink(self, U, x, y, x_bh, y_bh):
-        rho = U[..., 0]
+        rho= U[..., 0]
+        u, v =  U[..., 1] / rho, U[..., 2] / rho
         dx, dy = x - x_bh, y - y_bh
         r = jnp.sqrt(dx ** 2 + dy ** 2)
         r_sink = self.eps
-        m_dot = jnp.exp(-(r / r_sink) ** 6) * (self.t_sink ** -1) * rho
-        S = jnp.zeros_like(U).at[:, :, 0].set(-m_dot)
+        sink = jnp.exp(-((r / r_sink) ** 6)) * (self.t_sink ** -1) * rho
+        S = jnp.zeros_like(U).at[:, :, 0].set(-sink)
+        S = S.at[:, :, 1].set(-sink * u)
+        S = S.at[:, :, 2].set(-sink * v)
 
         return S
 
@@ -215,8 +217,7 @@ class Binary(Hydro):
             self.BH_gravity(U, X1, X2, x1_2, x2_2)
 
         # sinks
-        S += self.BH_sink(U, X1, X2, x1_1, x2_1) + \
-            self.BH_sink(U, X1, X2, x1_2, x2_2)
+        S += self.BH_sink(U, X1, X2, x1_1, x2_1) + self.BH_sink(U, X1, X2, x1_2, x2_2)
 
         return S
 
@@ -233,24 +234,25 @@ class Binary(Hydro):
         g = lattice.num_g
         # buffer
         x, y = lattice.X1, lattice.X2
-        # r, theta = cartesian_to_polar(x, y)
-        # buff = r >= (0.95 * lattice.x1_max)
-        # omega_naught = jnp.sqrt((self.G * self.M / (r ** 3))
-        #                         * (1 - (1 / (self.mach ** 2))))
-        # omega = ((omega_naught ** -4) + (self.omega_B ** -4)) ** (-1/4)
-        # v_theta = omega * r
-        # u_k, v_k = - v_theta * \
-        #     jnp.sin(theta), v_theta * jnp.cos(theta)
-        # rho = U[g:-g, g:-g, 0][buff]
-        # e = self.E((rho, u_k, v_k, jnp.zeros_like(rho)), x, y, t)
+        r, theta = cartesian_to_polar(x, y)
+        buff = r >= (0.95 * lattice.x1_max)
+        omega_naught = jnp.sqrt((self.G * self.M / (r ** 3 + self.eps ** 3))
+                                * (1 - (1 / (self.mach ** 2))))
+        omega = ((omega_naught ** -4) + (self.omega_B ** -4)) ** (-1/4)
+        v_theta = omega * r
+        u_k, v_k = - v_theta * \
+            jnp.sin(theta), v_theta * jnp.cos(theta)
+        rho = U[g:-g, g:-g, 0]
+        e = self.E((rho, u_k, v_k, jnp.zeros_like(rho)), x, y, t)
 
-        # U = U.at[g:-g, g:-g, 1][buff].set(rho * u_k)
-        # U = U.at[g:-g, g:-g, 2][buff].set(rho * v_k)
-        # U = U.at[g:-g, g:-g, 3][buff].set(e)
+
+        U = U.at[g:-g, g:-g, 1].set(jnp.where(buff, rho * u_k, U[g:-g, g:-g, 1]))
+        U = U.at[g:-g, g:-g, 2].set(jnp.where(buff, rho * v_k, U[g:-g, g:-g, 2]))
+        U = U.at[g:-g, g:-g, 3].set(jnp.where(buff, e, U[g:-g, g:-g, 3]))
 
         # check for invalid zones
         rho = U[g:-g, g:-g, 0]
-        mask = rho <= 0
+        mask = rho <= 1e-3
         U = U.at[g:-g, g:-g, 0].set(jnp.where(mask, 1e-6, U[g:-g, g:-g, 0]))
         U = U.at[g:-g, g:-g, 1].set(jnp.where(mask, 0, U[g:-g, g:-g, 1]))
         U = U.at[g:-g, g:-g, 2].set(jnp.where(mask, 0, U[g:-g, g:-g, 2]))

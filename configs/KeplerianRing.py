@@ -10,7 +10,7 @@ from hydrocode import Hydro, Lattice, Primitives, Conservatives, BoundaryConditi
 from src.common.helpers import load_U
 
 @partial(jit, static_argnames=["hydro", "lattice"])
-def get_accr_rate(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float, dt: float) -> float:
+def get_accr_rate(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
     dr = lattice.x1_intf[1] - lattice.x1_intf[0]
     dtheta = lattice.x2_intf[1] - lattice.x2_intf[0]
     dA = lattice.x1[0] * dr * dtheta
@@ -20,7 +20,7 @@ def get_accr_rate(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[Arra
 
 
 @partial(jit, static_argnames=["hydro", "lattice"])
-def get_angular_mom_rate(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float, dt: float) -> float:
+def get_angular_mom_rate(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
     dr = lattice.x1_intf[1] - lattice.x1_intf[0]
     dtheta = lattice.x2_intf[1] - lattice.x2_intf[0]
     dA = lattice.x1[0] * dr * dtheta
@@ -32,7 +32,7 @@ def get_angular_mom_rate(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tup
 
 
 @partial(jit, static_argnames=["hydro", "lattice"])
-def get_torque1(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float, dt: float) -> float:
+def get_torque1(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
     x1_1, x2_1, x1_2, x2_2 = hydro.get_positions(t)
     rho = U[..., 0]
     r, theta = lattice.X1, lattice.X2
@@ -54,7 +54,7 @@ def get_torque1(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayL
 
 
 @partial(jit, static_argnames=["hydro", "lattice"])
-def get_torque2(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float, dt: float) -> float:
+def get_torque2(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
     x1_1, x2_1, x1_2, x2_2 = hydro.get_positions(t)
     rho = U[..., 0]
     r, theta = lattice.X1, lattice.X2
@@ -75,7 +75,7 @@ def get_torque2(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayL
 
     return T
 
-def get_eccentricity(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float, dt: float):
+def get_eccentricity(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
     rho = U[..., 0]
     vr, vtheta = U[..., 1] / rho, U[..., 2] / rho
     r, theta = lattice.X1, lattice.X2
@@ -98,13 +98,13 @@ def get_eccentricity(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[A
 
 
 @partial(jit, static_argnames=["hydro", "lattice"])
-def get_eccentricity_x(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float, dt: float):
-    return get_eccentricity(hydro, lattice, U, flux, t, dt)[0]
+def get_eccentricity_x(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
+    return get_eccentricity(hydro, lattice, U, flux, t)[0]
 
 
 @partial(jit, static_argnames=["hydro", "lattice"])
-def get_eccentricity_y(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float, dt: float):
-    return get_eccentricity(hydro, lattice, U, flux, t, dt)[1]
+def get_eccentricity_y(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
+    return get_eccentricity(hydro, lattice, U, flux, t)[1]
 
 
 @dataclass(frozen=True)

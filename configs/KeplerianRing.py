@@ -117,13 +117,14 @@ class KeplerianRing(Hydro):
     eps: float = 0.05 * a
     omega_B: float = 1
     R_0: float = 4 * a
+    sigma: float = 0.2 * a
 
     def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
         t = 0
         r, theta = X1, X2
 
         # surface density
-        gaussian = self.Sigma_0 * jnp.exp(- ((r - self.R_0) ** 2) / (2 * ((0.2 * self.a) ** 2)))
+        gaussian = self.Sigma_0 * jnp.exp(- ((r - self.R_0) ** 2) / (2 * (self.sigma ** 2)))
         floor = 0.01
         rho = jnp.maximum(floor, gaussian)
 
@@ -145,7 +146,7 @@ class KeplerianRing(Hydro):
         return True
 
     def resolution(self) -> tuple[int, int]:
-        return (300, 1800)
+        return (200, 1200)
 
     def t_end(self) -> float:
         tau_end = 2
@@ -218,22 +219,20 @@ class KeplerianRing(Hydro):
 
     def get_positions(self, t):
         delta = jnp.pi
-        # x1_1, x2_1 = (self.a / 2), (self.omega_B * t) % (2 * jnp.pi)
-        # x1_2, x2_2 = (self.a / 2), (self.omega_B *
-        #                             t + delta) % (2 * jnp.pi)
-        x1_1, x2_1 = 0, 0
-        x1_2, x2_2 = 0, 0
+        x1_1, x2_1 = (self.a / 2), (self.omega_B * t) % (2 * jnp.pi)
+        x1_2, x2_2 = (self.a / 2), (self.omega_B * t + delta) % (2 * jnp.pi)
+        # x1_1, x2_1 = 0, 0
+        # x1_2, x2_2 = 0, 0
 
         return x1_1, x2_1, x1_2, x2_2
 
     # assumes U with ghost cells
     def check_U(self, lattice: Lattice, U: ArrayLike, t: float) -> Array:
         g = lattice.num_g
-        if self.coords == Coords.POLAR: # prevent outflow from inner boundary
-            rho = U[:, :, 0]
-            vr = U[:, :, 1] / rho
-            vr = vr.at[:g, :].set(jnp.minimum(vr[:g, :], 0))
-            U = U.at[:g, :, 1].set(rho[:g, :] * vr[:g, :])
+        rho = U[:, :, 0]
+        vr = U[:, :, 1] / rho
+        vr = vr.at[:g, :].set(jnp.minimum(vr[:g, :], 0))
+        U = U.at[:g, :, 1].set(rho[:g, :] * vr[:g, :])
         return U
 
     def diagnostics(self):

@@ -31,6 +31,9 @@ class RT(Hydro):
     def t_end(self) -> float:
         return 18
     
+    def PLM(self) -> float:
+        return True
+    
     def save_interval(self) -> float:
         return 0.1
         
@@ -38,7 +41,7 @@ class RT(Hydro):
         return ((0, 0.5), (0, 1.5))
         
     def resolution(self) -> tuple[int, int]:
-        return (100, 150)
+        return (300, 750)
     
     def bc_x1(self) -> BoundaryCondition:
         return ("periodic", "periodic")

@@ -21,10 +21,7 @@ def load_config(config_file):
 
 def run_config(config_file, checkpoint, plot, plot_range, output_dir, **kwargs):
     config_class = load_config(config_file)
-    # print(config_class.__dict__)
-    print(kwargs)
     hydro = config_class(**kwargs)
-    # print(hydro.__dict__)
     
     lattice = Lattice(
         coords=hydro.coords(),
@@ -41,7 +38,6 @@ def run_config(config_file, checkpoint, plot, plot_range, output_dir, **kwargs):
 
     if checkpoint:  # user specifies a checkpoint file to run from
         U, t = load_U(checkpoint)
-        print(t)
     else:
         U, t = hydro.initialize(
             lattice.X1, lattice.X2), hydro.t_start()

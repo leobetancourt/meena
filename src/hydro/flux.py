@@ -1,11 +1,12 @@
 import jax.numpy as jnp
-from jax import vmap, Array
+from jax import vmap, Array, debug
 from jax.typing import ArrayLike
-from ..common.helpers import F_from_prim, G_from_prim, get_prims, add_ghost_cells, apply_bcs
+from ..common.helpers import U_from_prim, F_from_prim, G_from_prim, get_prims, add_ghost_cells, apply_bcs, minmod
 
 
 def lambdas(v: ArrayLike, c_s: ArrayLike) -> tuple[Array, Array]:
     return v + c_s, v - c_s
+
 
 def alphas(v_L: ArrayLike, v_R: ArrayLike, c_s_L: ArrayLike, c_s_R: ArrayLike) -> tuple[Array, Array]:
     lambda_L = lambdas(v_L, c_s_L)
@@ -19,8 +20,8 @@ def alphas(v_L: ArrayLike, v_R: ArrayLike, c_s_L: ArrayLike, c_s_R: ArrayLike) -
 
 @vmap
 @vmap
-def hll_flux_x1(F_L: ArrayLike, F_R: ArrayLike, 
-                U_L: ArrayLike, U_R: ArrayLike, 
+def hll_flux_x1(F_L: ArrayLike, F_R: ArrayLike,
+                U_L: ArrayLike, U_R: ArrayLike,
                 c_s_L: ArrayLike, c_s_R: ArrayLike) -> Array:
     rho_L, rho_R = U_L[0], U_R[0]
     v_L, v_R = U_L[1] / rho_L, U_R[1] / rho_R
@@ -116,21 +117,13 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
     g = lattice.num_g
     x1, x2 = lattice.x1, lattice.x2
 
-    # add ghost regions to x1 and x2
-    x1_g = jnp.concatenate([
-        jnp.array([x1[0] - 2 * (x1[1] - x1[0]),
-                   x1[0] - (x1[1] - x1[0])]),
-        x1,
-        jnp.array([x1[-1] + (x1[-1] - x1[-2]),
-                   x1[-1] + 2 * (x1[-1] - x1[-2])])
-    ])
-    x2_g = jnp.concatenate([
-        jnp.array([x2[0] - 2 * (x2[1] - x2[0]),
-                   x2[0] - (x2[1] - x2[0])]),
-        x2,
-        jnp.array([x2[-1] + (x2[-1] - x2[-2]),
-                   x2[-1] + 2 * (x2[-1] - x2[-2])])
-    ])
+    x1_left = x1[0] - (x1[1] - x1[0]) * jnp.arange(g, 0, -1)
+    x1_right = x1[-1] + (x1[-1] - x1[-2]) * jnp.arange(1, g + 1)
+    x1_g = jnp.concatenate([x1_left, x1, x1_right])
+
+    x2_left = x2[0] - (x2[1] - x2[0]) * jnp.arange(g, 0, -1)
+    x2_right = x2[-1] + (x2[-1] - x2[-2]) * jnp.arange(1, g + 1)
+    x2_g = jnp.concatenate([x2_left, x2, x2_right])
 
     X1, X2 = jnp.meshgrid(x1_g, x2_g, indexing="ij")
 
@@ -139,51 +132,148 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
     U = apply_bcs(lattice, U)
     U = hydro.check_U(lattice, U, t)
 
-    prims = get_prims(hydro, U, X1, X2, t)
-    F = F_from_prim(hydro, prims, X1, X2, t)
-    G = G_from_prim(hydro, prims, X1, X2, t)
-
-    F_L = F[(g-1):-(g+1), g:-g, :]
-    F_C = F[g:-g, g:-g, :]
-    F_R = F[(g+1):-(g-1), g:-g, :]
-    G_L = G[g:-g, (g-1):-(g+1), :]
-    G_C = G[g:-g, g:-g, :]
-    G_R = G[g:-g, (g+1):-(g-1), :]
+    X1_LL = X1[:-(g+2), g:-g]
     X1_L = X1[(g-1):-(g+1), g:-g]
     X1_C = X1[g:-g, g:-g]
     X1_R = X1[(g+1):-(g-1), g:-g]
+    X1_RR = X1[(g+2):, g:-g]
+    X2_LL = X2[g:-g, :-(g+2)]
     X2_L = X2[g:-g, (g-1):-(g+1)]
     X2_C = X2[g:-g, g:-g]
     X2_R = X2[g:-g, (g+1):-(g-1)]
+    X2_RR = X2[g:-g, (g+2):]
 
-    U_L = U[(g-1):-(g+1), g:-g, :]
-    U_C = U[g:-g, g:-g, :]
-    U_R = U[(g+1):-(g-1), g:-g, :]
-    prims_L = get_prims(hydro, U_L, X1_L, X2_C, t)
-    prims_C = get_prims(hydro, U_C, X1_C, X2_C, t)
-    prims_R = get_prims(hydro, U_R, X1_R, X2_C, t)
-    c_s_L = hydro.c_s(prims_L, X1_L, X2_C, t)
-    c_s_C = hydro.c_s(prims_C, X1_C, X2_C, t)
-    c_s_R = hydro.c_s(prims_R, X1_R, X2_C, t)
-    # F_(i-1/2)
-    F_l = hll_flux_x1(F_L, F_C, U_L, U_C, c_s_L, c_s_C)
-    # F_(i+1/2)
-    F_r = hll_flux_x1(F_C, F_R, U_C, U_R, c_s_C, c_s_R)
+    if hydro.PLM():
+        theta = hydro.theta_PLM()
 
-    U_L = U[g:-g, (g-1):-(g+1), :]
-    U_C = U[g:-g, g:-g, :]
-    U_R = U[g:-g, (g+1):-(g-1)]
-    prims_L = get_prims(hydro, U_L, X1_C, X2_L, t)
-    prims_C = get_prims(hydro, U_C, X1_C, X2_C, t)
-    prims_R = get_prims(hydro, U_R, X1_C, X2_R, t)
-    c_s_L = hydro.c_s(prims_L, X1_C, X2_L, t)
-    c_s_C = hydro.c_s(prims_C, X1_C, X2_C, t)
-    c_s_R = hydro.c_s(prims_R, X1_C, X2_R, t)
-    # G_(i-1/2)
-    G_l = hll_flux_x2(G_L, G_C, U_L, U_C, c_s_L, c_s_C)
-    # F_(i+1/2)
-    G_r = hll_flux_x2(G_C, G_R, U_C, U_R, c_s_C, c_s_R)
-    
+        prims_C = jnp.asarray(get_prims(hydro, U[g:-g, g:-g], X1_C, X2_C, t))
+        prims_LL = jnp.asarray(
+            get_prims(hydro, U[:-(g+2), g:-g], X1_LL, X2_C, t))
+        prims_L = jnp.asarray(
+            get_prims(hydro, U[(g-1):-(g+1), g:-g], X1_L, X2_C, t))
+        prims_R = jnp.asarray(
+            get_prims(hydro, U[(g+1):-(g-1), g:-g], X1_R, X2_C, t))
+        prims_RR = jnp.asarray(
+            get_prims(hydro, U[(g+2):, g:-g], X1_RR, X2_C, t))
+
+        # left cell interface (i-1/2)
+        X1_l = (X1_L + X1_C) / 2
+        # left-biased state
+        prims_ll = prims_L - 0.5 * \
+            minmod(theta * (prims_L - prims_LL), 0.5 *
+                   (prims_C - prims_LL), theta * (prims_C - prims_L))
+        # right-biased state
+        prims_lr = prims_C + 0.5 * \
+            minmod(theta * (prims_C - prims_L), 0.5 *
+                   (prims_R - prims_L), theta * (prims_R - prims_C))
+
+        # right cell interface (i+1/2)
+        X1_r = (X1_C + X1_R) / 2
+        # left-biased state
+        prims_rl = prims_C - 0.5 * \
+            minmod(theta * (prims_C - prims_L), 0.5 *
+                   (prims_R - prims_L), theta * (prims_R - prims_C))
+        # right-biased state
+        prims_rr = prims_R + 0.5 * \
+            minmod(theta * (prims_R - prims_C), 0.5 *
+                   (prims_RR - prims_C), theta * (prims_RR - prims_R))
+
+        F_ll, F_lr, F_rl, F_rr = F_from_prim(hydro, prims_ll, X1_l, X2_C, t), F_from_prim(
+            hydro, prims_lr, X1_l, X2_C, t), F_from_prim(hydro, prims_rl, X1_r, X2_C, t), F_from_prim(hydro, prims_rr, X1_r, X2_C, t)
+        U_ll, U_lr, U_rl, U_rr = U_from_prim(hydro, prims_ll, X1_l, X2_C, t), U_from_prim(
+            hydro, prims_lr, X1_l, X2_C, t), U_from_prim(hydro, prims_rl, X1_r, X2_C, t), U_from_prim(hydro, prims_rr, X1_r, X2_C, t)
+        c_s_ll, c_s_lr, c_s_rl, c_s_rr = hydro.c_s(prims_ll, X1_l, X2_C, t), hydro.c_s(
+            prims_lr, X1_l, X2_C, t), hydro.c_s(prims_rl, X1_r, X2_C, t), hydro.c_s(prims_rr, X1_r, X2_C, t)
+
+        F_l, F_r = hll_flux_x1(F_ll, F_lr, U_ll, U_lr, c_s_ll, c_s_lr), hll_flux_x1(
+            F_rl, F_rr, U_rl, U_rr, c_s_rl, c_s_rr)
+
+        prims_LL = jnp.asarray(
+            get_prims(hydro, U[g:-g, :-(g+2)], X1_C, X2_LL, t))
+        prims_L = jnp.asarray(
+            get_prims(hydro, U[g:-g, (g-1):-(g+1)], X1_C, X2_L, t))
+        prims_R = jnp.asarray(
+            get_prims(hydro, U[g:-g, (g+1):-(g-1)], X1_C, X2_R, t))
+        prims_RR = jnp.asarray(
+            get_prims(hydro, U[g:-g, (g+2):], X1_C, X2_RR, t))
+
+        # left cell interface (i-1/2)
+        X2_l = (X2_L + X2_C) / 2
+        # left-biased state
+        prims_ll = prims_L - 0.5 * \
+            minmod(theta * (prims_L - prims_LL), 0.5 *
+                   (prims_C - prims_LL), theta * (prims_C - prims_L))
+        # right-biased state
+        prims_lr = prims_C + 0.5 * \
+            minmod(theta * (prims_C - prims_L), 0.5 *
+                   (prims_R - prims_L), theta * (prims_R - prims_C))
+
+        # right cell interface (i+1/2)
+        X2_r = (X2_C + X2_R) / 2
+        # left-biased state
+        prims_rl = prims_C - 0.5 * \
+            minmod(theta * (prims_C - prims_L), 0.5 *
+                   (prims_R - prims_L), theta * (prims_R - prims_C))
+        # right-biased state
+        prims_rr = prims_R + 0.5 * \
+            minmod(theta * (prims_R - prims_C), 0.5 *
+                   (prims_RR - prims_C), theta * (prims_RR - prims_R))
+
+        G_ll, G_lr, G_rl, G_rr = G_from_prim(hydro, prims_ll, X1_C, X2_l, t), G_from_prim(
+            hydro, prims_lr, X1_C, X2_l, t), G_from_prim(hydro, prims_rl, X1_C, X2_r, t), G_from_prim(hydro, prims_rr, X1_C, X2_r, t)
+        U_ll, U_lr, U_rl, U_rr = U_from_prim(hydro, prims_ll, X1_C, X2_l, t), U_from_prim(
+            hydro, prims_lr, X1_C, X2_l, t), U_from_prim(hydro, prims_rl, X1_C, X2_r, t), U_from_prim(hydro, prims_rr, X1_C, X2_r, t)
+        c_s_ll, c_s_lr, c_s_rl, c_s_rr = hydro.c_s(prims_ll, X1_C, X2_l, t), hydro.c_s(
+            prims_lr, X1_C, X2_l, t), hydro.c_s(prims_rl, X1_C, X2_r, t), hydro.c_s(prims_rr, X1_C, X2_r, t)
+
+        G_l, G_r = hll_flux_x2(G_ll, G_lr, U_ll, U_lr, c_s_ll, c_s_lr), hll_flux_x2(
+            G_rl, G_rr, U_rl, U_rr, c_s_rl, c_s_rr)
+    else:
+        prims = get_prims(hydro, U, X1, X2, t)
+        F = F_from_prim(hydro, prims, X1, X2, t)
+        G = G_from_prim(hydro, prims, X1, X2, t)
+
+        F_L = F[(g-1):-(g+1), g:-g, :]
+        F_C = F[g:-g, g:-g, :]
+        F_R = F[(g+1):-(g-1), g:-g, :]
+        G_L = G[g:-g, (g-1):-(g+1), :]
+        G_C = G[g:-g, g:-g, :]
+        G_R = G[g:-g, (g+1):-(g-1), :]
+        X1_L = X1[(g-1):-(g+1), g:-g]
+        X1_C = X1[g:-g, g:-g]
+        X1_R = X1[(g+1):-(g-1), g:-g]
+        X2_L = X2[g:-g, (g-1):-(g+1)]
+        X2_C = X2[g:-g, g:-g]
+        X2_R = X2[g:-g, (g+1):-(g-1)]
+
+        U_L = U[(g-1):-(g+1), g:-g, :]
+        U_C = U[g:-g, g:-g, :]
+        U_R = U[(g+1):-(g-1), g:-g, :]
+        prims_L = get_prims(hydro, U_L, X1_L, X2_C, t)
+        prims_C = get_prims(hydro, U_C, X1_C, X2_C, t)
+        prims_R = get_prims(hydro, U_R, X1_R, X2_C, t)
+        c_s_L = hydro.c_s(prims_L, X1_L, X2_C, t)
+        c_s_C = hydro.c_s(prims_C, X1_C, X2_C, t)
+        c_s_R = hydro.c_s(prims_R, X1_R, X2_C, t)
+        # F_(i-1/2)
+        F_l = hll_flux_x1(F_L, F_C, U_L, U_C, c_s_L, c_s_C)
+        # F_(i+1/2)
+        F_r = hll_flux_x1(F_C, F_R, U_C, U_R, c_s_C, c_s_R)
+
+        U_L = U[g:-g, (g-1):-(g+1), :]
+        U_C = U[g:-g, g:-g, :]
+        U_R = U[g:-g, (g+1):-(g-1)]
+        prims_L = get_prims(hydro, U_L, X1_C, X2_L, t)
+        prims_C = get_prims(hydro, U_C, X1_C, X2_C, t)
+        prims_R = get_prims(hydro, U_R, X1_C, X2_R, t)
+        c_s_L = hydro.c_s(prims_L, X1_C, X2_L, t)
+        c_s_C = hydro.c_s(prims_C, X1_C, X2_C, t)
+        c_s_R = hydro.c_s(prims_R, X1_C, X2_R, t)
+        # G_(i-1/2)
+        G_l = hll_flux_x2(G_L, G_C, U_L, U_C, c_s_L, c_s_C)
+        # F_(i+1/2)
+        G_r = hll_flux_x2(G_C, G_R, U_C, U_R, c_s_C, c_s_R)
+
     if hydro.nu():
         Fv_l, Fv_r, Gv_l, Gv_r = viscosity(hydro, lattice, U, x1_g, x2_g)
         F_l += Fv_l

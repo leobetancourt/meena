@@ -12,16 +12,19 @@ def linspace_cells(min, max, num):
 
     return centers, interfaces
 
+
 def logspace_cells(min, max, num):
     interfaces = jnp.logspace(jnp.log10(min), jnp.log10(max), num + 1)
     centers = (interfaces[:-1] + interfaces[1:]) / 2
 
     return centers, interfaces
 
+
 def cartesian_to_polar(x, y):
     r = jnp.sqrt(x ** 2 + y ** 2)
     theta = jnp.arctan2(y, x)
     return r, theta
+
 
 def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█', printEnd="\r"):
     percent = ("{0:." + str(decimals) + "f}").format(100 *
@@ -32,6 +35,7 @@ def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, lengt
     # print new line on complete
     if iteration == total:
         print()
+
 
 def read_csv(path, compress=False):
     # Read the CSV file using pandas
@@ -48,6 +52,7 @@ def read_csv(path, compress=False):
             numpy_arrays[column] = df[column].values
 
     return numpy_arrays
+
 
 def save_to_h5(filename, t, U, hydro, lattice):
     rho, momx1, momx2, E = U[..., 0], U[..., 1], U[..., 2], U[..., 3]
@@ -100,8 +105,6 @@ def plot_grid(matrix, label, coords, x1, x2, vmin=None, vmax=None):
         fig, ax = plt.subplots()
         if vmin is None:
             vmin, vmax = jnp.min(matrix), jnp.max(matrix)
-        ax.set_xlim(-10, 10)
-        ax.set_ylim(-10, 10)
         c = ax.imshow(jnp.transpose(matrix), cmap="magma", interpolation='nearest',
                       origin='lower', extent=extent, vmin=vmin, vmax=vmax)
     elif coords == "polar":
@@ -111,8 +114,8 @@ def plot_grid(matrix, label, coords, x1, x2, vmin=None, vmax=None):
         ax.grid(False)
         ax.set_xticks([])
         ax.set_yticks([])
-        # ax.set_ylim(0, jnp.max(x1))
-        ax.set_ylim(0, 10)
+        ax.set_ylim(0, jnp.max(x1))
+        # ax.set_ylim(0, 10)
         ax.set_facecolor("black")
         circle_r = jnp.min(x1) - (x1[1] - x1[0]) / 2
         circle = Circle((0, 0), radius=circle_r, transform=ax.transData._b,
@@ -193,6 +196,18 @@ def get_prims(hydro, U, X1, X2, t):
     p = hydro.P((rho, u, v, e), X1, X2, t)
     return rho, u, v, p
 
+
+def U_from_prim(hydro, prims, X1, X2, t):
+    rho, u, v, _ = prims
+    e = hydro.E(prims, X1, X2, t)
+    return jnp.array([
+        rho,
+        rho * u,
+        rho * v,
+        e
+    ]).transpose((1, 2, 0))
+
+
 def F_from_prim(hydro, prims, X1, X2, t):
     rho, u, v, p = prims
     e = hydro.E(prims, X1, X2, t)
@@ -203,6 +218,7 @@ def F_from_prim(hydro, prims, X1, X2, t):
         (e + p) * u
     ]).transpose((1, 2, 0))
 
+
 def G_from_prim(hydro, prims, X1, X2, t):
     rho, u, v, p = prims
     e = hydro.E(prims, X1, X2, t)
@@ -212,3 +228,7 @@ def G_from_prim(hydro, prims, X1, X2, t):
         rho * (v ** 2) + p,
         (e + p) * v
     ]).transpose((1, 2, 0))
+
+
+def minmod(x, y, z):
+    return (1 / 4) * jnp.absolute(jnp.sign(x) + jnp.sign(y)) * (jnp.sign(x) + jnp.sign(z)) * jnp.minimum(jnp.minimum(jnp.absolute(x), jnp.absolute(y)), jnp.absolute(z))

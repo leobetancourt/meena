@@ -6,18 +6,22 @@ from jax.typing import ArrayLike
 
 from src.common.helpers import linspace_cells, logspace_cells
 
+
 class Boundary:
     OUTFLOW = "outflow"
     REFLECTIVE = "reflective"
     PERIODIC = "periodic"
 
+
 class Coords:
     CARTESIAN = "cartesian"
     POLAR = "polar"
 
+
 Primitives = tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike]
 Conservatives = tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike]
 BoundaryCondition = tuple[str, str]
+
 
 class Lattice:
     def __init__(self, coords: str, bc_x1: BoundaryCondition, bc_x2: BoundaryCondition, nx1: int, nx2: int, x1_range: tuple[float, float], x2_range: tuple[float, float], num_g: int = 2, log_x1: bool = False, log_x2: bool = False):
@@ -53,7 +57,7 @@ class Hydro(ABC):
         for key, value in kwargs.items():
             print(key, value)
             setattr(self, key, value)
-    
+
     @abstractmethod
     def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
         pass
@@ -64,10 +68,10 @@ class Hydro(ABC):
 
     def t_start(self) -> float:
         return 0
-    
+
     def t_end(self) -> float:
         return 1
-    
+
     def save_interval(self) -> float:
         return None
 
@@ -76,15 +80,21 @@ class Hydro(ABC):
 
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
         return ((0, 1), (0, 1))
-    
+
     def num_g(self) -> int:
         return 2
-    
+
     def log_x1(self) -> bool:
         return False
-    
+
     def log_x2(self) -> bool:
         return False
+
+    def PLM(self) -> bool:
+        return False
+    
+    def theta_PLM(self) -> float:
+        return 1.5
 
     def cfl(self) -> float:
         return 0.4
@@ -107,23 +117,23 @@ class Hydro(ABC):
     def nu(self) -> float:
         return None
 
-    def E(self, prims: Primitives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
+    def E(self, prims: Primitives, X1: ArrayLike = None, X2: ArrayLike = None, t: float = None) -> Array:
         rho, u, v, p = prims
         return (p / (self.gamma() - 1)) + (0.5 * rho * (u ** 2 + v ** 2))
 
-    def c_s(self, prims: Primitives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
+    def c_s(self, prims: Primitives, X1: ArrayLike = None, X2: ArrayLike = None, t: float = None) -> Array:
         rho, u, v, p = prims
         return jnp.sqrt(self.gamma() * p / rho)
 
-    def P(self, cons: Conservatives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
+    def P(self, cons: Conservatives, X1: ArrayLike = None, X2: ArrayLike = None, t: float = None) -> Array:
         rho, u, v, e = cons
         return (self.gamma() - 1) * (e - (0.5 * rho * (u ** 2 + v ** 2)))
 
-    def source(self, U: ArrayLike, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
+    def source(self, U: ArrayLike, X1: ArrayLike = None, X2: ArrayLike = None, t: float = None) -> Array:
         return jnp.zeros_like(U)
 
     def check_U(self, lattice: Lattice, U: ArrayLike, t: float) -> Array:
         return U
-    
+
     def diagnostics(self):
         return []

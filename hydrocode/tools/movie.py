@@ -6,8 +6,6 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-plt.rcParams['figure.dpi'] = 800
-plt.rcParams['savefig.dpi'] = 800
 
 
 def get_h5_files_in_range(directory, t_min, t_max):
@@ -28,25 +26,32 @@ def get_h5_files_in_range(directory, t_min, t_max):
     return sorted(files_in_range, key=lambda x: float(re.match(pattern, os.path.basename(x)).group(1)))
 
 
-def process_h5_files(file_list):
+def generate_movie(checkpoint_path, t_min, t_max, var, title, fps=24, vmin=None, vmax=None):
+    file_list = get_h5_files_in_range(checkpoint_path, t_min, t_max)
+    labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$", "v": r"$v$", "energy": r"$E$"}
     with h5py.File(file_list[0], 'r') as f:
         coords = f.attrs["coords"]
         x1 = f.attrs["x1"]
         x2 = f.attrs["x2"]
-        t = f.attrs["t"] / (2 * np.pi)
-        matrix = np.log10(f["rho"][...])
-        # matrix = np.array(f["rho"][...])
+        t = f.attrs["t"]
+        rho, momx1, momx2, e = np.array(f["rho"]), np.array(f["momx1"]), np.array(f["momx2"]), np.array(f["E"])
+        if var == "density":
+            matrix = rho
+        elif var == "log density":
+            matrix = np.log10(rho)
+        elif var == "u":
+            matrix = momx1 / rho
+        elif var == "v":
+            matrix = momx2 / rho
+        elif var == "energy":
+            matrix = e
 
-    # vmin, vmax = -3, 0.5
-    vmin, vmax = -6, -1
     fig, ax, c, cb = plot_grid(
-        matrix, r"$\log_{10} \Sigma$", coords=coords, x1=x1, x2=x2, vmin=vmin, vmax=vmax)
-    title = f"t = {t:.2f}" + r", $\mathcal{M}=10$"
-    ax.set_title(title)
-    fps = 24
+        matrix, labels[var], coords=coords, x1=x1, x2=x2, vmin=vmin, vmax=vmax)
+    ax.set_title(title + f", t = {t:.2f}")
     FFMpegWriter = animation.writers['ffmpeg']
     writer = FFMpegWriter(fps=fps)
-    PATH = f"./visual"
+    PATH = checkpoint_path.split("checkpoints/")[0]
     if not os.path.exists(PATH):
         os.makedirs(PATH)
     cm = writer.saving(fig, f"{PATH}/movie.mp4", 800)
@@ -55,23 +60,26 @@ def process_h5_files(file_list):
         for i in range(len(file_list)):
             file_path = file_list[i]
             with h5py.File(file_path, 'r') as f:
-                t = f.attrs["t"] / (2 * np.pi)
-                matrix = np.log10(f["rho"][...])
-                # matrix = np.array(f["rho"][...])
-                c.set_array(matrix.ravel())
+                t = f.attrs["t"]
+                rho, momx1, momx2, e = np.array(f["rho"]), np.array(f["momx1"]), np.array(f["momx2"]), np.array(f["E"])
+                if var == "density":
+                    matrix = rho
+                elif var == "log density":
+                    matrix = np.log10(rho)
+                elif var == "u":
+                    matrix = momx1 / rho
+                elif var == "v":
+                    matrix = momx2 / rho
+                elif var == "energy":
+                    matrix = e
+                if coords == "polar":
+                    c.set_array(matrix.ravel())
+                elif coords == "cartesian":
+                    c.set_data(np.transpose(matrix))
                 cb.update_normal(c)
-                title = f"t = {t:.2f}" + r", $\mathcal{M}=10$"
-                ax.set_title(title)
+                ax.set_title(title + f", t = {t:.2f}")
                 fig.canvas.draw()
                 writer.grab_frame()
 
                 print_progress_bar(i, len(file_list),
                                    suffix="complete", length=25)
-
-
-PATH = "./gaussian_10/checkpoints"
-t_min = 290 * 2 * np.pi
-t_max = 300 * 2 * np.pi
-
-files = get_h5_files_in_range(PATH, t_min, t_max)
-process_h5_files(files)

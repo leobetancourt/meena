@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from . import run_config, load_config
+from .tools import generate_movie
 from src.common.helpers import plot_grid
 
 @click.group()
@@ -70,10 +71,25 @@ def plot(checkpoint_file, var, plot_range):
         fig, ax, c, cb = plot_grid(matrix, labels[var], coords, x1, x2, vmin, vmax)
         ax.set_title(f"t = {t:.2f}")
         plt.show()
+        
+@click.command()
+@click.argument("checkpoint_path", type=click.Path(exists=True))
+@click.option("-t", "--t-range", type=(float, float))
+@click.option("-v", "--var", type=click.Choice(["density", "log density", "u", "v", "energy"]), default="density")
+@click.option("-p", "--plot-range", type=(float, float))
+@click.option("--title", type=str)
+@click.option("--fps", type=int, default=24)
+def movie(checkpoint_path, t_range, var, plot_range, title, fps):
+    vmin, vmax = None, None
+    if plot_range:
+        vmin, vmax = plot_range
+    t_min, t_max = t_range
+        
+    generate_movie(checkpoint_path, t_min, t_max, var, title, fps, vmin, vmax)
 
 cli.add_command(run)
 cli.add_command(plot)
-
+cli.add_command(movie)
 
 if __name__ == "__main__":
     cli()

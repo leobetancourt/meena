@@ -1,6 +1,7 @@
 from matplotlib.patches import Circle
 import matplotlib.pyplot as plt
 import jax.numpy as jnp
+from jax.typing import ArrayLike
 import pandas as pd
 import h5py
 import csv
@@ -188,11 +189,13 @@ def apply_bcs(lattice, U):
 
     return U
 
+def enthalpy(rho: ArrayLike, p: ArrayLike, e: ArrayLike):
+    return (e + p) / rho
 
 def get_prims(hydro, U, X1, X2, t):
-    rho = U[:, :, 0]
-    u, v = U[:, :, 1] / rho, U[:, :, 2] / rho
-    e = U[:, :, 3]
+    rho = U[..., 0]
+    u, v = U[..., 1] / rho, U[..., 2] / rho
+    e = U[..., 3]
     p = hydro.P((rho, u, v, e), X1, X2, t)
     return rho, u, v, p
 

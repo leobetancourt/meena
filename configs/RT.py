@@ -31,6 +31,9 @@ class RT(Hydro):
     def t_end(self) -> float:
         return 18
     
+    def solver(self) -> str:
+        return "hllc"
+    
     def PLM(self) -> float:
         return True
     

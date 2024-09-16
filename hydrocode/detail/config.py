@@ -89,6 +89,9 @@ class Hydro(ABC):
 
     def log_x2(self) -> bool:
         return False
+    
+    def solver(self) -> str:
+        return "hll"
 
     def PLM(self) -> bool:
         return False

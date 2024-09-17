@@ -17,9 +17,13 @@ class RT(Hydro):
         # velocity perturbation is 5% of characteristic sound speed
         v = 0.01 * (1 + jnp.cos(4 * jnp.pi * x)) * (1 + jnp.cos(3 * jnp.pi * y)) / 4
         rho = jnp.zeros_like(x)
-        rho = rho.at[y > 0].set(2)
-        rho = rho.at[y <= 0].set(1)
+        rho = rho.at[(y < 0) & (x < 0)].set(1)
+        rho = rho.at[(y > 0) & (x < 0)].set(2)
+        rho = rho.at[(y > 0) & (x > 0)].set(3)
+        rho = rho.at[(y < 0) & (x > 0)].set(4)
         p = 2.5 - self.g * rho * y
+        
+        print(rho)
         
         return jnp.array([
             rho,
@@ -47,7 +51,7 @@ class RT(Hydro):
         return ((-0.25, 0.25), (-0.75, 0.75))
         
     def resolution(self) -> tuple[int, int]:
-        return (10, 30)
+        return (2, 6)
     
     def bc_x1(self) -> BoundaryCondition:
         return ("periodic", "periodic")

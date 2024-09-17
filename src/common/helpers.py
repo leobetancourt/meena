@@ -115,6 +115,7 @@ def plot_grid(matrix, label, coords, x1, x2, vmin=None, vmax=None):
         ax.grid(False)
         ax.set_xticks([])
         ax.set_yticks([])
+        ax.set_ylim(0, 5)
         ax.set_facecolor("black")
         circle_r = jnp.min(x1) - (x1[1] - x1[0]) / 2
         circle = Circle((0, 0), radius=circle_r, transform=ax.transData._b,
@@ -154,7 +155,7 @@ def apply_bcs(lattice, U):
     elif bc_x1[0] == "reflective":
         U = U.at[:g, :, :].set(jnp.flip(U[g:(2*g), :, :], axis=0))
         # invert x1 momentum
-        U = U.at[:g, :, 1].set(-jnp.flip(U[g:(2*g), : 1], axis=0))
+        U = U.at[:g, :, 1].set(-jnp.flip(U[g:(2*g), :, 1], axis=0))
     elif bc_x1[0] == "periodic":
         U = U.at[:g, :, :].set(U[(-2*g):(-g), :, :])
 
@@ -163,7 +164,7 @@ def apply_bcs(lattice, U):
     elif bc_x1[1] == "reflective":
         U = U.at[-g:, :, :].set(jnp.flip(U[-(2*g):-g, :, :], axis=0))
         # invert x1 momentum
-        U = U.at[-g:, :, 1].set(-jnp.flip(U[-(2*g):-g, : 1], axis=0))
+        U = U.at[-g:, :, 1].set(-jnp.flip(U[-(2*g):-g, :, 1], axis=0))
     elif bc_x1[1] == "periodic":
         U = U.at[-g:, :, :].set(U[g:(2*g), :, :])
 

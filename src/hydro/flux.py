@@ -346,8 +346,8 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
             G_l, G_r = hll_flux_x2(G_ll, G_lr, U_ll, U_lr, c_s_ll, c_s_lr), hll_flux_x2(
                 G_rl, G_rr, U_rl, U_rr, c_s_rl, c_s_rr)
         elif hydro.solver() == "hllc":
-            G_l, G_r = hllc_flux_x2(hydro, G_ll, G_lr, U_ll, U_lr, c_s_ll, c_s_lr, X1_C, X2_L, X2_C, t), hllc_flux_x2(hydro,
-                                                                                                                      G_rl, G_rr, U_rl, U_rr, c_s_rl, c_s_rr, X1_C, X2_C, X2_R, t)
+            G_l, G_r = hllc_flux_x2(hydro, G_ll, G_lr, U_ll, U_lr, c_s_ll, c_s_lr, X1_C, X2_L, X2_C, t), hllc_flux_x2(
+                hydro, G_rl, G_rr, U_rl, U_rr, c_s_rl, c_s_rr, X1_C, X2_C, X2_R, t)
     else:
         prims = get_prims(hydro, U, X1, X2, t)
         F = F_from_prim(hydro, prims, X1, X2, t)

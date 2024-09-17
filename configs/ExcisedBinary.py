@@ -242,11 +242,10 @@ class ExcisedBinary(Hydro):
     # assumes U with ghost cells
     def check_U(self, lattice: Lattice, U: ArrayLike, t: float) -> Array:
         g = lattice.num_g
-        if self.coords == Coords.POLAR: # prevent outflow from inner boundary
-            rho = U[:, :, 0]
-            vr = U[:, :, 1] / rho
-            vr = vr.at[:g, :].set(jnp.minimum(vr[:g, :], 0))
-            U.at[:g, :, 1].set(rho[:g, :] * vr[:g, :])
+        rho = U[:, :, 0]
+        vr = U[:, :, 1] / rho
+        vr = vr.at[:g, :].set(jnp.minimum(vr[:g, :], 0))
+        U = U.at[:g, :, 1].set(rho[:g, :] * vr[:g, :])
         return U
     
     def diagnostics(self):

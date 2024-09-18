@@ -145,7 +145,7 @@ class KeplerianRing(Hydro):
         return True
 
     def resolution(self) -> tuple[int, int]:
-        return (200, 1200)
+        return (250, 1500)
 
     def t_end(self) -> float:
         tau_end = 2

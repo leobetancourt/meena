@@ -71,6 +71,8 @@ def plot(checkpoint_file, var, plot_range):
         fig, ax, c, cb = plot_grid(matrix, labels[var], coords, x1, x2, vmin, vmax)
         ax.set_title(f"t = {t:.2f}")
         plt.show()
+        PATH = checkpoint_file.split("checkpoints/")[0]
+        plt.savefig(f"{PATH}/t={t:.2f}.png", bbox_inches="tight", dpi=500)
         
 @click.command()
 @click.argument("checkpoint_path", type=click.Path(exists=True))

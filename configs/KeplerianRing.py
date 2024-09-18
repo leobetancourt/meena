@@ -1,13 +1,11 @@
 from dataclasses import dataclass
 from functools import partial
 
-import h5py
 from jax.typing import ArrayLike
 from jax import Array, jit
 import jax.numpy as jnp
 
 from hydrocode import Hydro, Lattice, Primitives, Conservatives, BoundaryCondition, Coords
-from src.common.helpers import load_U
 
 @partial(jit, static_argnames=["hydro", "lattice"])
 def get_accr_rate(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
@@ -118,6 +116,7 @@ class KeplerianRing(Hydro):
     omega_B: float = 1
     R_0: float = 4 * a
     sigma: float = 0.2 * a
+    CFL_num: float = 0.4
 
     def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
         t = 0
@@ -146,7 +145,7 @@ class KeplerianRing(Hydro):
         return True
 
     def resolution(self) -> tuple[int, int]:
-        return (150, 900)
+        return (200, 1200)
 
     def t_end(self) -> float:
         tau_end = 2
@@ -156,7 +155,7 @@ class KeplerianRing(Hydro):
         return True
     
     def cfl(self) -> float:
-        return 0.4
+        return self.CFL_num
     
     def nu(self) -> float:
         return 1e-3

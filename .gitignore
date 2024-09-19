@@ -8,3 +8,4 @@ test.py
 hpc/
 hydrocode.egg-info/
 build/
+dist/

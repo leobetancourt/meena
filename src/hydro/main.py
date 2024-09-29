@@ -80,7 +80,10 @@ def solve(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> tuple[Array
 
 @partial(jit, static_argnames=["hydro", "lattice"])
 def first_order_step(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> tuple[Array, float]:
-    dt = compute_timestep(hydro, lattice, U, t)
+    if hydro.timestep():
+        dt = hydro.timestep()
+    else:
+        dt = compute_timestep(hydro, lattice, U, t)
     L, flux = solve(hydro, lattice, U, t)
     U = U + L * dt + hydro.source(U, lattice.X1, lattice.X2, t) * dt
     return U, flux, dt

@@ -106,7 +106,7 @@ def get_eccentricity_y(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple
 
 
 @dataclass(frozen=True)
-class KeplerianRing(Hydro):
+class Ring(Hydro):
     G: float = 1
     M: float = 1
     mach: float = 10
@@ -145,10 +145,10 @@ class KeplerianRing(Hydro):
         return True
 
     def resolution(self) -> tuple[int, int]:
-        return (250, 1500)
+        return (100, 600)
 
     def t_end(self) -> float:
-        tau_end = 2
+        tau_end = 10
         return tau_end / (12 * self.nu()) * (self.R_0 ** 2)
     
     def PLM(self) -> bool:
@@ -156,6 +156,9 @@ class KeplerianRing(Hydro):
     
     def cfl(self) -> float:
         return self.CFL_num
+    
+    def timestep(self) -> str:
+        return 5e-5
     
     def nu(self) -> float:
         return 1e-3

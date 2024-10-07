@@ -48,14 +48,14 @@ def F_star_x1(hydro, F_k, S_k, S_M, U_k, X1, X2, t):
 
     rho_star = rho_k * (S_k - v_k) / (S_k - S_M)
     p_star = p_k + rho_k * (v_k - S_k) * (v_k - S_M)
-    rhov_star = (rho_k * v_k * (S_k - v_k) +
-                 p_star - p_k) / (S_k - S_M)
+    momx1_star = rho_k * ((S_k - v_k) / (S_k - S_M)) * S_M
+    momx2_star = rho_k * vy_k * ((S_k - v_k) / (S_k - S_M))
     E_star = (E_k * (S_k - v_k) - p_k *
               v_k + p_star * S_M) / (S_k - S_M)
 
-    U_star = jnp.array([rho_star, rhov_star, rho_star * vy_k, E_star])
+    U_star = jnp.array([rho_star, momx1_star, momx2_star, E_star])
     U_star = jnp.transpose(U_star, (1, 2, 0))
-    S_k = jnp.expand_dims(S_k, axis=-1)
+    S_k = S_k[..., None]
     return F_k + S_k * (U_star - U_k)
 
 
@@ -66,14 +66,14 @@ def F_star_x2(hydro, F_k, S_k, S_M, U_k, X1, X2, t):
 
     rho_star = rho_k * (S_k - v_k) / (S_k - S_M)
     p_star = p_k + rho_k * (v_k - S_k) * (v_k - S_M)
-    rhov_star = (rho_k * v_k * (S_k - v_k) +
-                 p_star - p_k) / (S_k - S_M)
+    momx1_star = rho_k * vx_k * ((S_k - v_k) / (S_k - S_M))
+    momx2_star = rho_k * ((S_k - v_k) / (S_k - S_M)) * S_M
     E_star = (E_k * (S_k - v_k) - p_k *
               v_k + p_star * S_M) / (S_k - S_M)
 
-    U_star = jnp.array([rho_star, rho_star * vx_k, rhov_star, E_star])
+    U_star = jnp.array([rho_star, momx1_star, momx2_star, E_star])
     U_star = jnp.transpose(U_star, (1, 2, 0))
-    S_k = jnp.expand_dims(S_k, axis=-1)
+    S_k = S_k[..., None]
     return F_k + S_k * (U_star - U_k)
 
 
@@ -91,7 +91,7 @@ def hllc_flux_x1(hydro, F_L: ArrayLike, F_R: ArrayLike, U_L: ArrayLike, U_R: Arr
     H_R = enthalpy(rho_R, p_R, e_R)
     H_t = (H_L + (H_R * R_rho)) / (1 + R_rho)  # H tilde
     v_t = (v_L + (v_R * R_rho)) / (1 + R_rho)
-    c_t = jnp.sqrt((hydro.gamma() - 1) * (H_t + (0.5 * v_t ** 2)))
+    c_t = jnp.sqrt((hydro.gamma() - 1) * (H_t - (0.5 * v_t ** 2)))
 
     S_L = jnp.minimum(v_L - c_s_L, v_t - c_t)
     S_R = jnp.maximum(v_R + c_s_R, v_t + c_t)
@@ -100,7 +100,7 @@ def hllc_flux_x1(hydro, F_L: ArrayLike, F_R: ArrayLike, U_L: ArrayLike, U_R: Arr
 
     F = jnp.empty_like(F_L)
     case_1 = S_L > 0
-    case_2 = (S_L <= 0) & (S_M >= 0)
+    case_2 = (S_L <= 0) & (S_M > 0)
     case_3 = (S_M <= 0) & (S_R >= 0)
     case_4 = S_R < 0
     case_1 = case_1[..., None]
@@ -131,7 +131,7 @@ def hllc_flux_x2(hydro, G_L: ArrayLike, G_R: ArrayLike, U_L: ArrayLike, U_R: Arr
     H_R = enthalpy(rho_R, p_R, e_R)
     H_t = (H_L + (H_R * R_rho)) / (1 + R_rho)  # H tilde
     v_t = (v_L + (v_R * R_rho)) / (1 + R_rho)
-    c_t = jnp.sqrt((hydro.gamma() - 1) * (H_t + (0.5 * v_t ** 2)))
+    c_t = jnp.sqrt((hydro.gamma() - 1) * (H_t - (0.5 * v_t ** 2)))
 
     S_L = jnp.minimum(v_L - c_s_L, v_t - c_t)
     S_R = jnp.maximum(v_R + c_s_R, v_t + c_t)
@@ -140,7 +140,7 @@ def hllc_flux_x2(hydro, G_L: ArrayLike, G_R: ArrayLike, U_L: ArrayLike, U_R: Arr
 
     G = jnp.empty_like(G_L)
     case_1 = S_L > 0
-    case_2 = (S_L <= 0) & (S_M >= 0)
+    case_2 = (S_L <= 0) & (S_M > 0)
     case_3 = (S_M <= 0) & (S_R >= 0)
     case_4 = S_R < 0
     case_1 = case_1[..., None]

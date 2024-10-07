@@ -77,7 +77,7 @@ def plot(checkpoint_file, var, plot_range):
 @click.option("-t", "--t-range", type=(float, float))
 @click.option("-v", "--var", type=click.Choice(["density", "log density", "u", "v", "energy"]), default="density")
 @click.option("-p", "--plot-range", type=(float, float))
-@click.option("--title", type=str)
+@click.option("--title", type=str, default="")
 @click.option("--fps", type=int, default=24)
 def movie(checkpoint_path, t_range, var, plot_range, title, fps):
     vmin, vmax = None, None

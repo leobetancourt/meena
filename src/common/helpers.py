@@ -99,14 +99,14 @@ def load_U(file):
         return U, t
 
 
-def plot_grid(matrix, label, coords, x1, x2, vmin=None, vmax=None):
+def plot_grid(matrix, label, coords, x1, x2, vmin=None, vmax=None, cmap="magma"):
     extent = [x1[0], x1[-1], x2[0], x2[-1]]
 
     if coords == "cartesian":
         fig, ax = plt.subplots()
         if vmin is None:
             vmin, vmax = jnp.min(matrix), jnp.max(matrix)
-        c = ax.imshow(jnp.transpose(matrix), cmap="magma", interpolation='nearest',
+        c = ax.imshow(jnp.transpose(matrix), cmap=cmap, interpolation='nearest',
                       origin='lower', extent=extent, vmin=vmin, vmax=vmax)
     elif coords == "polar":
         fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
@@ -123,7 +123,7 @@ def plot_grid(matrix, label, coords, x1, x2, vmin=None, vmax=None):
         ax.add_patch(circle)
         R, Theta = jnp.meshgrid(x1, x2, indexing="ij")
         c = ax.pcolormesh(Theta, R, matrix, shading='auto',
-                          cmap="magma", vmin=vmin, vmax=vmax)
+                          cmap=cmap, vmin=vmin, vmax=vmax)
 
     cb = plt.colorbar(c, ax=ax, label=label)
 

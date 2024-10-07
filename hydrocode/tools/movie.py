@@ -26,15 +26,17 @@ def get_h5_files_in_range(directory, t_min, t_max):
     return sorted(files_in_range, key=lambda x: float(re.match(pattern, os.path.basename(x)).group(1)))
 
 
-def generate_movie(checkpoint_path, t_min, t_max, var, title, fps=24, vmin=None, vmax=None, dpi=200):
+def generate_movie(checkpoint_path, t_min, t_max, var, title, fps=24, vmin=None, vmax=None, dpi=200, cmap="magma"):
     file_list = get_h5_files_in_range(checkpoint_path, t_min, t_max)
-    labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$", "v": r"$v$", "energy": r"$E$"}
+    labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$",
+              "u": r"$u$", "v": r"$v$", "energy": r"$E$"}
     with h5py.File(file_list[0], 'r') as f:
         coords = f.attrs["coords"]
         x1 = f.attrs["x1"]
         x2 = f.attrs["x2"]
         t = f.attrs["t"]
-        rho, momx1, momx2, e = np.array(f["rho"]), np.array(f["momx1"]), np.array(f["momx2"]), np.array(f["E"])
+        rho, momx1, momx2, e = np.array(f["rho"]), np.array(
+            f["momx1"]), np.array(f["momx2"]), np.array(f["E"])
         if var == "density":
             matrix = rho
         elif var == "log density":
@@ -47,8 +49,11 @@ def generate_movie(checkpoint_path, t_min, t_max, var, title, fps=24, vmin=None,
             matrix = e
 
     fig, ax, c, cb = plot_grid(
-        matrix, labels[var], coords=coords, x1=x1, x2=x2, vmin=vmin, vmax=vmax)
-    ax.set_title(title + f", t = {t:.2f}")
+        matrix, labels[var], coords, x1, x2, vmin, vmax, cmap)
+    if title != "":
+        ax.set_title(title + f", t = {t:.2f}")
+    else:
+        ax.set_title(f"t = {t:.2f}")
     FFMpegWriter = animation.writers['ffmpeg']
     writer = FFMpegWriter(fps=fps)
     PATH = checkpoint_path.split("checkpoints/")[0]
@@ -61,7 +66,8 @@ def generate_movie(checkpoint_path, t_min, t_max, var, title, fps=24, vmin=None,
             file_path = file_list[i]
             with h5py.File(file_path, 'r') as f:
                 t = f.attrs["t"]
-                rho, momx1, momx2, e = np.array(f["rho"]), np.array(f["momx1"]), np.array(f["momx2"]), np.array(f["E"])
+                rho, momx1, momx2, e = np.array(f["rho"]), np.array(
+                    f["momx1"]), np.array(f["momx2"]), np.array(f["E"])
                 if var == "density":
                     matrix = rho
                 elif var == "log density":
@@ -77,7 +83,10 @@ def generate_movie(checkpoint_path, t_min, t_max, var, title, fps=24, vmin=None,
                 elif coords == "cartesian":
                     c.set_data(np.transpose(matrix))
                 cb.update_normal(c)
-                ax.set_title(title + f", t = {t:.2f}")
+                if title != "":
+                    ax.set_title(title + f", t = {t:.2f}")
+                else:
+                    ax.set_title(f"t = {t:.2f}")
                 fig.canvas.draw()
                 writer.grab_frame()
 

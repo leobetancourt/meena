@@ -44,9 +44,10 @@ def run(config_file, checkpoint, plot, plot_range, output_dir, **kwargs):
 @click.argument("checkpoint_file", type=click.Path(exists=True))
 @click.option("-v", "--var", type=click.Choice(["density", "log density", "u", "v", "energy"]), default="density")
 @click.option("--plot-range", type=(float, float))
-@click.option("--title", type=str)
+@click.option("--title", type=str, default="")
 @click.option("--dpi", type=int, default=500)
-def plot(checkpoint_file, var, plot_range, title, dpi):
+@click.option("--cmap", type=str, default="magma")
+def plot(checkpoint_file, var, plot_range, title, dpi, cmap):
     labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$", "v": r"$v$", "energy": r"$E$"}
     vmin, vmax = None, None
     if plot_range:
@@ -70,11 +71,14 @@ def plot(checkpoint_file, var, plot_range, title, dpi):
         elif var == "energy":
             matrix = e
         
-        fig, ax, c, cb = plot_grid(matrix, labels[var], coords, x1, x2, vmin, vmax)
-        ax.set_title(title + f", t = {t:.2f}")
-        plt.show()
+        fig, ax, c, cb = plot_grid(matrix, labels[var], coords, x1, x2, vmin, vmax, cmap)
+        if title != "":
+            ax.set_title(title + f", t = {t:.2f}")
+        else:
+            ax.set_title(f"t = {t:.2f}")
         PATH = checkpoint_file.split("checkpoints/")[0]
         plt.savefig(f"{PATH}/t={t:.2f}.png", bbox_inches="tight", dpi=dpi)
+        plt.show()
         
 @click.command()
 @click.argument("checkpoint_path", type=click.Path(exists=True))
@@ -84,13 +88,14 @@ def plot(checkpoint_file, var, plot_range, title, dpi):
 @click.option("--title", type=str, default="")
 @click.option("--fps", type=int, default=24)
 @click.option("--dpi", type=int, default=200)
-def movie(checkpoint_path, t_range, var, plot_range, title, fps, dpi):
+@click.option("--cmap", type=str, default="magma")
+def movie(checkpoint_path, t_range, var, plot_range, title, fps, dpi, cmap):
     vmin, vmax = None, None
     if plot_range:
         vmin, vmax = plot_range
     t_min, t_max = t_range
         
-    generate_movie(checkpoint_path, t_min, t_max, var, title, fps, vmin, vmax, dpi)
+    generate_movie(checkpoint_path, t_min, t_max, var, title, fps, vmin, vmax, dpi, cmap)
 
 cli.add_command(run)
 cli.add_command(plot)

@@ -44,7 +44,9 @@ def run(config_file, checkpoint, plot, plot_range, output_dir, **kwargs):
 @click.argument("checkpoint_file", type=click.Path(exists=True))
 @click.option("-v", "--var", type=click.Choice(["density", "log density", "u", "v", "energy"]), default="density")
 @click.option("--plot-range", type=(float, float))
-def plot(checkpoint_file, var, plot_range):
+@click.option("--title", type=str)
+@click.option("--dpi", type=int, default=500)
+def plot(checkpoint_file, var, plot_range, title, dpi):
     labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$", "v": r"$v$", "energy": r"$E$"}
     vmin, vmax = None, None
     if plot_range:
@@ -69,8 +71,10 @@ def plot(checkpoint_file, var, plot_range):
             matrix = e
         
         fig, ax, c, cb = plot_grid(matrix, labels[var], coords, x1, x2, vmin, vmax)
-        ax.set_title(f"t = {t:.2f}")
+        ax.set_title(title + f", t = {t:.2f}")
         plt.show()
+        PATH = checkpoint_file.split("checkpoints/")[0]
+        plt.savefig(f"{PATH}/t={t:.2f}.png", bbox_inches="tight", dpi=dpi)
         
 @click.command()
 @click.argument("checkpoint_path", type=click.Path(exists=True))

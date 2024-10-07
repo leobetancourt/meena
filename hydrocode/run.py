@@ -3,8 +3,8 @@ import importlib
 import inspect
 from pathlib import Path
 from .detail import Hydro, Lattice
-from src import run
 from src.common.helpers import load_U
+from src.hydro.main import run
 
 def load_config(config_file):
     config_path = Path(config_file)
@@ -15,7 +15,7 @@ def load_config(config_file):
     for name_local in dir(config_module):
         obj = getattr(config_module, name_local)
         if inspect.isclass(obj):
-            if obj.__name__ != 'Hydro' and issubclass(obj, Hydro):
+            if obj.__name__ != 'Hydro' and obj.__module__ != "builtins" and issubclass(obj, Hydro):
                 return obj
     return None
 

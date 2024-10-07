@@ -26,7 +26,7 @@ def get_h5_files_in_range(directory, t_min, t_max):
     return sorted(files_in_range, key=lambda x: float(re.match(pattern, os.path.basename(x)).group(1)))
 
 
-def generate_movie(checkpoint_path, t_min, t_max, var, title, fps=24, vmin=None, vmax=None):
+def generate_movie(checkpoint_path, t_min, t_max, var, title, fps=24, vmin=None, vmax=None, dpi=200):
     file_list = get_h5_files_in_range(checkpoint_path, t_min, t_max)
     labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$", "v": r"$v$", "energy": r"$E$"}
     with h5py.File(file_list[0], 'r') as f:
@@ -54,7 +54,7 @@ def generate_movie(checkpoint_path, t_min, t_max, var, title, fps=24, vmin=None,
     PATH = checkpoint_path.split("checkpoints/")[0]
     if not os.path.exists(PATH):
         os.makedirs(PATH)
-    cm = writer.saving(fig, f"{PATH}/movie.mp4", 800)
+    cm = writer.saving(fig, f"{PATH}/movie.mp4", dpi)
 
     with cm:
         for i in range(len(file_list)):

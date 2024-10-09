@@ -132,11 +132,11 @@ class Binary(Hydro):
         ]).transpose((1, 2, 0))
 
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
-        size = 10
+        size = 5
         return ((-size, size), (-size, size))
 
     def resolution(self) -> tuple[int, int]:
-        return (1000, 1000)
+        return (300, 300)
 
     def t_end(self) -> float:
         return 10 * 2 * jnp.pi
@@ -196,15 +196,15 @@ class Binary(Hydro):
         ]).transpose((1, 2, 0))
 
     def BH_sink(self, U, x, y, x_bh, y_bh):
-        rho= U[..., 0]
+        rho = U[..., 0]
         u, v =  U[..., 1] / rho, U[..., 2] / rho
         dx, dy = x - x_bh, y - y_bh
         r = jnp.sqrt(dx ** 2 + dy ** 2)
         r_sink = self.eps
         sink = jnp.exp(-((r / r_sink) ** 6)) * (self.t_sink ** -1) * rho
-        S = jnp.zeros_like(U).at[:, :, 0].set(-sink)
-        S = S.at[:, :, 1].set(-sink * u)
-        S = S.at[:, :, 2].set(-sink * v)
+        S = jnp.zeros_like(U).at[:, :, 0].set(-jnp.minimum(sink, rho))
+        # S = S.at[:, :, 1].set(-sink * u)
+        # S = S.at[:, :, 2].set(-sink * v)
 
         return S
 
@@ -230,7 +230,6 @@ class Binary(Hydro):
         return x1_1, x2_1, x1_2, x2_2
 
     def check_U(self, lattice: Lattice, U: ArrayLike, t: float) -> Array:
-        # print(U[lattice.nx1 // 2, lattice.nx2 // 2])
         g = lattice.num_g
         # buffer
         x, y = lattice.X1, lattice.X2
@@ -251,12 +250,12 @@ class Binary(Hydro):
         U = U.at[g:-g, g:-g, 3].set(jnp.where(buff, e, U[g:-g, g:-g, 3]))
 
         # check for invalid zones
-        rho = U[g:-g, g:-g, 0]
-        mask = rho <= 1e-3
-        U = U.at[g:-g, g:-g, 0].set(jnp.where(mask, 1e-6, U[g:-g, g:-g, 0]))
-        U = U.at[g:-g, g:-g, 1].set(jnp.where(mask, 0, U[g:-g, g:-g, 1]))
-        U = U.at[g:-g, g:-g, 2].set(jnp.where(mask, 0, U[g:-g, g:-g, 2]))
-        U = U.at[g:-g, g:-g, 3].set(jnp.where(mask, 1e-6, U[g:-g, g:-g, 3]))
+        # rho = U[g:-g, g:-g, 0]
+        # mask = rho <= 1e-3
+        # U = U.at[g:-g, g:-g, 0].set(jnp.where(mask, 1e-6, U[g:-g, g:-g, 0]))
+        # U = U.at[g:-g, g:-g, 1].set(jnp.where(mask, 0, U[g:-g, g:-g, 1]))
+        # U = U.at[g:-g, g:-g, 2].set(jnp.where(mask, 0, U[g:-g, g:-g, 2]))
+        # U = U.at[g:-g, g:-g, 3].set(jnp.where(mask, 1e-6, U[g:-g, g:-g, 3]))
 
         return U
 

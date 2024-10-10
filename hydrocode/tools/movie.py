@@ -26,7 +26,7 @@ def get_h5_files_in_range(directory, t_min, t_max):
     return sorted(files_in_range, key=lambda x: float(re.match(pattern, os.path.basename(x)).group(1)))
 
 
-def generate_movie(checkpoint_path, t_min, t_max, var, title, fps=24, vmin=None, vmax=None, dpi=200, cmap="magma"):
+def generate_movie(checkpoint_path, t_min, t_max, var, grid_range, title, fps=24, vmin=None, vmax=None, dpi=200, cmap="magma"):
     file_list = get_h5_files_in_range(checkpoint_path, t_min, t_max)
     labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$",
               "u": r"$u$", "v": r"$v$", "energy": r"$E$"}
@@ -47,6 +47,17 @@ def generate_movie(checkpoint_path, t_min, t_max, var, title, fps=24, vmin=None,
             matrix = momx2 / rho
         elif var == "energy":
             matrix = e
+
+        if grid_range:
+            x1_min, x1_max = grid_range[0], grid_range[1]
+            x2_min, x2_max = grid_range[2], grid_range[3]
+            x1_min_i = np.searchsorted(x1, x1_min, side="left")
+            x1_max_i = np.searchsorted(x1, x1_max, side="right") - 1
+            x2_min_i = np.searchsorted(x2, x2_min, side="left")
+            x2_max_i = np.searchsorted(x2, x2_max, side="right") - 1
+
+            matrix = matrix[x1_min_i:x1_max_i+1, x2_min_i:x2_max_i+1]
+            x1, x2 = x1[(x1 >= x1_min) & (x1 <= x1_max)], x2[(x2 >= x2_min) & (x2 <= x2_max)]
 
     fig, ax, c, cb = plot_grid(
         matrix, labels[var], coords, x1, x2, vmin, vmax, cmap)
@@ -78,6 +89,10 @@ def generate_movie(checkpoint_path, t_min, t_max, var, title, fps=24, vmin=None,
                     matrix = momx2 / rho
                 elif var == "energy":
                     matrix = e
+
+                if grid_range:
+                    matrix = matrix[x1_min_i:x1_max_i+1, x2_min_i:x2_max_i+1]
+                
                 if coords == "polar":
                     c.set_array(matrix.ravel())
                 elif coords == "cartesian":

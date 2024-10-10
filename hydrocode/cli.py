@@ -43,16 +43,17 @@ def run(config_file, checkpoint, plot, plot_range, output_dir, **kwargs):
 @click.command()
 @click.argument("checkpoint_file", type=click.Path(exists=True))
 @click.option("-v", "--var", type=click.Choice(["density", "log density", "u", "v", "energy"]), default="density")
-@click.option("--plot-range", type=(float, float))
+@click.option("-r", "--range", type=(float, float, float, float), default=None)
 @click.option("--title", type=str, default="")
 @click.option("--dpi", type=int, default=500)
 @click.option("--cmap", type=str, default="magma")
-def plot(checkpoint_file, var, plot_range, title, dpi, cmap):
+@click.option("--c-range", type=(float, float))
+def plot(checkpoint_file, var, range, title, dpi, cmap, c_range):
     labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$", "v": r"$v$", "energy": r"$E$"}
     vmin, vmax = None, None
-    if plot_range:
-        vmin, vmax = plot_range
-        
+    if c_range:
+        vmin, vmax = c_range
+    
     with h5py.File(checkpoint_file, 'r') as f:
         t = f.attrs["t"]
         coords = f.attrs["coords"]
@@ -70,6 +71,17 @@ def plot(checkpoint_file, var, plot_range, title, dpi, cmap):
             matrix = momx2 / rho
         elif var == "energy":
             matrix = e
+
+        if range:
+            x1_min, x1_max = range[0], range[1]
+            x2_min, x2_max = range[2], range[3]
+            x1_min_i = np.searchsorted(x1, x1_min, side="left")
+            x1_max_i = np.searchsorted(x1, x1_max, side="right") - 1
+            x2_min_i = np.searchsorted(x2, x2_min, side="left")
+            x2_max_i = np.searchsorted(x2, x2_max, side="right") - 1
+
+            matrix = matrix[x1_min_i:x1_max_i+1, x2_min_i:x2_max_i+1]
+            x1, x2 = x1[(x1 >= x1_min) & (x1 <= x1_max)], x2[(x2 >= x2_min) & (x2 <= x2_max)]
         
         fig, ax, c, cb = plot_grid(matrix, labels[var], coords, x1, x2, vmin, vmax, cmap)
         if title != "":
@@ -84,18 +96,19 @@ def plot(checkpoint_file, var, plot_range, title, dpi, cmap):
 @click.argument("checkpoint_path", type=click.Path(exists=True))
 @click.option("-t", "--t-range", type=(float, float))
 @click.option("-v", "--var", type=click.Choice(["density", "log density", "u", "v", "energy"]), default="density")
-@click.option("-p", "--plot-range", type=(float, float))
+@click.option("-r", "--range", type=(float, float, float, float), default=None)
 @click.option("--title", type=str, default="")
 @click.option("--fps", type=int, default=24)
 @click.option("--dpi", type=int, default=200)
 @click.option("--cmap", type=str, default="magma")
-def movie(checkpoint_path, t_range, var, plot_range, title, fps, dpi, cmap):
+@click.option("--c-range", type=(float, float))
+def movie(checkpoint_path, t_range, var, range, title, fps, dpi, cmap, c_range):
     vmin, vmax = None, None
-    if plot_range:
-        vmin, vmax = plot_range
+    if c_range:
+        vmin, vmax = c_range
     t_min, t_max = t_range
         
-    generate_movie(checkpoint_path, t_min, t_max, var, title, fps, vmin, vmax, dpi, cmap)
+    generate_movie(checkpoint_path, t_min, t_max, var, range, title, fps, vmin, vmax, dpi, cmap)
 
 cli.add_command(run)
 cli.add_command(plot)

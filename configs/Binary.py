@@ -98,13 +98,14 @@ class Binary(Hydro):
     eps: float = 0.05 * a
     omega_B: float = 1
     t_sink: float = 1 / (10 * omega_B)
+    cfl_num: float = 0.4
 
     def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
         t = 0
         r, theta = cartesian_to_polar(X1, X2)
 
         def f(r):
-            return 1
+            return 1 # - 1 / (1 + jnp.exp(-2 * (r - self.R_out) / self.a))
         # surface density
         rho = self.Sigma_0 * \
             ((1 - self.delta_0) * jnp.exp(-(self.R_cav /
@@ -123,7 +124,6 @@ class Binary(Hydro):
         u = v_r * jnp.cos(theta) - v_theta * jnp.sin(theta)
         v = v_r * jnp.sin(theta) + v_theta * jnp.cos(theta)
 
-
         return jnp.array([
             rho,
             rho * u,
@@ -132,14 +132,20 @@ class Binary(Hydro):
         ]).transpose((1, 2, 0))
 
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
-        size = 5
+        size = 10
         return ((-size, size), (-size, size))
 
     def resolution(self) -> tuple[int, int]:
-        return (300, 300)
+        return (3000, 3000)
 
     def t_end(self) -> float:
-        return 10 * 2 * jnp.pi
+        return 100 * 2 * jnp.pi
+    
+    def PLM(self) -> bool:
+        return True
+    
+    def cfl(self) -> float:
+        return self.cfl_num
 
     def coords(self) -> str:
         return "cartesian"
@@ -197,14 +203,11 @@ class Binary(Hydro):
 
     def BH_sink(self, U, x, y, x_bh, y_bh):
         rho = U[..., 0]
-        u, v =  U[..., 1] / rho, U[..., 2] / rho
         dx, dy = x - x_bh, y - y_bh
         r = jnp.sqrt(dx ** 2 + dy ** 2)
         r_sink = self.eps
         sink = jnp.exp(-((r / r_sink) ** 6)) * (self.t_sink ** -1) * rho
-        S = jnp.zeros_like(U).at[:, :, 0].set(-jnp.minimum(sink, rho))
-        # S = S.at[:, :, 1].set(-sink * u)
-        # S = S.at[:, :, 2].set(-sink * v)
+        S = jnp.zeros_like(U).at[:, :, 0].set(-sink)
 
         return S
 
@@ -229,35 +232,26 @@ class Binary(Hydro):
                                             delta), (self.a / 2) * jnp.sin(self.omega_B * t + delta)
         return x1_1, x2_1, x1_2, x2_2
 
-    def check_U(self, lattice: Lattice, U: ArrayLike, t: float) -> Array:
-        g = lattice.num_g
-        # buffer
-        x, y = lattice.X1, lattice.X2
-        r, theta = cartesian_to_polar(x, y)
-        buff = r >= (0.95 * lattice.x1_max)
-        omega_naught = jnp.sqrt((self.G * self.M / (r ** 3 + self.eps ** 3))
-                                * (1 - (1 / (self.mach ** 2))))
-        omega = ((omega_naught ** -4) + (self.omega_B ** -4)) ** (-1/4)
-        v_theta = omega * r
-        u_k, v_k = - v_theta * \
-            jnp.sin(theta), v_theta * jnp.cos(theta)
-        rho = U[g:-g, g:-g, 0]
-        e = self.E((rho, u_k, v_k, jnp.zeros_like(rho)), x, y, t)
+    # def check_U(self, lattice: Lattice, U: ArrayLike, t: float) -> Array:
+    #     g = lattice.num_g
+    #     # buffer
+    #     x, y = lattice.X1, lattice.X2
+    #     r, theta = cartesian_to_polar(x, y)
+    #     buff = r >= (0.95 * lattice.x1_max)
+    #     omega_naught = jnp.sqrt((self.G * self.M / (r ** 3 + self.eps ** 3))
+    #                             * (1 - (1 / (self.mach ** 2))))
+    #     omega = ((omega_naught ** -4) + (self.omega_B ** -4)) ** (-1/4)
+    #     v_theta = omega * r
+    #     u_k, v_k = - v_theta * \
+    #         jnp.sin(theta), v_theta * jnp.cos(theta)
+    #     rho = U[g:-g, g:-g, 0]
+    #     e = self.E((rho, u_k, v_k, jnp.zeros_like(rho)), x, y, t)
 
 
-        U = U.at[g:-g, g:-g, 1].set(jnp.where(buff, rho * u_k, U[g:-g, g:-g, 1]))
-        U = U.at[g:-g, g:-g, 2].set(jnp.where(buff, rho * v_k, U[g:-g, g:-g, 2]))
-        U = U.at[g:-g, g:-g, 3].set(jnp.where(buff, e, U[g:-g, g:-g, 3]))
-
-        # check for invalid zones
-        # rho = U[g:-g, g:-g, 0]
-        # mask = rho <= 1e-3
-        # U = U.at[g:-g, g:-g, 0].set(jnp.where(mask, 1e-6, U[g:-g, g:-g, 0]))
-        # U = U.at[g:-g, g:-g, 1].set(jnp.where(mask, 0, U[g:-g, g:-g, 1]))
-        # U = U.at[g:-g, g:-g, 2].set(jnp.where(mask, 0, U[g:-g, g:-g, 2]))
-        # U = U.at[g:-g, g:-g, 3].set(jnp.where(mask, 1e-6, U[g:-g, g:-g, 3]))
-
-        return U
+    #     U = U.at[g:-g, g:-g, 1].set(jnp.where(buff, rho * u_k, U[g:-g, g:-g, 1]))
+    #     U = U.at[g:-g, g:-g, 2].set(jnp.where(buff, rho * v_k, U[g:-g, g:-g, 2]))
+    #     U = U.at[g:-g, g:-g, 3].set(jnp.where(buff, e, U[g:-g, g:-g, 3]))
+    #     return U
 
     def diagnostics(self):
         diagnostics = []
@@ -270,4 +264,4 @@ class Binary(Hydro):
         return diagnostics
 
     def save_interval(self):
-        return (2 * jnp.pi) / 24
+        return 0.1

@@ -32,10 +32,10 @@ class KH(Hydro):
         u = jnp.where((jnp.abs(y) <= 0.25), -0.5, u)
         
         rng = np.random.default_rng(1000)
-        sin_pert = 0.01 * jnp.sin(2 * jnp.pi * x)
+        sin_pert = 0.01 * jnp.sin(2 * jnp.pi * x[:, 0])
         u_rand = rng.choice(sin_pert, size=u.shape)
         v_rand = rng.choice(sin_pert, size=v.shape)
-        
+
         u += u_rand
         v += v_rand
 

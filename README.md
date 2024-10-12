@@ -16,14 +16,14 @@ Meena implements the [HLL and HLLC Riemann solvers](https://link.springer.com/ch
 Install with:
 
 ```bash
-cd hydro-code
-python setup.py
+cd meena
+python setup.py install
 ```
 
 Run a configuration script:
 
 ```bash
-hydrocode run configs/RayleighTaylor.py --nx 1000 --gamma-ad 1.4
+meena run configs/RayleighTaylor.py --nx 1000 --gamma-ad 1.4
 ```
 Command line arguments `nx` and `gamma-ad` are dynamically parsed from the config class (a subclass of `Hydro`). See the `configs/` directory for examples.
 

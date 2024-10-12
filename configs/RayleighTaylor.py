@@ -8,10 +8,10 @@ from jax.typing import ArrayLike
 from meena import Hydro, BoundaryCondition
 
 @dataclass(frozen=True)
-class RT(Hydro):
+class RayleighTaylor(Hydro):
     g: float = -0.1
     gamma_ad: float = 1.4
-    nx: int = 1000
+    nx: int = 200
     
     def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
         t = 0
@@ -22,12 +22,6 @@ class RT(Hydro):
         rho = rho.at[y > 0].set(2)
         rho = rho.at[y <= 0].set(1)
         p = 2.5 + self.g * rho * y
-        
-        rng = np.random.default_rng(12345)
-        sin_pert = 0.01 * jnp.sin(2 * jnp.pi * x[:, 0])
-        v_rand = rng.choice(sin_pert, size=v.shape)
-
-        v += v_rand
 
         return jnp.array([
             rho,

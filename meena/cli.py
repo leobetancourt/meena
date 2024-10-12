@@ -20,8 +20,10 @@ class DynamicCommand(click.Command):
         config_class = load_config(config_file)
         self.original_names = {}
         for name, value in vars(config_class()).items():
-            self.params.append(click.Option([f"--{name}"], default=value))
-            self.original_names[name.lower()] = name
+            new_name = name.lower().replace("_", "-")
+            print(new_name)
+            self.params.append(click.Option([f"--{new_name}"], default=value))
+            self.original_names[new_name] = name
         return super().parse_args(ctx, args)
 
 @click.command(cls=DynamicCommand)
@@ -38,6 +40,7 @@ def run(config_file, checkpoint, plot, plot_range, output_dir, **kwargs):
     for k, v in kwargs.items():
         original_key = dynamic_command.original_names[k]
         original_kwargs[original_key] = v
+
     run_config(config_file, checkpoint, plot, plot_range, output_dir, **original_kwargs)
 
 @click.command()

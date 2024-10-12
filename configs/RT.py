@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+import numpy as np
 import jax.numpy as jnp
 from jax import Array
 from jax.typing import ArrayLike
@@ -9,6 +10,8 @@ from hydrocode import Hydro, BoundaryCondition
 @dataclass(frozen=True)
 class RT(Hydro):
     g: float = -0.1
+    gamma_ad: float = 1.4
+    nx: int = 1000
     
     def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
         t = 0
@@ -19,6 +22,12 @@ class RT(Hydro):
         rho = rho.at[y > 0].set(2)
         rho = rho.at[y <= 0].set(1)
         p = 2.5 + self.g * rho * y
+        
+        rng = np.random.default_rng(12345)
+        sin_pert = 0.01 * jnp.sin(2 * jnp.pi * x[:, 0])
+        v_rand = rng.choice(sin_pert, size=v.shape)
+
+        v += v_rand
 
         return jnp.array([
             rho,
@@ -26,34 +35,34 @@ class RT(Hydro):
             rho * v,
             self.E((rho, 0, v, p))
         ]).transpose((1, 2, 0))
-        
+
     def gamma(self) -> float:
-        return 1.4
-    
+        return self.gamma_ad
+
     def t_end(self) -> float:
-        return 36
-    
+        return 20
+
     def solver(self) -> str:
         return "hllc"
-    
+
     def PLM(self) -> float:
         return True
-    
+
     def save_interval(self) -> float:
-        return 0.1
+        return 0.05
         
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
         return ((-0.25, 0.25), (-0.75, 0.75))
-        
+
     def resolution(self) -> tuple[int, int]:
-        return (300, 900)
-    
+        return (self.nx, self.nx * 3)
+
     def bc_x1(self) -> BoundaryCondition:
         return ("periodic", "periodic")
 
     def bc_x2(self) -> BoundaryCondition:
         return ("reflective", "reflective")
-    
+
     def source(self, U: ArrayLike, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
         rho = U[..., 0]
         v = U[..., 2] / rho

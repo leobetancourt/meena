@@ -100,15 +100,16 @@ def plot(checkpoint_file, var, range, title, dpi, cmap, c_range):
 @click.option("--title", type=str, default="")
 @click.option("--fps", type=int, default=24)
 @click.option("--dpi", type=int, default=200)
+@click.option("--bitrate", type=int, default=-1)
 @click.option("--cmap", type=str, default="magma")
 @click.option("--c-range", type=(float, float))
-def movie(checkpoint_path, t_range, var, range, title, fps, dpi, cmap, c_range):
+def movie(checkpoint_path, t_range, var, range, title, fps, dpi, bitrate, cmap, c_range):
     vmin, vmax = None, None
     if c_range:
         vmin, vmax = c_range
     t_min, t_max = t_range
         
-    generate_movie(checkpoint_path, t_min, t_max, var, range, title, fps, vmin, vmax, dpi, cmap)
+    generate_movie(checkpoint_path, t_min, t_max, var, range, title, fps, vmin, vmax, dpi, bitrate, cmap)
 
 cli.add_command(run)
 cli.add_command(plot)

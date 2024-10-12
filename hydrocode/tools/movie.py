@@ -26,7 +26,7 @@ def get_h5_files_in_range(directory, t_min, t_max):
     return sorted(files_in_range, key=lambda x: float(re.match(pattern, os.path.basename(x)).group(1)))
 
 
-def generate_movie(checkpoint_path, t_min, t_max, var, grid_range, title, fps=24, vmin=None, vmax=None, dpi=200, cmap="magma"):
+def generate_movie(checkpoint_path, t_min, t_max, var, grid_range, title, fps=24, vmin=None, vmax=None, dpi=200, bitrate=-1, cmap="magma"):
     file_list = get_h5_files_in_range(checkpoint_path, t_min, t_max)
     labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$",
               "u": r"$u$", "v": r"$v$", "energy": r"$E$"}
@@ -66,7 +66,7 @@ def generate_movie(checkpoint_path, t_min, t_max, var, grid_range, title, fps=24
     else:
         ax.set_title(f"t = {t:.2f}")
     FFMpegWriter = animation.writers['ffmpeg']
-    writer = FFMpegWriter(fps=fps)
+    writer = FFMpegWriter(fps=fps, bitrate=bitrate)
     PATH = checkpoint_path.split("checkpoints/")[0]
     if not os.path.exists(PATH):
         os.makedirs(PATH)

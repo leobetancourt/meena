@@ -4,7 +4,7 @@ with open("README.md", "r") as f:
     long_description = f.read()
 
 setup(
-    name='hydrocode',
+    name='meena',
     version='0.1',
     description="A GPU-accelerated hydrodynamics code written in JAX.",
     long_description=long_description,
@@ -36,7 +36,7 @@ setup(
     python_requires=">=3.8",
     entry_points={
         'console_scripts': [
-            'hydrocode=hydrocode.cli:cli'
+            'meena=meena.cli:cli'
         ]
     }
 )

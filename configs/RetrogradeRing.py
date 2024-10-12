@@ -5,7 +5,7 @@ from jax.typing import ArrayLike
 from jax import Array, jit
 import jax.numpy as jnp
 
-from hydrocode import Hydro, Lattice, Primitives, Conservatives, BoundaryCondition, Coords
+from meena import Hydro, Lattice, Primitives, Conservatives, BoundaryCondition, Coords
 
 @partial(jit, static_argnames=["hydro", "lattice"])
 def get_accr_rate(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:

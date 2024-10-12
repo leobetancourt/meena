@@ -6,7 +6,7 @@ import jax.numpy as jnp
 from jax import Array
 from jax.typing import ArrayLike
 
-from hydrocode import Hydro, BoundaryCondition
+from meena import Hydro, BoundaryCondition
 
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 @dataclass(frozen=True)

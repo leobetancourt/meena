@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from hydrocode import Hydro, Lattice
+    from meena import Hydro, Lattice
     
 from ..common.log import Logger
 from ..common.helpers import get_prims, plot_grid, append_row_csv, create_csv_file, save_to_h5

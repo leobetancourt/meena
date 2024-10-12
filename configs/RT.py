@@ -4,7 +4,7 @@ import jax.numpy as jnp
 from jax import Array
 from jax.typing import ArrayLike
 
-from hydrocode import Hydro, BoundaryCondition
+from meena import Hydro, BoundaryCondition
 
 @dataclass(frozen=True)
 class RT(Hydro):

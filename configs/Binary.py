@@ -5,7 +5,7 @@ from jax.typing import ArrayLike
 from jax import Array, jit
 import jax.numpy as jnp
 
-from hydrocode import Hydro, Lattice, Primitives, Conservatives, BoundaryCondition
+from meena import Hydro, Lattice, Primitives, Conservatives, BoundaryCondition
 from src.common.helpers import cartesian_to_polar, get_prims
 
 

@@ -6,7 +6,7 @@ from jax.typing import ArrayLike
 from jax import Array, jit
 import jax.numpy as jnp
 
-from hydrocode import Hydro, Lattice, Primitives, Conservatives, BoundaryCondition
+from meena import Hydro, Lattice, Primitives, Conservatives, BoundaryCondition
 from src.common.helpers import load_U
 
 @partial(jit, static_argnames=["hydro", "lattice"])

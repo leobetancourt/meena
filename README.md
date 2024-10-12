@@ -1,4 +1,4 @@
-# Hydro Code
+# Meena
 
 
 
@@ -8,7 +8,7 @@ https://github.com/user-attachments/assets/4a9abd93-4475-446b-8e73-1dcc3d937822
 
 This code supports Newtonian hydrodynamics up to 2D and compiles on CPU/GPU/TPU from the same Python code base. See [just-in-time compilation](https://jax.readthedocs.io/en/latest/jit-compilation.html).
 
-_ implements the [HLL and HLLC Riemann solvers](https://link.springer.com/chapter/10.1007/978-3-662-03490-3_10) and is second order accurate in space using piecewise-linear spatial reconstruction. 
+Meena implements the [HLL and HLLC Riemann solvers](https://link.springer.com/chapter/10.1007/978-3-662-03490-3_10) and is second order accurate in space using piecewise-linear spatial reconstruction. 
 
 
 ## Quick-start

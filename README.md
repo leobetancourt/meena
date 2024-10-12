@@ -2,7 +2,7 @@
 
 
 
-A GPU-acccelerated Godunov hydrodynamics code written in [JAX](https://github.com/jax-ml/jax).
+A GPU-accelerated Godunov hydrodynamics code written in [JAX](https://github.com/jax-ml/jax).
 
 https://github.com/user-attachments/assets/4a9abd93-4475-446b-8e73-1dcc3d937822
 

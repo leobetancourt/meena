@@ -5,12 +5,12 @@ with open("README.md", "r") as f:
 
 setup(
     name='meena',
-    version='0.1',
+    version='1',
     description="A GPU-accelerated hydrodynamics code written in JAX.",
     long_description=long_description,
     long_description_content_type="text/markdown",
     packages=find_packages(),
-    url="https://github.com/leobetancourt/hydro-code",
+    url="https://github.com/leobetancourt/meena",
     author="Leo Betancourt",
     author_email="leo.kbet@gmail.com",
     license="MIT",

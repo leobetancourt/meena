@@ -8,10 +8,9 @@ from jax.typing import ArrayLike
 
 from meena import Hydro, BoundaryCondition
 
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 @dataclass(frozen=True)
 class KH(Hydro):
-    res: int = 1000
+    res: int = 200
     gamma_ad: float = 5.0 / 3.0
     
     def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:

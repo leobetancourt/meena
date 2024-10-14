@@ -20,7 +20,7 @@ class DynamicCommand(click.Command):
         config_class = load_config(config_file)
         self.og_params = {}
         for param, value in vars(config_class()).items():
-            new_param = param.lower().replace("_", "-")
+            new_param = param.replace("_", "-")
             self.params.append(click.Option([f"--{new_param}"], default=value))
             self.og_params[new_param] = param
         return super().parse_args(ctx, args)

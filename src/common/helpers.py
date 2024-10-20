@@ -5,6 +5,9 @@ from jax.typing import ArrayLike
 import pandas as pd
 import h5py
 import csv
+import os
+import glob
+import re
 
 
 def linspace_cells(min, max, num):
@@ -40,7 +43,7 @@ def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, lengt
 
 def read_csv(path, compress=False):
     # Read the CSV file using pandas
-    df = pd.read_csv(path)
+    df = pd.read_csv(path, on_bad_lines="skip")
 
     # Initialize a dictionary to store the numpy arrays
     numpy_arrays = {}
@@ -234,3 +237,33 @@ def G_from_prim(hydro, prims, X1, X2, t):
 
 def minmod(x, y, z):
     return (1 / 4) * jnp.absolute(jnp.sign(x) + jnp.sign(y)) * (jnp.sign(x) + jnp.sign(z)) * jnp.minimum(jnp.minimum(jnp.absolute(x), jnp.absolute(y)), jnp.absolute(z))
+
+def find_latest_checkpoint(output_dir):
+    """
+    Function to find the latest checkpoint in the specified output directory by parsing the time in the filename.
+    Assumes checkpoint files are named like 'out_x.xx.h5', where x.xx is the time.
+    """
+    # Find all .h5 files in the output directory
+    checkpoint_files = glob.glob(os.path.join(output_dir, "checkpoints/out_*.h5"))
+    
+    if not checkpoint_files:
+        raise FileNotFoundError("No checkpoint files found in the output directory.")
+    
+    # Regular expression to extract the time from the filename (e.g., 'out_1.24.h5' -> 1.24)
+    pattern = re.compile(r'out_(\d+\.\d+)\.h5')
+
+    # Extract times from the filenames and sort by time
+    checkpoints_with_times = []
+    for file in checkpoint_files:
+        match = pattern.search(file)
+        if match:
+            time = float(match.group(1))  # Extract the time part as a float
+            checkpoints_with_times.append((time, file))
+    
+    if not checkpoints_with_times:
+        raise ValueError("No valid checkpoint files found with the expected naming convention.")
+    
+    # Sort by time and select the file with the largest time
+    latest_checkpoint = max(checkpoints_with_times, key=lambda x: x[0])[1]
+    
+    return latest_checkpoint

@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 from . import run_config, load_config
 from .tools import generate_movie
-from src.common.helpers import plot_grid
+from src.common.helpers import plot_grid, find_latest_checkpoint
 
 @click.group()
 def cli():
@@ -27,17 +27,23 @@ class DynamicCommand(click.Command):
 
 @click.command(cls=DynamicCommand)
 @click.argument("config_file", type=click.Path(exists=True))
-@click.option("--checkpoint", type=click.Path())
+@click.option("--checkpoint", type=click.Path(), help="Path to a specific checkpoint file.")
 @click.option("--plot", type=click.Choice(["density", "log density", "u", "v", "pressure", "energy"]))
 @click.option("--plot-range", type=(float, float))
 @click.option("--output-dir", type=click.Path())
-def run(config_file, checkpoint, plot, plot_range, output_dir, **kwargs):
+@click.option("--resume", is_flag=True, help="Resume simulation from the latest checkpoint in given output directory.")
+def run(config_file, checkpoint, plot, plot_range, output_dir, resume, **kwargs):
     ctx = click.get_current_context()
     dynamic_command = ctx.command
     og_kwargs = {}
+    
     for k, v in kwargs.items():
         og_key = dynamic_command.og_params[k.replace("_", "-")]
         og_kwargs[og_key] = v
+        
+    if resume:
+        checkpoint = find_latest_checkpoint(output_dir)    
+    
     run_config(config_file, checkpoint, plot, plot_range, output_dir, **og_kwargs)
 
 @click.command()
@@ -48,7 +54,9 @@ def run(config_file, checkpoint, plot, plot_range, output_dir, **kwargs):
 @click.option("--dpi", type=int, default=500)
 @click.option("--cmap", type=str, default="magma")
 @click.option("--c-range", type=(float, float))
-def plot(checkpoint_file, var, range, title, dpi, cmap, c_range):
+@click.option("--t-factor", type=float, default=1)
+@click.option("--t-units", type=str, default="")
+def plot(checkpoint_file, var, range, title, dpi, cmap, c_range, t_factor, t_units):
     labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$", "v": r"$v$", "energy": r"$E$"}
     vmin, vmax = None, None
     if c_range:
@@ -84,10 +92,7 @@ def plot(checkpoint_file, var, range, title, dpi, cmap, c_range):
             x1, x2 = x1[(x1 >= x1_min) & (x1 <= x1_max)], x2[(x2 >= x2_min) & (x2 <= x2_max)]
         
         fig, ax, c, cb = plot_grid(matrix, labels[var], coords, x1, x2, vmin, vmax, cmap)
-        if title != "":
-            ax.set_title(title + f", t = {t:.2f}")
-        else:
-            ax.set_title(f"t = {t:.2f}")
+        ax.set_title(title + f", t = {(t*t_factor):.2f} {t_units}")
         PATH = checkpoint_file.split("checkpoints/")[0]
         plt.savefig(f"{PATH}/t={t:.2f}.png", bbox_inches="tight", dpi=dpi)
         plt.show()
@@ -99,17 +104,19 @@ def plot(checkpoint_file, var, range, title, dpi, cmap, c_range):
 @click.option("-r", "--range", type=(float, float, float, float), default=None)
 @click.option("--title", type=str, default="")
 @click.option("--fps", type=int, default=24)
-@click.option("--dpi", type=int, default=200)
+@click.option("--dpi", type=int, default=300)
 @click.option("--bitrate", type=int, default=-1)
 @click.option("--cmap", type=str, default="magma")
 @click.option("--c-range", type=(float, float))
-def movie(checkpoint_path, t_range, var, range, title, fps, dpi, bitrate, cmap, c_range):
+@click.option("--t-factor", type=float, default=1)
+@click.option("--t-units", type=str, default="")
+def movie(checkpoint_path, t_range, var, range, title, fps, dpi, bitrate, cmap, c_range, t_factor, t_units):
     vmin, vmax = None, None
     if c_range:
         vmin, vmax = c_range
     t_min, t_max = t_range
         
-    generate_movie(checkpoint_path, t_min, t_max, var, range, title, fps, vmin, vmax, dpi, bitrate, cmap)
+    generate_movie(checkpoint_path, t_min, t_max, var, range, title, fps, vmin, vmax, dpi, bitrate, cmap, t_factor, t_units)
 
 cli.add_command(run)
 cli.add_command(plot)

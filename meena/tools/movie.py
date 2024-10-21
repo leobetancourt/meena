@@ -61,7 +61,10 @@ def generate_movie(checkpoint_path, t_min, t_max, var, grid_range, title, fps, v
 
     fig, ax, c, cb = plot_grid(
         matrix, labels[var], coords, x1, x2, vmin, vmax, cmap)
-    ax.set_title(title + f", t = {(t*t_factor):.2f} {t_units}")
+    if title == "":
+        ax.set_title(f"t = {(t*t_factor):.2f} {t_units}")
+    else:
+        ax.set_title(title + f", t = {(t*t_factor):.2f} {t_units}")
     FFMpegWriter = animation.writers['ffmpeg']
     writer = FFMpegWriter(fps=fps, bitrate=bitrate)
     PATH = checkpoint_path.split("checkpoints/")[0]
@@ -95,7 +98,10 @@ def generate_movie(checkpoint_path, t_min, t_max, var, grid_range, title, fps, v
                 elif coords == "cartesian":
                     c.set_data(np.transpose(matrix))
                 cb.update_normal(c)
-                ax.set_title(title + f", t = {(t*t_factor):.2f} {t_units}")
+                if title == "":
+                    ax.set_title(f"t = {(t*t_factor):.2f} {t_units}")
+                else:
+                    ax.set_title(title + f", t = {(t*t_factor):.2f} {t_units}")
                 fig.canvas.draw()
                 writer.grab_frame()
 

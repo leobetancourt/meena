@@ -92,7 +92,10 @@ def plot(checkpoint_file, var, range, title, dpi, cmap, c_range, t_factor, t_uni
             x1, x2 = x1[(x1 >= x1_min) & (x1 <= x1_max)], x2[(x2 >= x2_min) & (x2 <= x2_max)]
         
         fig, ax, c, cb = plot_grid(matrix, labels[var], coords, x1, x2, vmin, vmax, cmap)
-        ax.set_title(title + f", t = {(t*t_factor):.2f} {t_units}")
+        if title == "":
+            ax.set_title(f"t = {(t*t_factor):.2f} {t_units}")
+        else:
+            ax.set_title(title + f", t = {(t*t_factor):.2f} {t_units}")
         PATH = checkpoint_file.split("checkpoints/")[0]
         plt.savefig(f"{PATH}/t={t:.2f}.png", bbox_inches="tight", dpi=dpi)
         plt.show()

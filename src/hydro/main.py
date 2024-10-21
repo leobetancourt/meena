@@ -77,15 +77,21 @@ def solve(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> tuple[Array
     elif lattice.coords == "polar":
         return solve_polar(hydro, lattice, U, t)
 
-
 @partial(jit, static_argnames=["hydro", "lattice"])
-def first_order_step(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> tuple[Array, float]:
+def step(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> tuple[Array, float]:
     if hydro.timestep():
         dt = hydro.timestep()
     else:
         dt = compute_timestep(hydro, lattice, U, t)
-    L, flux = solve(hydro, lattice, U, t)
-    U = U + L * dt + hydro.source(U, lattice.X1, lattice.X2, t) * dt
+    L1, flux = solve(hydro, lattice, U, t)
+    S1 = hydro.source(U, lattice.X1, lattice.X2, t)
+    if hydro.time_order() == 1: # forward Euler
+        U = U + L1 * dt + S1 * dt
+    elif hydro.time_order() == 2: # RK2
+        U2 = U + (L1 * dt / 2) + (S1 * dt / 2)
+        L2, flux = solve(hydro, lattice, U2, t + (dt / 2))
+        S2 = hydro.source(U2, lattice.X1, lattice.X2, t + (dt / 2))
+        U = U + L2 * dt + S2 * dt
     return U, flux, dt
 
 
@@ -136,7 +142,7 @@ def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, plot_range=None, out="./
         n = 1
         next_checkpoint = t
         while (N is None and t < T) or (N is not None and n < N):
-            U_, flux, dt = first_order_step(hydro, lattice, U, t)
+            U_, flux, dt = step(hydro, lattice, U, t)
 
             if len(diagnostics) > 0:
                 # save diagnostics

@@ -148,6 +148,9 @@ class Ring(Hydro):
 
     def nu(self) -> float:
         return 1e-3 * (self.a ** 2) * self.omega_B
+    
+    def self_gravity(self) -> bool:
+        return True
 
     def E(self, prims: Primitives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
         rho, u, v, p = prims

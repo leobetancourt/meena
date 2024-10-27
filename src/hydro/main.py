@@ -17,6 +17,37 @@ from ..common.log import Logger
 from ..common.helpers import get_prims, plot_grid, append_row_csv, create_csv_file, save_to_h5
 from .flux import interface_flux
 
+def gravity_mesh(hydro: Hydro, lattice: Lattice, U: ArrayLike) -> Array:
+    """
+        Implements self-gravity by solving Poisson's equation on a mesh using the Fast-Fourier-Transform
+    """
+    rho = U[..., 0]
+    u, v, = U[..., 1] / rho, U[..., 2] / rho
+    rho_hat = jnp.fft.fft2(rho)
+    dx1, dx2 = lattice.x1[1] - lattice.x1[0], lattice.x2[1] - lattice.x2[0]
+    kx = jnp.fft.fftfreq(lattice.nx1, d=dx1) * 2 * jnp.pi
+    ky = jnp.fft.fftfreq(lattice.nx2, d=dx2) * 2 * jnp.pi
+    kx, ky = jnp.meshgrid(kx, ky, indexing='ij')
+
+    # Avoid division by zero at (kx, ky) = (0, 0)
+    k_squared = kx**2 + ky**2
+    k_squared = k_squared.at[0, 0].set(1.0)  # Temporarily set to avoid division by zero
+
+    # Calculate the potential in Fourier space
+    phi_hat = -4 * jnp.pi * hydro.G() * rho_hat / k_squared
+    phi_hat = phi_hat.at[0, 0].set(0)
+    
+    phi = jnp.fft.ifft2(phi_hat).real
+    gx1, gx2 = jnp.gradient(phi, dx1, dx2)
+    gx1, gx2 = -gx1, -gx2
+    
+    return jnp.array([
+        jnp.zeros_like(rho),
+        gx1,
+        gx2,
+        (u * gx1 + v * gx2)
+    ]).transpose((1, 2, 0))
+
 def cartesian_timestep(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> float:
     rho, u, v, p = get_prims(hydro, U, lattice.X1, lattice.X2, t)
     c_s = hydro.c_s((rho, u, v, p), lattice.X1, lattice.X2, t)
@@ -86,6 +117,10 @@ def first_order_step(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> 
         dt = compute_timestep(hydro, lattice, U, t)
     L, flux = solve(hydro, lattice, U, t)
     U = U + L * dt + hydro.source(U, lattice.X1, lattice.X2, t) * dt
+    
+    if hydro.self_gravity():
+        U = U + gravity_mesh(hydro, lattice, U) * dt
+    
     return U, flux, dt
 
 

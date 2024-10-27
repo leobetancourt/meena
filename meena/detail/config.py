@@ -134,6 +134,12 @@ class Hydro(ABC):
 
     def source(self, U: ArrayLike, X1: ArrayLike = None, X2: ArrayLike = None, t: float = None) -> Array:
         return jnp.zeros_like(U)
+    
+    def self_gravity(self) -> bool:
+        return False
+    
+    def G(self) -> float:
+        return 1
 
     def check_U(self, lattice: Lattice, U: ArrayLike, t: float) -> Array:
         return U

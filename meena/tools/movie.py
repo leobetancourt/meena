@@ -28,7 +28,7 @@ def get_h5_files_in_range(directory, t_min, t_max):
 
 def generate_movie(checkpoint_path, t_min, t_max, var, grid_range, title, fps, vmin, vmax, dpi, bitrate, cmap, t_factor, t_units):
     file_list = get_h5_files_in_range(checkpoint_path, t_min, t_max)
-    labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$",
+    labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma / \Sigma_0$",
               "u": r"$u$", "v": r"$v$", "energy": r"$E$"}
     with h5py.File(file_list[0], 'r') as f:
         coords = f.attrs["coords"]

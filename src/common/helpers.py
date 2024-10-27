@@ -1,5 +1,6 @@
 from matplotlib.patches import Circle
 import matplotlib.pyplot as plt
+import numpy as np
 import jax.numpy as jnp
 from jax.typing import ArrayLike
 import pandas as pd
@@ -42,9 +43,15 @@ def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, lengt
 
 
 def read_csv(path, compress=False):
-    # Read the CSV file using pandas
-    df = pd.read_csv(path, on_bad_lines="skip")
-
+    # Read the CSV file and treat 'nan' as missing values
+    df = pd.read_csv(path, na_values=['nan', 'inf', '-inf'], on_bad_lines="skip")
+    # Convert all columns to numeric, forcing errors='coerce' to convert any bad strings to NaN
+    df = df.apply(pd.to_numeric, errors='coerce')
+    # Replace inf and -inf with NaN explicitly (if they somehow sneak through)
+    df.replace([np.inf, -np.inf], np.nan, inplace=True)
+    # Drop rows containing any NaN values (including those converted from inf)
+    df = df.dropna()
+    
     # Initialize a dictionary to store the numpy arrays
     numpy_arrays = {}
 
@@ -54,7 +61,7 @@ def read_csv(path, compress=False):
             numpy_arrays[column] = df[column].values[::2]
         else:
             numpy_arrays[column] = df[column].values
-
+    
     return numpy_arrays
 
 

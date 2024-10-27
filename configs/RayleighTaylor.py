@@ -36,6 +36,9 @@ class RayleighTaylor(Hydro):
     def t_end(self) -> float:
         return 20
 
+    def time_order(self) -> int:
+        return 2
+
     def solver(self) -> str:
         return "hllc"
 

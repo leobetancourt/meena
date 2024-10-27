@@ -26,7 +26,7 @@ def get_h5_files_in_range(directory, t_min, t_max):
     return sorted(files_in_range, key=lambda x: float(re.match(pattern, os.path.basename(x)).group(1)))
 
 
-def generate_movie(checkpoint_path, t_min, t_max, var, grid_range, title, fps=24, vmin=None, vmax=None, dpi=200, bitrate=-1, cmap="magma"):
+def generate_movie(checkpoint_path, t_min, t_max, var, grid_range, title, fps, vmin, vmax, dpi, bitrate, cmap, t_factor, t_units):
     file_list = get_h5_files_in_range(checkpoint_path, t_min, t_max)
     labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$",
               "u": r"$u$", "v": r"$v$", "energy": r"$E$"}
@@ -61,10 +61,10 @@ def generate_movie(checkpoint_path, t_min, t_max, var, grid_range, title, fps=24
 
     fig, ax, c, cb = plot_grid(
         matrix, labels[var], coords, x1, x2, vmin, vmax, cmap)
-    if title != "":
-        ax.set_title(title + f", t = {t:.2f}")
+    if title == "":
+        ax.set_title(f"t = {(t*t_factor):.2f} {t_units}")
     else:
-        ax.set_title(f"t = {t:.2f}")
+        ax.set_title(title + f", t = {(t*t_factor):.2f} {t_units}")
     FFMpegWriter = animation.writers['ffmpeg']
     writer = FFMpegWriter(fps=fps, bitrate=bitrate)
     PATH = checkpoint_path.split("checkpoints/")[0]
@@ -98,10 +98,10 @@ def generate_movie(checkpoint_path, t_min, t_max, var, grid_range, title, fps=24
                 elif coords == "cartesian":
                     c.set_data(np.transpose(matrix))
                 cb.update_normal(c)
-                if title != "":
-                    ax.set_title(title + f", t = {t:.2f}")
+                if title == "":
+                    ax.set_title(f"t = {(t*t_factor):.2f} {t_units}")
                 else:
-                    ax.set_title(f"t = {t:.2f}")
+                    ax.set_title(title + f", t = {(t*t_factor):.2f} {t_units}")
                 fig.canvas.draw()
                 writer.grab_frame()
 

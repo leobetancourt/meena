@@ -15,7 +15,7 @@ def get_accr_rate(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[Arra
     x1_1, x2_1, x1_2, x2_2 = hydro.get_positions(t)
     sink_source = hydro.BH_sink(U, lattice.X1, lattice.X2, x1_1, x2_1) + \
             hydro.BH_sink(U, lattice.X1, lattice.X2, x1_2, x2_2)
-    m_dot = (sink_source[..., 0] * dA)
+    m_dot = (-sink_source[..., 0] * dA)
     return jnp.sum(m_dot)
 
 
@@ -100,6 +100,7 @@ class Ring(Hydro):
     CFL_num: float = 0.4
     domain_size: float = 10
     res: int = 600
+    retrograde: bool = 0
 
     def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
         t = 0
@@ -112,6 +113,8 @@ class Ring(Hydro):
 
         v_r = jnp.zeros_like(rho)
         v_theta = jnp.sqrt(self.G * self.M / r) # keplerian velocity
+        if self.retrograde:
+            v_theta *= -1
         u = v_r * jnp.cos(theta) - v_theta * jnp.sin(theta)
         v = v_r * jnp.sin(theta) + v_theta * jnp.cos(theta)
 
@@ -129,7 +132,7 @@ class Ring(Hydro):
         return (self.res, self.res)
 
     def t_end(self) -> float:
-        return 2 * 2 * jnp.pi
+        return 500 * 2 * jnp.pi
     
     def PLM(self) -> bool:
         return True
@@ -224,24 +227,6 @@ class Ring(Hydro):
                                             delta), (self.a / 2) * jnp.sin(self.omega_B * t + delta)
         return x1_1, x2_1, x1_2, x2_2
 
-    # def check_U(self, lattice: Lattice, U: ArrayLike, t: float) -> Array:
-    #     g = lattice.num_g
-    #     # buffer
-    #     x, y = lattice.X1, lattice.X2
-    #     r, theta = cartesian_to_polar(x, y)
-    #     buff = r >= (0.95 * lattice.x1_max)
-    #     v_theta = jnp.sqrt(self.G * self.M / r)
-    #     u_k, v_k = - v_theta * \
-    #         jnp.sin(theta), v_theta * jnp.cos(theta)
-    #     rho = U[g:-g, g:-g, 0]
-    #     e = self.E((rho, u_k, v_k, jnp.zeros_like(rho)), x, y, t)
-
-    #     U = U.at[g:-g, g:-g, 1].set(jnp.where(buff, rho * u_k, U[g:-g, g:-g, 1]))
-    #     U = U.at[g:-g, g:-g, 2].set(jnp.where(buff, rho * v_k, U[g:-g, g:-g, 2]))
-    #     U = U.at[g:-g, g:-g, 3].set(jnp.where(buff, e, U[g:-g, g:-g, 3]))
-        
-    #     return U
-
     def diagnostics(self):
         diagnostics = []
         diagnostics.append(("m_dot", get_accr_rate))
@@ -252,4 +237,4 @@ class Ring(Hydro):
         return diagnostics
 
     def save_interval(self):
-        return 0.05
+        return 1

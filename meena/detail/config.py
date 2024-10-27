@@ -90,6 +90,9 @@ class Hydro(ABC):
     def log_x2(self) -> bool:
         return False
     
+    def time_order(self) -> int:
+        return 1
+    
     def solver(self) -> str:
         return "hll"
 

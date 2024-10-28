@@ -49,7 +49,7 @@ class GravityMesh(Hydro):
         return True
 
     def save_interval(self) -> float:
-        return 1
+        return 0.1
 
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
         return ((-1, 1), (-1, 1))

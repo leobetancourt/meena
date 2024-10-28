@@ -31,7 +31,7 @@ def get_torque1(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayL
     delta_theta = theta - theta_bh
     dist = jnp.sqrt(r ** 2 + r_bh ** 2 - 2 * r *
                     r_bh * jnp.cos(delta_theta))
-    Fg = hydro.G * (hydro.M / 2) * rho * dA / \
+    Fg = hydro.G() * (hydro.M / 2) * rho * dA / \
         (dist ** 2 + hydro.eps ** 2)
     Fg_theta = Fg * (r * jnp.sin(delta_theta)) / dist
     T = jnp.sum((hydro.a / 2) * Fg_theta)
@@ -50,7 +50,7 @@ def get_torque2(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayL
     delta_theta = theta - theta_bh
     dist = jnp.sqrt(r ** 2 + r_bh ** 2 - 2 * r *
                     r_bh * jnp.cos(delta_theta))
-    Fg = hydro.G * (hydro.M / 2) * rho * dA / \
+    Fg = hydro.G() * (hydro.M / 2) * rho * dA / \
         (dist ** 2 + hydro.eps ** 2)
     Fg_theta = Fg * (r * jnp.sin(delta_theta)) / dist
     T = jnp.sum((hydro.a / 2) * Fg_theta)
@@ -63,8 +63,8 @@ def get_eccentricity(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[A
 
     rho, u, v, p = get_prims(hydro, U, x, y, t)
     j = x * v - y * u
-    e_x = (j * v / (hydro.G * hydro.M)) - (x / r)
-    e_y = -(j * u / (hydro.G * hydro.M)) - (y / r)
+    e_x = (j * v / (hydro.G() * hydro.M)) - (x / r)
+    e_y = -(j * u / (hydro.G() * hydro.M)) - (y / r)
     dA = lattice.dX1 * lattice.dX2
 
     bounds = jnp.logical_and(r >= hydro.a, r <= 6 * hydro.a)
@@ -87,7 +87,6 @@ def get_eccentricity_y(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple
 
 @dataclass(frozen=True)
 class Ring(Hydro):
-    G: float = 1
     M: float = 1
     mach: float = 10
     a: float = 1
@@ -95,11 +94,11 @@ class Ring(Hydro):
     eps: float = 0.05 * a
     omega_B: float = 1
     t_sink: float = 1 / (10 * omega_B)
-    R_0: float = 1 * a
-    sigma: float = 0.1 * a
+    R_0: float = 2 * a
+    sigma: float = 0.2 * a
     CFL_num: float = 0.4
     domain_size: float = 10
-    res: int = 600
+    res: int = 2000
     retrograde: bool = 0
 
     def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
@@ -112,7 +111,7 @@ class Ring(Hydro):
         rho = jnp.maximum(floor, gaussian)
 
         v_r = jnp.zeros_like(rho)
-        v_theta = jnp.sqrt(self.G * self.M / r) # keplerian velocity
+        v_theta = jnp.sqrt(self.G() * self.M / r) # keplerian velocity
         if self.retrograde:
             v_theta *= -1
         u = v_r * jnp.cos(theta) - v_theta * jnp.sin(theta)
@@ -132,7 +131,7 @@ class Ring(Hydro):
         return (self.res, self.res)
 
     def t_end(self) -> float:
-        return 500 * 2 * jnp.pi
+        return 20 * 2 * jnp.pi
     
     def PLM(self) -> bool:
         return True
@@ -151,6 +150,9 @@ class Ring(Hydro):
 
     def nu(self) -> float:
         return 1e-3 * (self.a ** 2) * self.omega_B
+    
+    def G(self) -> float:
+        return 1
     
     def self_gravity(self) -> bool:
         return True
@@ -172,8 +174,8 @@ class Ring(Hydro):
         dist2 = jnp.sqrt(r ** 2 + r2 ** 2 - 2 * r *
                          r2 * jnp.cos(theta - theta2))
 
-        cs = jnp.sqrt(((self.G * (self.M / 2) / jnp.sqrt(dist1 ** 2 + self.eps ** 2)) +
-                       (self.G * (self.M / 2) / jnp.sqrt(dist2 ** 2 + self.eps ** 2))) / (self.mach ** 2))
+        cs = jnp.sqrt(((self.G() * (self.M / 2) / jnp.sqrt(dist1 ** 2 + self.eps ** 2)) +
+                       (self.G() * (self.M / 2) / jnp.sqrt(dist2 ** 2 + self.eps ** 2))) / (self.mach ** 2))
         return cs
 
     def P(self, cons: Conservatives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
@@ -184,7 +186,7 @@ class Ring(Hydro):
         dx, dy = x - x_bh, y - y_bh
         r = jnp.sqrt(dx ** 2 + dy ** 2)
         
-        g_acc = - self.G * (self.M / 2) / (r ** 2 + self.eps ** 2)
+        g_acc = - self.G() * (self.M / 2) / (r ** 2 + self.eps ** 2)
         g_x, g_y = g_acc * dx / (r + self.eps), g_acc * dy / (r + self.eps)
         rho = U[..., 0]
         u, v = U[..., 1] / rho, U[..., 2] / rho

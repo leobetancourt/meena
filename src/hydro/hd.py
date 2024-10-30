@@ -3,17 +3,17 @@ from jax import Array
 from jax.typing import ArrayLike
 from ..common.helpers import add_ghost_cells, apply_bcs, minmod, enthalpy, finite_difference_x1, finite_difference_x2
 
-def get_prims(hydro, U, X1, X2, t):
+def get_prims(hydro, U, *args):
     rho = U[..., 0]
     u, v = U[..., 1] / rho, U[..., 2] / rho
     e = U[..., 3]
-    p = hydro.P((rho, u, v, e), X1, X2, t)
+    p = hydro.P((rho, rho * u, rho * v, e), *args)
     return rho, u, v, p
 
 
-def U_from_prim(hydro, prims, X1, X2, t):
+def U_from_prim(hydro, prims, *args):
     rho, u, v, _ = prims
-    e = hydro.E(prims, X1, X2, t)
+    e = hydro.E(prims, *args)
     return jnp.array([
         rho,
         rho * u,
@@ -22,9 +22,9 @@ def U_from_prim(hydro, prims, X1, X2, t):
     ]).transpose((1, 2, 0))
 
 
-def F_from_prim(hydro, prims, X1, X2, t):
+def F_from_prim(hydro, prims, *args):
     rho, u, v, p = prims
-    e = hydro.E(prims, X1, X2, t)
+    e = hydro.E(prims, *args)
     return jnp.array([
         rho * u,
         rho * (u ** 2) + p,
@@ -33,9 +33,9 @@ def F_from_prim(hydro, prims, X1, X2, t):
     ]).transpose((1, 2, 0))
 
 
-def G_from_prim(hydro, prims, X1, X2, t):
+def G_from_prim(hydro, prims, *args):
     rho, u, v, p = prims
-    e = hydro.E(prims, X1, X2, t)
+    e = hydro.E(prims, *args)
     return jnp.array([
         rho * v,
         rho * u * v,
@@ -79,8 +79,8 @@ def hll_flux_x2(F_L: ArrayLike, F_R: ArrayLike, U_L: ArrayLike, U_R: ArrayLike, 
     return (a_p * F_L + a_m * F_R - (a_p * a_m * (U_R - U_L))) / (a_p + a_m)
 
 
-def F_star_x1(hydro, F_k, S_k, S_M, U_k, X1, X2, t):
-    rho_k, vx_k, vy_k, p_k = get_prims(hydro, U_k, X1, X2, t)
+def F_star_x1(hydro, F_k, S_k, S_M, U_k, *args):
+    rho_k, vx_k, vy_k, p_k = get_prims(hydro, U_k, *args)
     E_k = U_k[..., -1]
     v_k = vx_k
 
@@ -97,8 +97,8 @@ def F_star_x1(hydro, F_k, S_k, S_M, U_k, X1, X2, t):
     return F_k + S_k * (U_star - U_k)
 
 
-def F_star_x2(hydro, F_k, S_k, S_M, U_k, X1, X2, t):
-    rho_k, vx_k, vy_k, p_k = get_prims(hydro, U_k, X1, X2, t)
+def F_star_x2(hydro, F_k, S_k, S_M, U_k, *args):
+    rho_k, vx_k, vy_k, p_k = get_prims(hydro, U_k, *args)
     E_k = U_k[..., -1]
     v_k = vy_k
 
@@ -115,13 +115,13 @@ def F_star_x2(hydro, F_k, S_k, S_M, U_k, X1, X2, t):
     return F_k + S_k * (U_star - U_k)
 
 
-def hllc_flux_x1(hydro, F_L: ArrayLike, F_R: ArrayLike, U_L: ArrayLike, U_R: ArrayLike, c_s_L: ArrayLike, c_s_R: ArrayLike, X1_L: ArrayLike, X1_R: ArrayLike, X2_C: ArrayLike, t: float) -> Array:
+def hllc_flux_x1(hydro, F_L: ArrayLike, F_R: ArrayLike, U_L: ArrayLike, U_R: ArrayLike, c_s_L: ArrayLike, c_s_R: ArrayLike, *args) -> Array:
     """
             HLLC algorithm adapted from Robert Caddy
             https://robertcaddy.com/posts/HLLC-Algorithm/
     """
-    rho_L, v_L, _, p_L = get_prims(hydro, U_L, X1_L, X2_C, t)
-    rho_R, v_R, _, p_R = get_prims(hydro, U_R, X1_R, X2_C, t)
+    rho_L, v_L, _, p_L = get_prims(hydro, U_L, *args)
+    rho_R, v_R, _, p_R = get_prims(hydro, U_R, *args)
     e_L, e_R = U_L[..., -1], U_R[..., -1]
 
     R_rho = jnp.sqrt(rho_R / rho_L)
@@ -147,21 +147,21 @@ def hllc_flux_x1(hydro, F_L: ArrayLike, F_R: ArrayLike, U_L: ArrayLike, U_R: Arr
     case_4 = case_4[..., None]
     F = jnp.where(case_1, F_L, F)
     F = jnp.where(case_2, F_star_x1(
-        hydro, F_L, S_L, S_M, U_L, X1_L, X2_C, t), F)
+        hydro, F_L, S_L, S_M, U_L, *args), F)
     F = jnp.where(case_3, F_star_x1(
-        hydro, F_R, S_R, S_M, U_R, X1_R, X2_C, t), F)
+        hydro, F_R, S_R, S_M, U_R, *args), F)
     F = jnp.where(case_4, F_R, F)
 
     return F
 
 
-def hllc_flux_x2(hydro, G_L: ArrayLike, G_R: ArrayLike, U_L: ArrayLike, U_R: ArrayLike, c_s_L: ArrayLike, c_s_R: ArrayLike, X1_C: ArrayLike, X2_L: ArrayLike, X2_R: ArrayLike, t: float) -> Array:
+def hllc_flux_x2(hydro, G_L: ArrayLike, G_R: ArrayLike, U_L: ArrayLike, U_R: ArrayLike, c_s_L: ArrayLike, c_s_R: ArrayLike, *args) -> Array:
     """
             HLLC algorithm adapted from Robert Caddy
             https://robertcaddy.com/posts/HLLC-Algorithm/
     """
-    rho_L, _, v_L, p_L = get_prims(hydro, U_L, X1_C, X2_L, t)
-    rho_R, _, v_R, p_R = get_prims(hydro, U_R, X1_C, X2_R, t)
+    rho_L, _, v_L, p_L = get_prims(hydro, U_L, *args)
+    rho_R, _, v_R, p_R = get_prims(hydro, U_R, *args)
     e_L, e_R = U_L[..., -1], U_R[..., -1]
 
     R_rho = jnp.sqrt(rho_R / rho_L)
@@ -187,9 +187,9 @@ def hllc_flux_x2(hydro, G_L: ArrayLike, G_R: ArrayLike, U_L: ArrayLike, U_R: Arr
     case_4 = case_4[..., None]
     G = jnp.where(case_1, G_L, G)
     G = jnp.where(case_2, F_star_x2(
-        hydro, G_L, S_L, S_M, U_L, X1_C, X2_L, t), G)
+        hydro, G_L, S_L, S_M, U_L, *args), G)
     G = jnp.where(case_3, F_star_x2(
-        hydro, G_R, S_R, S_M, U_R, X1_C, X2_R, t), G)
+        hydro, G_R, S_R, S_M, U_R, *args), G)
     G = jnp.where(case_4, G_R, G)
 
     return G

@@ -1,1 +1,1 @@
-from .config import BoundaryCondition, Hydro, Lattice, Coords, Boundary, Primitives, Conservatives
+from .config import BoundaryCondition, Hydro, Lattice, Coords, Boundary, Prims, Cons

@@ -6,14 +6,15 @@ import jax.numpy as jnp
 from jax import Array
 from jax.typing import ArrayLike
 
-from meena import Hydro, BoundaryCondition
+from meena import Hydro, Lattice, BoundaryCondition
 
 @dataclass(frozen=True)
 class KH(Hydro):
     res: int = 200
     gamma_ad: float = 5.0 / 3.0
     
-    def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
+    def initialize(self, lattice: Lattice) -> Array:
+        X1, X2 = lattice.X1, lattice.X2
         x, y = X1, X2
         
         rho = jnp.zeros_like(x)

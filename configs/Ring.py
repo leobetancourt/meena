@@ -5,8 +5,9 @@ from jax.typing import ArrayLike
 from jax import Array, jit
 import jax.numpy as jnp
 
-from meena import Hydro, Lattice, Primitives, Conservatives, BoundaryCondition
-from src.common.helpers import cartesian_to_polar, get_prims
+from meena import Hydro, Lattice, Prims, Cons, BoundaryCondition
+from src.hydro.hd import get_prims
+from src.common.helpers import cartesian_to_polar
 
 
 @partial(jit, static_argnames=["hydro", "lattice"])
@@ -101,7 +102,8 @@ class Ring(Hydro):
     res: int = 2000
     retrograde: bool = 0
 
-    def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
+    def initialize(self, lattice: Lattice) -> Array:
+        X1, X2 = lattice.X1, lattice.X2
         t = 0
         r, theta = cartesian_to_polar(X1, X2)
 
@@ -157,13 +159,14 @@ class Ring(Hydro):
     def self_gravity(self) -> bool:
         return True
 
-    def E(self, prims: Primitives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
+    def E(self, prims: Prims, *args) -> Array:
         rho, u, v, p = prims
-        e_internal = rho * (self.c_s(prims, X1, X2, t) ** 2)
+        e_internal = rho * (self.c_s(prims, *args) ** 2)
         e_kinetic = 0.5 * rho * (u ** 2 + v ** 2)
         return e_internal + e_kinetic
 
-    def c_s(self, prims: Primitives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
+    def c_s(self, prims: Prims, *args) -> Array:
+        X1, X2, t = args
         x1_1, x2_1, x1_2, x2_2 = self.get_positions(t)
         r, theta = cartesian_to_polar(X1, X2)
         r1, theta1 = cartesian_to_polar(x1_1, x2_1)
@@ -178,9 +181,9 @@ class Ring(Hydro):
                        (self.G() * (self.M / 2) / jnp.sqrt(dist2 ** 2 + self.eps ** 2))) / (self.mach ** 2))
         return cs
 
-    def P(self, cons: Conservatives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
+    def P(self, cons: Cons, *args) -> Array:
         rho, _, _, _ = cons
-        return rho * self.c_s(cons, X1, X2, t) ** 2
+        return rho * self.c_s(cons, *args) ** 2
 
     def BH_gravity(self, U, x, y, x_bh, y_bh):
         dx, dy = x - x_bh, y - y_bh
@@ -208,7 +211,8 @@ class Ring(Hydro):
 
         return S
 
-    def source(self, U: ArrayLike, X1, X2, t: float) -> Array:
+    def source(self, U: ArrayLike, *args) -> Array:
+        X1, X2, t = args
         S = jnp.zeros_like(U)
         x1_1, x2_1, x1_2, x2_2 = self.get_positions(t)
  

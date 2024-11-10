@@ -37,56 +37,172 @@ def cartesian_to_spherical(x, y, z):
     phi = jnp.arccos(jnp.clip(z / r, -1.0, 1.0)) if r != 0 else 0.0  # Zenith angle
     return r, theta, phi
 
-
 def add_ghost_cells(arr, num_g, axis=0):
     if axis == 0:
-        # add ghost cells to the first coordinate direction
-        return jnp.vstack((jnp.repeat(arr[:1, :, :], num_g, axis), arr, jnp.repeat(
-            arr[-1:, :, :], num_g, axis)))
+        return jnp.vstack((
+            jnp.repeat(arr[:1], num_g, axis), 
+            arr, 
+            jnp.repeat(arr[-1:, :, :], num_g, axis)))
     elif axis == 1:
-        # add ghost cells to the second coordinate direction
-        return jnp.hstack((jnp.repeat(arr[:, :1, :], num_g, axis), arr, jnp.repeat(
-            arr[:, -1:, :], num_g, axis)))
+        return jnp.hstack((
+            jnp.repeat(arr[:, :1], num_g, axis), 
+            arr, 
+            jnp.repeat(arr[:, -1:, :], num_g, axis)))
+    elif axis == 2:
+        return jnp.dstack((
+            jnp.repeat(arr[:, :, :1], num_g, axis), 
+            arr, 
+            jnp.repeat(arr[:, :, -1:], num_g, axis)))
+    else:
+        raise ValueError("Axis must be 0, 1, or 2.")
 
 
 def apply_bcs(lattice, U):
     g = lattice.num_g
     bc_x1, bc_x2 = lattice.bc_x1, lattice.bc_x2
+    
     if bc_x1[0] == "outflow":
-        U = U.at[:g, :, :].set(U[g:(g+1), :, :])
+        U = U.at[:g].set(U[g:(g+1)])
     elif bc_x1[0] == "reflective":
-        U = U.at[:g, :, :].set(jnp.flip(U[g:(2*g), :, :], axis=0))
+        U = U.at[:g].set(jnp.flip(U[g:(2*g)], axis=0))
         # invert x1 momentum
         U = U.at[:g, :, 1].set(-jnp.flip(U[g:(2*g), :, 1], axis=0))
     elif bc_x1[0] == "periodic":
-        U = U.at[:g, :, :].set(U[(-2*g):(-g), :, :])
+        U = U.at[:g].set(U[(-2*g):(-g)])
 
     if bc_x1[1] == "outflow":
-        U = U.at[-g:, :, :].set(U[-(g+1):-g, :, :])
+        U = U.at[-g:].set(U[-(g+1):-g])
     elif bc_x1[1] == "reflective":
-        U = U.at[-g:, :, :].set(jnp.flip(U[-(2*g):-g, :, :], axis=0))
+        U = U.at[-g:].set(jnp.flip(U[-(2*g):-g], axis=0))
         # invert x1 momentum
         U = U.at[-g:, :, 1].set(-jnp.flip(U[-(2*g):-g, :, 1], axis=0))
     elif bc_x1[1] == "periodic":
-        U = U.at[-g:, :, :].set(U[g:(2*g), :, :])
+        U = U.at[-g:].set(U[g:(2*g)])
 
     if bc_x2[0] == "outflow":
-        U = U.at[:, :g, :].set(U[:, g:(g+1), :])
+        U = U.at[:, :g].set(U[:, g:(g+1)])
     elif bc_x2[0] == "reflective":
-        U = U.at[:, :g, :].set(jnp.flip(U[:, g:(2*g), :], axis=1))
+        U = U.at[:, :g].set(jnp.flip(U[:, g:(2*g)], axis=1))
         # invert x2 momentum
         U = U.at[:, :g, 2].set(-jnp.flip(U[:, g:(2*g), 2], axis=1))
     elif bc_x2[0] == "periodic":
-        U = U.at[:, :g, :].set(U[:, (-2*g):(-g), :])
+        U = U.at[:, :g].set(U[:, (-2*g):(-g)])
 
     if bc_x2[1] == "outflow":
-        U = U.at[:, -g:, :].set(U[:, -(g+1):-g, :])
+        U = U.at[:, -g:].set(U[:, -(g+1):-g])
     elif bc_x2[1] == "reflective":
-        U = U.at[:, -g:, :].set(jnp.flip(U[:, -(2*g):-g, :], axis=1))
+        U = U.at[:, -g:].set(jnp.flip(U[:, -(2*g):-g], axis=1))
         # invert x2 momentum
         U = U.at[:, -g:, 2].set(-jnp.flip(U[:, -(2*g):-g, 2], axis=1))
     elif bc_x2[1] == "periodic":
-        U = U.at[:, -g:, :].set(U[:, g:(2*g), :])
+        U = U.at[:, -g:].set(U[:, g:(2*g)])
+
+    return U
+
+def apply_bcs_mhd(lattice, U):
+    g = lattice.num_g
+    bc_x1, bc_x2, bc_x3 = lattice.bc_x1, lattice.bc_x2, lattice.bc_x3
+    
+    if bc_x1[0] == "outflow":
+        U = U.at[:g].set(U[g:(g+1)])
+    elif bc_x1[0] == "reflective":
+        U = U.at[:g].set(jnp.flip(U[g:(2*g)], axis=0))
+        # invert x1 momentum
+        U = U.at[:g, :, :, 1].set(-jnp.flip(U[g:(2*g), :, :, 1], axis=0))
+    elif bc_x1[0] == "periodic":
+        U = U.at[:g].set(U[(-2*g):(-g)])
+
+    if bc_x1[1] == "outflow":
+        U = U.at[-g:].set(U[-(g+1):-g])
+    elif bc_x1[1] == "reflective":
+        U = U.at[-g:].set(jnp.flip(U[-(2*g):-g], axis=0))
+        # invert x1 momentum
+        U = U.at[-g:, :, :, 1].set(-jnp.flip(U[-(2*g):-g, :, :, 1], axis=0))
+    elif bc_x1[1] == "periodic":
+        U = U.at[-g:].set(U[g:(2*g)])
+
+    if bc_x2[0] == "outflow":
+        U = U.at[:, :g].set(U[:, g:(g+1)])
+    elif bc_x2[0] == "reflective":
+        U = U.at[:, :g].set(jnp.flip(U[:, g:(2*g)], axis=1))
+        # invert x2 momentum
+        U = U.at[:, :g, :, 2].set(-jnp.flip(U[:, g:(2*g), :, 2], axis=1))
+    elif bc_x2[0] == "periodic":
+        U = U.at[:, :g].set(U[:, (-2*g):(-g)])
+
+    if bc_x2[1] == "outflow":
+        U = U.at[:, -g:].set(U[:, -(g+1):-g])
+    elif bc_x2[1] == "reflective":
+        U = U.at[:, -g:].set(jnp.flip(U[:, -(2*g):-g], axis=1))
+        # invert x2 momentum
+        U = U.at[:, -g:, :, 2].set(-jnp.flip(U[:, -(2*g):-g, :, 2], axis=1))
+    elif bc_x2[1] == "periodic":
+        U = U.at[:, -g:].set(U[:, g:(2*g)])
+    
+    if bc_x3[0] == "outflow":
+        U = U.at[:, :, :g].set(U[:, :, g:(g+1)])
+    elif bc_x3[0] == "reflective":
+        U = U.at[:, :, :g].set(jnp.flip(U[:, :, g:(2*g)], axis=2))
+        # invert x2 momentum
+        U = U.at[:, :, :g, 2].set(-jnp.flip(U[:, :, g:(2*g), 3], axis=2))
+    elif bc_x3[0] == "periodic":
+        U = U.at[:, :, :g].set(U[:, :, (-2*g):(-g)])
+
+    if bc_x3[1] == "outflow":
+        U = U.at[:, :, -g:].set(U[:, :, -(g+1):-g])
+    elif bc_x3[1] == "reflective":
+        U = U.at[:, :, -g:].set(jnp.flip(U[:, :, -(2*g):-g], axis=2))
+        # invert x2 momentum
+        U = U.at[:, :, -g:, 2].set(-jnp.flip(U[:, :, -(2*g):-g, 3], axis=2))
+    elif bc_x3[1] == "periodic":
+        U = U.at[:, :, -g:].set(U[:, :, g:(2*g)])
+
+    return U
+
+def apply_bcs_B(lattice, g, U):
+    bc_x1, bc_x2, bc_x3 = lattice.bc_x1, lattice.bc_x2, lattice.bc_x3
+    
+    if bc_x1[0] == "outflow":
+        U = U.at[:g].set(U[g:(g+1)])
+    elif bc_x1[0] == "reflective":
+        U = U.at[:g].set(jnp.flip(U[g:(2*g)], axis=0))
+    elif bc_x1[0] == "periodic":
+        U = U.at[:g].set(U[(-2*g):(-g)])
+
+    if bc_x1[1] == "outflow":
+        U = U.at[-g:].set(U[-(g+1):-g])
+    elif bc_x1[1] == "reflective":
+        U = U.at[-g:].set(jnp.flip(U[-(2*g):-g], axis=0))
+    elif bc_x1[1] == "periodic":
+        U = U.at[-g:].set(U[g:(2*g)])
+
+    if bc_x2[0] == "outflow":
+        U = U.at[:, :g].set(U[:, g:(g+1)])
+    elif bc_x2[0] == "reflective":
+        U = U.at[:, :g].set(jnp.flip(U[:, g:(2*g)], axis=1))
+    elif bc_x2[0] == "periodic":
+        U = U.at[:, :g].set(U[:, (-2*g):(-g)])
+
+    if bc_x2[1] == "outflow":
+        U = U.at[:, -g:].set(U[:, -(g+1):-g])
+    elif bc_x2[1] == "reflective":
+        U = U.at[:, -g:].set(jnp.flip(U[:, -(2*g):-g], axis=1))
+    elif bc_x2[1] == "periodic":
+        U = U.at[:, -g:].set(U[:, g:(2*g)])
+    
+    if bc_x3[0] == "outflow":
+        U = U.at[:, :, :g].set(U[:, :, g:(g+1)])
+    elif bc_x3[0] == "reflective":
+        U = U.at[:, :, :g].set(jnp.flip(U[:, :, g:(2*g)], axis=2))
+    elif bc_x3[0] == "periodic":
+        U = U.at[:, :, :g].set(U[:, :, (-2*g):(-g)])
+
+    if bc_x3[1] == "outflow":
+        U = U.at[:, :, -g:].set(U[:, :, -(g+1):-g])
+    elif bc_x3[1] == "reflective":
+        U = U.at[:, :, -g:].set(jnp.flip(U[:, :, -(2*g):-g], axis=2))
+    elif bc_x3[1] == "periodic":
+        U = U.at[:, :, -g:].set(U[:, :, g:(2*g)])
 
     return U
 

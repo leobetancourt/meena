@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 from ..common.log import Logger
 from ..common.helpers import plot_grid, append_row_csv, create_csv_file, save_to_h5
 from .hd import get_prims, interface_flux
+from .mhd import VL_CT
 
 def gravity_mesh(hydro: Hydro, lattice: Lattice, U: ArrayLike) -> Array:
     """
@@ -129,6 +130,12 @@ def step(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> tuple[Array,
     return U, flux, dt
 
 
+@partial(jit, static_argnames=["hydro", "lattice"])
+def step_mhd(hydro: Hydro, lattice: Lattice, U: ArrayLike, B: ArrayLike, t: float) -> tuple[Array, Array, Array, float]:
+    U, B, flux, dt = VL_CT(hydro, lattice, U, B, t)
+    
+    return U, B, flux, dt
+
 def get_matrix_to_plot(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float, plot: str):
     rho, u, v, p = get_prims(hydro, U, lattice.X1, lattice.X2, t)
     e = U[:, :, 3]
@@ -147,10 +154,29 @@ def get_matrix_to_plot(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float, p
         
     return matrix
 
-def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, plot_range=None, out="./out", save_interval=None, diagnostics: ArrayLike = []):
+def B_interface(lattice: Lattice, U: ArrayLike):
+    g = lattice.num_g
+    Bx = jnp.zeros(shape=lattice.X1_INTF.shape + (g-1, g-1, g-1))
+    By = jnp.zeros_like(lattice.X2_INTF)
+    Bz = jnp.zeros_like(lattice.X3_INTF)
+    
+    # Compute the face-centered magnetic fields by averaging cell-centered values
+    Bx.at[1:-1].set(0.5 * (U[:-1, :, :, 5] + U[1:, :, :, 5]))
+    By.at[:, 1:-1].set(0.5 * (U[:, :-1, :, 6] + U[:, 1:, :, 6]))
+    Bz.at[:, :, 1:-1].set(0.5 * (U[:, :, :-1, 7] + U[:, :, 1:, 7]))
+    
+    Bx.at[0].set(U[0, :, :, 5])
+    Bx.at[-1].set(U[-1, :, :, 5])
+    By.at[:, 0].set(U[:, 0, :, 6])
+    By.at[:, -1].set(U[:, -1, :, 6])
+    Bz.at[:, :, 0].set(U[:, :, 0, 7])
+    Bz.at[:, :, -1].set(U[:, :, -1, 7])
+        
+    return jnp.array([Bx, By, Bz]).transpose((1, 2, 3, 0))
+
+def run(hydro, lattice, U, B=None, t=0, T=1, N=None, plot=None, plot_range=None, out="./out", save_interval=None, diagnostics: ArrayLike = []):
     labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$",
               "v": r"$v$", "pressure": r"$P$", "energy": r"$E$", }
-
     saving = save_interval is not None
 
     if saving or len(diagnostics) > 0:
@@ -176,8 +202,11 @@ def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, plot_range=None, out="./
         n = 1
         next_checkpoint = t
         while (N is None and t < T) or (N is not None and n < N):
-            U_, flux, dt = step(hydro, lattice, U, t)
-
+            if hydro.regime() == "HD":
+                U_, flux, dt = step(hydro, lattice, U, t, B)
+            else:
+                U_, B, flux, dt = step_mhd(hydro, lattice, U, B, t)
+            
             if len(diagnostics) > 0:
                 # save diagnostics
                 diag_values = [get_val(hydro, lattice, U, flux, t)

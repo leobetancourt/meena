@@ -102,7 +102,10 @@ class Hydro(ABC):
         return ((0, 1), (0, 1))
 
     def num_g(self) -> int:
-        return 2
+        if self.regime() == "HD":
+            return 2
+        else:
+            return 3
 
     def log_x1(self) -> bool:
         return False
@@ -161,7 +164,6 @@ class Hydro(ABC):
         e = cons[3]
         return (self.gamma() - 1) * (e - (0.5 * rho * (u ** 2 + v ** 2)))
     
-    # it's calling _E_mhd even though regime == "HD"
     def E(self, prims: Prims, *args) -> Array:
         rho, u, v, p = prims
         return (p / (self.gamma() - 1)) + (0.5 * rho * (u ** 2 + v ** 2))

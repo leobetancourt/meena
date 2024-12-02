@@ -5,7 +5,7 @@ from jax import Array, lax
 import jax.numpy as jnp
 from jax.typing import ArrayLike
 
-from src.common.helpers import linspace_cells, logspace_cells
+from src.common.helpers import linspace_cells, logspace_cells, add_ghost_coords
 
 
 class Boundary:
@@ -41,18 +41,22 @@ class Lattice:
             self.x1_min, self.x1_max = x1_range
             self.x1, self.x1_intf = logspace_cells(self.x1_min, self.x1_max, num=nx1) \
                                     if log_x1 else linspace_cells(self.x1_min, self.x1_max, num=nx1)
+            # FIX: this assumes outflow BCS.
+            self.x1_g, self.x1_intf_g = add_ghost_coords(self.x1, self.num_g), add_ghost_coords(self.x1_intf, self.num_g)
             self.bc_x1 = bc_x1
         if nx2:
             self.nx2 = nx2
             self.x2_min, self.x2_max = x2_range
             self.x2, self.x2_intf = logspace_cells(self.x2_min, self.x2_max, num=nx2) \
                                     if log_x2 else linspace_cells(self.x2_min, self.x2_max, num=nx2)
+            self.x2_g, self.x2_intf_g = add_ghost_coords(self.x2, self.num_g), add_ghost_coords(self.x2_intf, self.num_g)
             self.bc_x2 = bc_x2
         if nx3:
             self.nx3 = nx3
             self.x3_min, self.x3_max = x3_range
             self.x3, self.x3_intf = logspace_cells(self.x3_min, self.x3_max, num=nx3) \
                                     if log_x3 else linspace_cells(self.x3_min, self.x3_max, num=nx3)
+            self.x3_g, self.x3_intf_g = add_ghost_coords(self.x3, self.num_g), add_ghost_coords(self.x3_intf, self.num_g)
             self.bc_x3 = bc_x3
 
         if self.dims == 1:
@@ -71,7 +75,11 @@ class Lattice:
             self.dX1 = self.X1_INTF[1:, :, :] - self.X1_INTF[:-1, :, :]
             self.dX2 = self.X2_INTF[:, 1:, :] - self.X2_INTF[:, :-1, :]
             self.dX3 = self.X3_INTF[:, :, 1:] - self.X3_INTF[:, :, :-1]
-
+            
+            self.X1_g, self.X2_g, self.X3_g = jnp.meshgrid(self.x1_g, self.x2_g, self.x3_g, indexing="ij")
+            self.X1_INTF_g, _, _ = jnp.meshgrid(self.x1_intf_g, self.x2_g, self.x3_g, indexing="ij")
+            _, self.X2_INTF_g, _ = jnp.meshgrid(self.x1_g, self.x2_intf_g, self.x3_g, indexing="ij")
+            _, _, self.X3_INTF_g = jnp.meshgrid(self.x1_g, self.x2_g, self.x3_intf_g, indexing="ij")
 
 class Hydro(ABC):
     def __init__(self, **kwargs):

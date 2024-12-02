@@ -37,6 +37,11 @@ def cartesian_to_spherical(x, y, z):
     phi = jnp.arccos(jnp.clip(z / r, -1.0, 1.0)) if r != 0 else 0.0  # Zenith angle
     return r, theta, phi
 
+def add_ghost_coords(x, num_g):
+    x_left = x[0] - (x[1] - x[0]) * jnp.arange(num_g, 0, -1)
+    x_right = x[-1] + (x[-1] - x[-2]) * jnp.arange(1, num_g + 1)
+    return jnp.concatenate([x_left, x, x_right])
+
 def add_ghost_cells(arr, num_g, axis=0):
     if axis == 0:
         return jnp.vstack((

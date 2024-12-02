@@ -56,7 +56,7 @@ class KH(Hydro):
         return "hllc"
 
     def PLM(self) -> float:
-        return True
+        return False
 
     def save_interval(self) -> float:
         return 0.01

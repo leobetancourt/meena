@@ -118,15 +118,13 @@ def step(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> tuple[Array,
 
     L1, flux = solve(hydro, lattice, U, t)
     S1 = hydro.source(U, lattice.X1, lattice.X2, t)
-    G1 = gravity_mesh(hydro, lattice, U) if hydro.self_gravity() else 0
     if hydro.time_order() == 1: # forward Euler
-        U = U + L1 * dt + S1 * dt + G1 * dt
+        U = U + L1 * dt + S1 * dt
     elif hydro.time_order() == 2: # RK2
-        U2 = U + (L1 * dt / 2) + (S1 * dt / 2) + (G1 * dt / 2)
+        U2 = U + (L1 * dt / 2) + (S1 * dt / 2)
         L2, flux = solve(hydro, lattice, U2, t + (dt / 2))
         S2 = hydro.source(U2, lattice.X1, lattice.X2, t + (dt / 2))
-        G2 = gravity_mesh(hydro, lattice, U2) if hydro.self_gravity() else 0
-        U = U + L2 * dt + S2 * dt + G2 * dt
+        U = U + L2 * dt + S2 * dt
     return U, flux, dt
 
 
@@ -153,26 +151,6 @@ def get_matrix_to_plot(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float, p
         matrix = e
         
     return matrix
-
-def B_interface(lattice: Lattice, U: ArrayLike):
-    g = lattice.num_g
-    Bx = jnp.zeros(shape=lattice.X1_INTF.shape + (g-1, g-1, g-1))
-    By = jnp.zeros_like(lattice.X2_INTF)
-    Bz = jnp.zeros_like(lattice.X3_INTF)
-    
-    # Compute the face-centered magnetic fields by averaging cell-centered values
-    Bx.at[1:-1].set(0.5 * (U[:-1, :, :, 5] + U[1:, :, :, 5]))
-    By.at[:, 1:-1].set(0.5 * (U[:, :-1, :, 6] + U[:, 1:, :, 6]))
-    Bz.at[:, :, 1:-1].set(0.5 * (U[:, :, :-1, 7] + U[:, :, 1:, 7]))
-    
-    Bx.at[0].set(U[0, :, :, 5])
-    Bx.at[-1].set(U[-1, :, :, 5])
-    By.at[:, 0].set(U[:, 0, :, 6])
-    By.at[:, -1].set(U[:, -1, :, 6])
-    Bz.at[:, :, 0].set(U[:, :, 0, 7])
-    Bz.at[:, :, -1].set(U[:, :, -1, 7])
-        
-    return jnp.array([Bx, By, Bz]).transpose((1, 2, 3, 0))
 
 def run(hydro, lattice, U, B=None, t=0, T=1, N=None, plot=None, plot_range=None, out="./out", save_interval=None, diagnostics: ArrayLike = []):
     labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$",
@@ -203,7 +181,7 @@ def run(hydro, lattice, U, B=None, t=0, T=1, N=None, plot=None, plot_range=None,
         next_checkpoint = t
         while (N is None and t < T) or (N is not None and n < N):
             if hydro.regime() == "HD":
-                U_, flux, dt = step(hydro, lattice, U, t, B)
+                U_, flux, dt = step(hydro, lattice, U, t)
             else:
                 U_, B, flux, dt = step_mhd(hydro, lattice, U, B, t)
             

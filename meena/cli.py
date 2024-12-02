@@ -57,7 +57,7 @@ def run(config_file, checkpoint, plot, plot_range, output_dir, resume, **kwargs)
 @click.option("--t-factor", type=float, default=1)
 @click.option("--t-units", type=str, default="")
 def plot(checkpoint_file, var, range, title, dpi, cmap, c_range, t_factor, t_units):
-    labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$", "v": r"$v$", "energy": r"$E$"}
+    labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma / \Sigma_0$", "u": r"$u$", "v": r"$v$", "energy": r"$E$"}
     vmin, vmax = None, None
     if c_range:
         vmin, vmax = c_range

@@ -61,7 +61,10 @@ def run_config(config_file, checkpoint, plot, plot_range, output_dir, **kwargs):
         elif hydro.regime() == "MHD":
             U, B, t = load_U(checkpoint)
     else:
-        U, B = hydro.initialize(lattice)
+        if hydro.regime() == "HD":
+            U = hydro.initialize(lattice)
+        elif hydro.regime() == "MHD":
+            U, B = hydro.initialize(lattice)
         t = hydro.t_start()
 
     out = output_dir if output_dir else f"./output/{Path(config_file).stem}"

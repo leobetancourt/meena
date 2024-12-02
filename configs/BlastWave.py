@@ -67,9 +67,6 @@ class BlastWave(Hydro):
     def t_end(self) -> float:
         return 10
     
-    def PLM(self) -> float:
-        return True
-    
     def regime(self) -> str:
         return "MHD"
     

@@ -8,34 +8,27 @@ from meena import Hydro, Lattice, Prims, Cons, BoundaryCondition
 from src.common.helpers import cartesian_to_spherical
 
 @dataclass(frozen=True)
-class BlastWave(Hydro):
-    L: float = 2
+class BrioWu(Hydro):
       
     def initialize(self, lattice: Lattice) -> Array:
-        radius = 0.1
-        x, y, z = lattice.X1, lattice.X2, lattice.X3
+        x = lattice.X1
         x_intf, y_intf, z_intf = lattice.X1_INTF, lattice.X2_INTF, lattice.X3_INTF
-        r = jnp.sqrt(x**2 + y**2 + z**2)
-            
-        rho_0 = jnp.ones_like(x)
-        v_0 = jnp.zeros_like(x)
-        p_0 = 0.1 * jnp.ones_like(x)
-        p_b = 100 * jnp.ones_like(x)
-        Bx = jnp.ones_like(x_intf) * 1/jnp.sqrt(2)
-        By = jnp.ones_like(y_intf) * 1/jnp.sqrt(2)
-        Bz = jnp.zeros_like(z_intf)
+
+        rho = jnp.where(x < 0.5, 1, 0.125)
+        v = jnp.zeros_like(x)
+        p = jnp.where(x < 0.5, 1, 0.1)
+        Bx = jnp.ones_like(x_intf) * 0.75
+        By = jnp.ones_like(y_intf) * jnp.where(x < 0.5, 1, -1)
+        Bz = jnp.ones_like(z_intf)
         bx, by, bz = 0.5 * (Bx[:-1] + Bx[1:]), 0.5 * (By[:, :-1] + Bx[: 1:]), 0.5 * (Bz[:, :, :-1] + Bz[:, :, 1:])
         
-        prims_0 = (rho_0, v_0, v_0, v_0, p_0, bx, by, bz)
-        prims_b = (rho_0, v_0, v_0, v_0, p_b, bx, by, bz)
-        e_0, e_b = self.E(prims_0), self.E(prims_b)
-        e = jnp.where(r < radius, e_b, e_0)
+        e = self.E((rho, v, v, v, p, bx, by, bz))
         
         U = jnp.array([
-            rho_0,
-            v_0,
-            v_0,
-            v_0,
+            rho,
+            v,
+            v,
+            v,
             e,
             bx,
             by,
@@ -61,11 +54,14 @@ class BlastWave(Hydro):
         B2 = Bx**2 + By**2 + Bz**2
         return (self.gamma() - 1) * (e - 0.5 * (rho * u2 + B2))
     
+    def gamma(self) -> float:
+        return 2
+    
     def cfl(self) -> float:
         return 0.4
         
     def t_end(self) -> float:
-        return 10
+        return 0.1
     
     def regime(self) -> str:
         return "MHD"
@@ -80,16 +76,10 @@ class BlastWave(Hydro):
         return 0.01
         
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
-        return ((-0.5 * self.L, 0.5 * self.L), (-0.75 * self.L, 0.75*self.L), (-0.5 * self.L, 0.5 * self.L))
+        return (((0, 1), (0, 1), (0, 1)))
         
     def resolution(self) -> tuple[int, int]:
-        return (100, 150, 100)
+        return (500, 1, 1)
     
     def bc_x1(self) -> BoundaryCondition:
-        return ("periodic", "periodic")
-
-    def bc_x2(self) -> BoundaryCondition:
-        return ("periodic", "periodic")
-    
-    def bc_x3(self) -> BoundaryCondition:
-        return ("periodic", "periodic")
+        return ("outflow", "outflow")

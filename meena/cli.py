@@ -79,6 +79,9 @@ def plot(checkpoint_file, var, range, title, dpi, cmap, c_range, t_factor, t_uni
             matrix = momx2 / rho
         elif var == "energy":
             matrix = e
+        
+        if len(rho.shape) == 3:
+            matrix = rho[..., rho.shape[-1] // 2]
 
         if range:
             x1_min, x1_max = range[0], range[1]

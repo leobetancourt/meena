@@ -7,7 +7,7 @@ from meena import Hydro, Lattice, Prims
 from ..common.helpers import add_ghost_cells, apply_bcs_mhd, apply_bcs_B
 
 import os
-jax.config.update('jax_log_compiles', True)
+# jax.config.update('jax_log_compiles', True)
 
 # shifts axes of x to the right (last axis becomes the first, all other axes are incremented to the next axis)
 def roll(x: ArrayLike):
@@ -274,6 +274,7 @@ def timestep(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float):
     dX = jnp.stack([lattice.dX1, lattice.dX2, lattice.dX3])
     C = c_fm(hydro, prims, lattice.X1, lattice.X2, lattice.X3, t)
     dt = dX / (jnp.abs(velocities) + C)
+    dt = jnp.where(dt == 0, jnp.inf, dt)  # Replace zeros with infinity
     return hydro.cfl() * jnp.min(dt)
 
 def add_ghost(arr, num_g):

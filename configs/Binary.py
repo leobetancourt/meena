@@ -99,6 +99,9 @@ class Binary(Hydro):
     omega_B: float = 1
     t_sink: float = 1 / (10 * omega_B)
     cfl_num: float = 0.4
+    size: float = 20
+    res: float = 2000
+    plm: float = 1.5
 
     def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
         t = 0
@@ -132,17 +135,22 @@ class Binary(Hydro):
         ]).transpose((1, 2, 0))
 
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
-        size = 10
-        return ((-size, size), (-size, size))
+        return ((-self.size/2, self.size/2), (-self.size/2, self.size/2))
 
     def resolution(self) -> tuple[int, int]:
-        return (3000, 3000)
+        return (self.res, self.res)
 
     def t_end(self) -> float:
-        return 100 * 2 * jnp.pi
+        return 1000 * 2 * jnp.pi
     
     def PLM(self) -> bool:
         return True
+    
+    def theta_PLM(self) -> float:
+        return self.plm
+    
+    def time_order(self) -> int:
+        return 2
     
     def cfl(self) -> float:
         return self.cfl_num
@@ -183,6 +191,14 @@ class Binary(Hydro):
     def P(self, cons: Conservatives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
         rho, _, _, _ = cons
         return rho * self.c_s(cons, X1, X2, t) ** 2
+    
+    def get_positions(self, t):
+        delta = jnp.pi
+        x1_1, x2_1 = (self.a / 2) * jnp.cos(self.omega_B *
+                                            t), (self.a / 2) * jnp.sin(self.omega_B * t)
+        x1_2, x2_2 = (self.a / 2) * jnp.cos(self.omega_B * t +
+                                            delta), (self.a / 2) * jnp.sin(self.omega_B * t + delta)
+        return x1_1, x2_1, x1_2, x2_2
 
     def BH_gravity(self, U, x, y, x_bh, y_bh):
         dx, dy = x - x_bh, y - y_bh
@@ -221,42 +237,32 @@ class Binary(Hydro):
 
         # sinks
         S += self.BH_sink(U, X1, X2, x1_1, x2_1) + self.BH_sink(U, X1, X2, x1_2, x2_2)
-
+        
+        # buffer
+        S += self.buffer(U, X1, X2)
+        
         return S
 
-    def get_positions(self, t):
-        delta = jnp.pi
-        x1_1, x2_1 = (self.a / 2) * jnp.cos(self.omega_B *
-                                            t), (self.a / 2) * jnp.sin(self.omega_B * t)
-        x1_2, x2_2 = (self.a / 2) * jnp.cos(self.omega_B * t +
-                                            delta), (self.a / 2) * jnp.sin(self.omega_B * t + delta)
-        return x1_1, x2_1, x1_2, x2_2
+    # Buffer implementation adapted from Westernacher-Schneider et al. 2022
+    def buffer(self, U: ArrayLike, X1, X2) -> Array:
+        D = self.size / 2
+        r, _ = cartesian_to_polar(X1, X2)
 
-    # def check_U(self, lattice: Lattice, U: ArrayLike, t: float) -> Array:
-    #     g = lattice.num_g
-    #     # buffer
-    #     x, y = lattice.X1, lattice.X2
-    #     r, theta = cartesian_to_polar(x, y)
-    #     buff = r >= (0.95 * lattice.x1_max)
-    #     omega_naught = jnp.sqrt((self.G * self.M / (r ** 3 + self.eps ** 3))
-    #                             * (1 - (1 / (self.mach ** 2))))
-    #     omega = ((omega_naught ** -4) + (self.omega_B ** -4)) ** (-1/4)
-    #     v_theta = omega * r
-    #     u_k, v_k = - v_theta * \
-    #         jnp.sin(theta), v_theta * jnp.cos(theta)
-    #     rho = U[g:-g, g:-g, 0]
-    #     e = self.E((rho, u_k, v_k, jnp.zeros_like(rho)), x, y, t)
-
-
-    #     U = U.at[g:-g, g:-g, 1].set(jnp.where(buff, rho * u_k, U[g:-g, g:-g, 1]))
-    #     U = U.at[g:-g, g:-g, 2].set(jnp.where(buff, rho * v_k, U[g:-g, g:-g, 2]))
-    #     U = U.at[g:-g, g:-g, 3].set(jnp.where(buff, e, U[g:-g, g:-g, 3]))
-    #     return U
+        # f(r) increases linearly from 0 at r = D - 0.1a to 1000 at r = D (and otherwise 0)
+        def f(r):
+            linear = (r - (D - 0.1 * self.a)) * (1000 / (0.1 * self.a))
+            return jnp.where((r >= D - 0.1 * self.a) & (r <= D), linear, 0)
+        
+        U_0 = self.initialize(X1, X2)
+        omega_naught = jnp.sqrt((self.G * self.M / (D ** 3 + self.eps ** 3))
+                                * (1 - (1 / (self.mach ** 2))))
+        omega_D = ((omega_naught ** -4) + (self.omega_B ** -4)) ** (-1/4)
+        
+        return - f(r)[..., jnp.newaxis] * omega_D * (U - U_0)
 
     def diagnostics(self):
         diagnostics = []
         diagnostics.append(("m_dot", get_accr_rate))
-        # diagnostics.append(("L_dot", get_angular_mom_rate))
         diagnostics.append(("torque_1", get_torque1))
         diagnostics.append(("torque_2", get_torque2))
         diagnostics.append(("e_x", get_eccentricity_x))
@@ -264,4 +270,4 @@ class Binary(Hydro):
         return diagnostics
 
     def save_interval(self):
-        return 0.1
+        return 1

@@ -7,7 +7,6 @@ from jax.typing import ArrayLike
 
 from src.common.helpers import linspace_cells, logspace_cells, add_ghost_coords
 
-
 class Boundary:
     OUTFLOW = "outflow"
     REFLECTIVE = "reflective"
@@ -80,7 +79,7 @@ class Lattice:
             self.X1_INTF_g, _, _ = jnp.meshgrid(self.x1_intf_g, self.x2_g, self.x3_g, indexing="ij")
             _, self.X2_INTF_g, _ = jnp.meshgrid(self.x1_g, self.x2_intf_g, self.x3_g, indexing="ij")
             _, _, self.X3_INTF_g = jnp.meshgrid(self.x1_g, self.x2_g, self.x3_intf_g, indexing="ij")
-
+                
 class Hydro(ABC):
     def __init__(self, **kwargs):
         for key, value in kwargs.items():

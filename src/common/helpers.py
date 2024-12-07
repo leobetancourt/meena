@@ -149,7 +149,7 @@ def apply_bcs_mhd(lattice, U):
     elif bc_x3[0] == "reflective":
         U = U.at[:, :, :g].set(jnp.flip(U[:, :, g:(2*g)], axis=2))
         # invert x2 momentum
-        U = U.at[:, :, :g, 2].set(-jnp.flip(U[:, :, g:(2*g), 3], axis=2))
+        U = U.at[:, :, :g, 3].set(-jnp.flip(U[:, :, g:(2*g), 3], axis=2))
     elif bc_x3[0] == "periodic":
         U = U.at[:, :, :g].set(U[:, :, (-2*g):(-g)])
 
@@ -158,7 +158,7 @@ def apply_bcs_mhd(lattice, U):
     elif bc_x3[1] == "reflective":
         U = U.at[:, :, -g:].set(jnp.flip(U[:, :, -(2*g):-g], axis=2))
         # invert x2 momentum
-        U = U.at[:, :, -g:, 2].set(-jnp.flip(U[:, :, -(2*g):-g, 3], axis=2))
+        U = U.at[:, :, -g:, 3].set(-jnp.flip(U[:, :, -(2*g):-g, 3], axis=2))
     elif bc_x3[1] == "periodic":
         U = U.at[:, :, -g:].set(U[:, :, g:(2*g)])
 

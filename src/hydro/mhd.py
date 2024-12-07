@@ -326,9 +326,6 @@ def VL_CT(hydro: Hydro, lattice: Lattice, U: ArrayLike, B: ArrayLike, t: float) 
     rho = U[..., 0]
     u, v, w = U[..., 1] / rho, U[..., 2] / rho, U[..., 3] / rho
     bx, by, bz = U[..., 5], U[..., 6], U[..., 7]
-    V = jnp.stack([u, v, w], axis=-1)
-    B = jnp.stack([bx, by, bz], axis=-1)
-    e_ref = -jnp.cross(V, B, axisa=-1, axisb=-1)
     
     dez_dy_l, dez_dy_r = dexi_dxj(2, 1, v*bx - u*by, G_l, F_l, dy, 1)
     dez_dx_l, dez_dx_r = dexi_dxj(2, 0, v*bx - u*by, F_l, G_l, dx, -1)
@@ -349,68 +346,65 @@ def VL_CT(hydro: Hydro, lattice: Lattice, U: ArrayLike, B: ArrayLike, t: float) 
         + (dy / 8) * (dex_dy_r - dex_dy_l) + (dz / 8) * (dex_dz_r - dex_dz_l)
     
     # STEP 3: Update cell-centered hydro variables and face-centered magnetic fields for one-half time step
-    U = U.at[c, c, c].add(1 * dt * (-(F_l[2:, c, c] - F_l[c, c, c]) / dx - (G_l[c, 2:, c] - G_l[c, c, c]) / dy - (H_l[c, c, 2:] - H_l[c, c, c]) / dz))
-    Bx = Bx.at[c, c, c].add(1 * dt * (-(1 / dy) * (ez[:, r, c] - ez[:, l, c]) + (1 / dz) * (ey[:, c, r] - ey[:, c, l])))
-    By = By.at[c, c, c].add(1 * dt * ((1 / dx) * (ez[r, :, c] - ez[l, :, c]) - (1 / dz) * (ex[c, :, r] - ex[c, :, l])))
-    Bz = Bz.at[c, c, c].add(1 * dt * (-(1 / dx) * (ey[r, c] - ey[l, c]) + (1 / dy) * (ex[c, r] - ex[c, l])))
+    U_half = U.at[c, c, c].add(0.5 * dt * (-(F_l[2:, c, c] - F_l[c, c, c]) / dx - (G_l[c, 2:, c] - G_l[c, c, c]) / dy - (H_l[c, c, 2:] - H_l[c, c, c]) / dz))
+    Bx_half = Bx.at[c, c, c].add(0.5 * dt * (-(1 / dy) * (ez[:, r, c] - ez[:, l, c]) + (1 / dz) * (ey[:, c, r] - ey[:, c, l])))
+    By_half = By.at[c, c, c].add(0.5 * dt * ((1 / dx) * (ez[r, :, c] - ez[l, :, c]) - (1 / dz) * (ex[c, :, r] - ex[c, :, l])))
+    Bz_half = Bz.at[c, c, c].add(0.5 * dt * (-(1 / dx) * (ey[r, c] - ey[l, c]) + (1 / dy) * (ex[c, r] - ex[c, l])))
     
-    # # STEP 4: Compute cell-centered magnetic field at half time step
-    # bx_half = 0.5 * (Bx_half[r] - Bx_half[l])
-    # by_half = 0.5 * (By_half[:, r] - By_half[:, l])
-    # bz_half = 0.5 * (Bz_half[:, :, r] - Bz_half[:, :, l])
-    # U_half = U_half.at[c, c, c, 5].set(bx_half[c, c, c])
-    # U_half = U_half.at[c, c, c, 6].set(by_half[c, c, c])
-    # U_half = U_half.at[c, c, c, 7].set(bz_half[c, c, c])
+    # STEP 4: Compute cell-centered magnetic field at half time step
+    bx_half = 0.5 * (Bx_half[r] - Bx_half[l])
+    by_half = 0.5 * (By_half[:, r] - By_half[:, l])
+    bz_half = 0.5 * (Bz_half[:, :, r] - Bz_half[:, :, l])
+    U_half = U_half.at[c, c, c, 5].set(bx_half[c, c, c])
+    U_half = U_half.at[c, c, c, 6].set(by_half[c, c, c])
+    U_half = U_half.at[c, c, c, 7].set(bz_half[c, c, c])
     
-    # # STEP 5: Compute left- and right-state primitives at half time step at cell interfaces using PLM reconstruction
-    # state_half = state.at[..., :8].set(U_half)
-    # prims_xl, prims_xr = PLM(hydro, 0, state_half, t)
-    # prims_yl, prims_yr = PLM(hydro, 1, state_half, t)
-    # prims_zl, prims_zr = PLM(hydro, 2, state_half, t)
+    # STEP 5: Compute left- and right-state primitives at half time step at cell interfaces using PLM reconstruction
+    state_half = state.at[..., :8].set(U_half)
+    prims_xl, prims_xr = PLM(hydro, 0, state_half, t)
+    prims_yl, prims_yr = PLM(hydro, 1, state_half, t)
+    prims_zl, prims_zr = PLM(hydro, 2, state_half, t)
 
-    # # STEP 6: Construct 1D fluxes at interfaces in all three dimensions
-    # state_xl, state_xr = state_from_prim(hydro, prims_xl, X1_INTF[r], X2, X3, t), state_from_prim(hydro, prims_xr, X1_INTF[l], X2, X3, t)
-    # state_xl, state_xr = state_xl.at[..., 5].set(Bx_half[r]), state_xr.at[..., 5].set(Bx_half[l]) # set longitudinal component of B at interfaces
-    # F_l = hll_flux(hydro, state_xl, state_xr.at[l].set(state_xr[r]), t, dir=0)
+    # STEP 6: Construct 1D fluxes at interfaces in all three dimensions
+    state_xl, state_xr = state_from_prim(hydro, prims_xl, X1_INTF[r], X2, X3, t), state_from_prim(hydro, prims_xr, X1_INTF[l], X2, X3, t)
+    state_xl, state_xr = state_xl.at[..., 5].set(Bx_half[r]), state_xr.at[..., 5].set(Bx_half[l]) # set longitudinal component of B at interfaces
+    F_l = hll_flux_x(hydro, state_xl, state_xr, t)
     
-    # state_yl, state_yr = state_from_prim(hydro, prims_yl, X1, X2_INTF[:, r], X3, t), state_from_prim(hydro, prims_yr, X1, X2_INTF[:, l], X3, t)
-    # state_yl, state_yr = state_yl.at[..., 6].set(By_half[:, r]), state_yr.at[..., 6].set(By_half[:, l])
-    # G_l = hll_flux(hydro, state_yl, state_yr.at[:, l].set(state_yr[:, r]), t, dir=1)
+    state_yl, state_yr = state_from_prim(hydro, prims_yl, X1, X2_INTF[:, r], X3, t), state_from_prim(hydro, prims_yr, X1, X2_INTF[:, l], X3, t)
+    state_yl, state_yr = state_yl.at[..., 6].set(By_half[:, r]), state_yr.at[..., 6].set(By_half[:, l])
+    G_l = hll_flux_y(hydro, state_yl, state_yr, t)
     
-    # state_zl, state_zr = state_from_prim(hydro, prims_zl, X1, X2, X3_INTF[:, :, r], t), state_from_prim(hydro, prims_zr, X1, X2, X3_INTF[:, :, l], t)
-    # state_zl, state_zr = state_zl.at[..., 7].set(Bz_half[:, :, r]), state_zr.at[..., 7].set(Bz_half[:, :, l])
-    # H_l = hll_flux(hydro, state_zl, state_zr.at[:, :, l].set(state_zr[:, :, r]), t, dir=2)
+    state_zl, state_zr = state_from_prim(hydro, prims_zl, X1, X2, X3_INTF[:, :, r], t), state_from_prim(hydro, prims_zr, X1, X2, X3_INTF[:, :, l], t)
+    state_zl, state_zr = state_zl.at[..., 7].set(Bz_half[:, :, r]), state_zr.at[..., 7].set(Bz_half[:, :, l])
+    H_l = hll_flux_z(hydro, state_zl, state_zr, t)
     
-    # # STEP 7: Calculate CT electric fields at cell corners using face-centered fluxes computed in step 6 and reference fields from the half step
-    # rho = U_half[..., 0]
-    # u, v, w = U_half[..., 1] / rho, U_half[..., 2] / rho, U_half[..., 3] / rho
-    # V = jnp.stack([u, v, w], axis=-1)
-    # B = jnp.stack([bx_half, by_half, bz_half], axis=-1)
-    # e_ref = -jnp.cross(V, B, axisa=-1, axisb=-1)
+    # STEP 7: Calculate CT electric fields at cell corners using face-centered fluxes computed in step 6 and reference fields from the half step
+    rho = U_half[..., 0]
+    u, v, w = U_half[..., 1] / rho, U_half[..., 2] / rho, U_half[..., 3] / rho
     
-    # dez_dy_l, dez_dy_r = dexi_dxj(2, 1, e_ref, G_l, F_l, dy)
-    # dez_dx_l, dez_dx_r = dexi_dxj(2, 0, e_ref, F_l, G_l, dx)
+    dez_dy_l, dez_dy_r = dexi_dxj(2, 1, v*bx - u*by, G_l, F_l, dy, 1)
+    dez_dx_l, dez_dx_r = dexi_dxj(2, 0, v*bx - u*by, F_l, G_l, dx, -1)
     
-    # dey_dx_l, dey_dx_r = dexi_dxj(1, 0, e_ref, F_l, H_l, dx)
-    # dey_dz_l, dey_dz_r = dexi_dxj(1, 2, e_ref, H_l, F_l, dz)
+    dey_dx_l, dey_dx_r = dexi_dxj(1, 0, u*bz - w*bx, F_l, H_l, dx, 1) # why the extra negative here
+    dey_dz_l, dey_dz_r = dexi_dxj(1, 2, u*bz - w*bx, H_l, F_l, dz, -1)
     
-    # dex_dy_l, dex_dy_r = dexi_dxj(0, 1, e_ref, G_l, H_l, dy)
-    # dex_dz_l, dex_dz_r = dexi_dxj(0, 2, e_ref, H_l, G_l, dz)
+    dex_dy_l, dex_dy_r = dexi_dxj(0, 1, w*by - v*bz, G_l, H_l, dy, -1)
+    dex_dz_l, dex_dz_r = dexi_dxj(0, 2, w*by - v*bz, H_l, G_l, dz, 1)
         
-    # ez = -0.25 * (F_l[r, r, :, 7] + F_l[r, l, :, 7] + G_l[r, r, :, 7] + G_l[l, r, :, 7]) \
-    #     + (dy / 8) * (dez_dy_r - dez_dy_l) + (dx / 8) * (dez_dx_r - dez_dx_l)
+    ez = 0.25 * (-F_l[r, r, :, 5] - F_l[r, l, :, 5] + G_l[r, r, :, 6] + G_l[l, r, :, 6]) \
+        + (dy / 8) * (dez_dy_r - dez_dy_l) + (dx / 8) * (dez_dx_r - dez_dx_l)
     
-    # ey = -0.25 * (F_l[r, :, r, 6] + F_l[r, :, l, 6] + H_l[r, :, r, 6] + H_l[l, :, r, 6]) \
-    #     + (dx / 8) * (dey_dx_r - dey_dx_l) + (dz / 8) * (dey_dz_r - dey_dz_l)
+    ey = 0.25 * (F_l[r, :, r, 6] + F_l[r, :, l, 6] - H_l[r, :, r, 5] - H_l[l, :, r, 5]) \
+        + (dx / 8) * (dey_dx_r - dey_dx_l) + (dz / 8) * (dey_dz_r - dey_dz_l)
     
-    # ex = -0.25 * (G_l[:, r, r, 5] + G_l[:, r, l, 5] + H_l[:, r, r, 5] + H_l[:, l, r, 5]) \
-    #     + (dy / 8) * (dex_dy_r - dex_dy_l) + (dz / 8) * (dex_dz_r - dex_dz_l)
+    ex = 0.25 * (-G_l[:, r, r, 5] - G_l[:, r, l, 5] + H_l[:, r, r, 6] + H_l[:, l, r, 6]) \
+        + (dy / 8) * (dex_dy_r - dex_dy_l) + (dz / 8) * (dex_dz_r - dex_dz_l)
     
-    # # STEP 8: Update cell-centered hydro variables and face-centered magnetic fields for a full timestep
-    # U = U.at[c, c, c].add(dt * (-(F_l[2:, c, c] - F_l[c, c, c]) / dx - (G_l[c, 2:, c] - G_l[c, c, c]) / dy - (H_l[c, c, 2:] - H_l[c, c, c]) / dz))
-    # Bx = Bx.at[c, c, c].add(dt * (-(1 / dy) * (ez[:, r, c] - ez[:, l, c]) + (1 / dz) * (ey[:, c, r] - ey[:, c, l])))
-    # By = By.at[c, c, c].add(dt * ((1 / dx) * (ez[r, :, c] - ez[l, :, c]) - (1 / dz) * (ex[c, :, r] - ex[c, :, l])))
-    # Bz = Bz.at[c, c, c].add(dt * (-(1 / dx) * (ey[r, c] - ey[l, c]) + (1 / dy) * (ex[c, r] - ex[c, l])))
+    # STEP 8: Update cell-centered hydro variables and face-centered magnetic fields for a full timestep
+    U = U.at[c, c, c].add(dt * (-(F_l[2:, c, c] - F_l[c, c, c]) / dx - (G_l[c, 2:, c] - G_l[c, c, c]) / dy - (H_l[c, c, 2:] - H_l[c, c, c]) / dz))
+    Bx = Bx.at[c, c, c].add(dt * (-(1 / dy) * (ez[:, r, c] - ez[:, l, c]) + (1 / dz) * (ey[:, c, r] - ey[:, c, l])))
+    By = By.at[c, c, c].add(dt * ((1 / dx) * (ez[r, :, c] - ez[l, :, c]) - (1 / dz) * (ex[c, :, r] - ex[c, :, l])))
+    Bz = Bz.at[c, c, c].add(dt * (-(1 / dx) * (ey[r, c] - ey[l, c]) + (1 / dy) * (ex[c, r] - ex[c, l])))
 
     # STEP 9: Compute cell-centered magnetic field
     bx = 0.5 * (Bx[r] - Bx[l])

@@ -6,20 +6,22 @@ from jax import Array
 from meena import Hydro, Lattice, Prims, Cons, BoundaryCondition
 
 @dataclass(frozen=True)
-class BrioWu(Hydro):
-    
-    res: int = 400
+class OrszagTang(Hydro):
+    cfl_num: float = 0.4
       
     def initialize(self, lattice: Lattice) -> Array:
-        x = lattice.X1
+        x, y = lattice.X1, lattice.X2
         x_intf, y_intf, z_intf = lattice.X1_INTF, lattice.X2_INTF, lattice.X3_INTF
-        mid = (self.range()[1] + self.range()[0]) / 2
 
-        rho = jnp.where(x < mid, 1, 0.125)
-        v = jnp.zeros_like(x)
-        p = jnp.where(x < mid, 1, 0.1)
-        Bx = jnp.ones_like(x_intf) * 0.75
-        By = jnp.ones_like(y_intf) * jnp.where(x < mid, 1, -1)
+        rho = jnp.ones_like(x)
+        v_0 = 1
+        u, v, w = v_0 * -jnp.sin(2 * jnp.pi * y), v_0 * jnp.sin(2 * jnp.pi * x), jnp.zeros_like(x)
+        p = jnp.ones_like(x) / self.gamma()
+        B_0 = 1 / self.gamma()
+        x_repl = jnp.concatenate([x[:, 0:1], x], axis=1)
+        y_repl = jnp.concatenate([y[0:1], y], axis=0)
+        Bx = B_0 * -jnp.sin(2 * jnp.pi * y_repl)
+        By = B_0 * jnp.sin(4 * jnp.pi * x_repl)
         Bz = jnp.zeros_like(z_intf)
         bx, by, bz = 0.5 * (Bx[:-1] + Bx[1:]), 0.5 * (By[:, :-1] + By[:, 1:]), 0.5 * (Bz[:, :, :-1] + Bz[:, :, 1:])
         
@@ -27,9 +29,9 @@ class BrioWu(Hydro):
         
         U = jnp.array([
             rho,
+            u,
             v,
-            v,
-            v,
+            w,
             e,
             bx,
             by,
@@ -56,28 +58,31 @@ class BrioWu(Hydro):
         return (self.gamma() - 1) * (e - 0.5 * (rho * u2 + B2))
     
     def gamma(self) -> float:
-        return 2
+        return 5.0 / 3.0
     
     def cfl(self) -> float:
-        return 0.2
+        return self.cfl_num
         
     def t_end(self) -> float:
-        return 0.2
+        return 1
     
     def regime(self) -> str:
         return "MHD"
     
     def solver(self) -> float:
-        return "hllc"
+        return "hll"
     
     def save_interval(self) -> float:
-        return 0.1
+        return 0.01
         
-    def range(self) -> tuple[float, float]:
-        return (0, 1)
+    def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
+        return ((0, 1), (0, 1))
         
     def resolution(self) -> tuple[int, int]:
-        return self.res
+        return (400, 400)
     
     def bc_x1(self) -> BoundaryCondition:
-        return ("outflow", "outflow")
+        return ("periodic", "periodic")
+    
+    def bc_x2(self) -> BoundaryCondition:
+        return ("periodic", "periodic")

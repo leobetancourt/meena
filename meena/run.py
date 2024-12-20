@@ -23,9 +23,12 @@ def run_config(config_file, checkpoint, plot, plot_range, output_dir, **kwargs):
     config_class = load_config(config_file)
     hydro = config_class(**kwargs)
     
-    dims = len(hydro.resolution())
-    nx1, nx2, nx3 = None, None, None
-    x1_range, x2_range, x3_range = None, None, None
+    if isinstance(hydro.resolution(), int):
+        dims = 1
+    else:
+        dims = len(hydro.resolution())
+    nx1, nx2, nx3 = 1, 1, 1
+    x1_range, x2_range, x3_range = (0, 1), (0, 1), (0, 1)
     if dims == 1:
         nx1 = hydro.resolution()
         x1_range = hydro.range()
@@ -38,7 +41,7 @@ def run_config(config_file, checkpoint, plot, plot_range, output_dir, **kwargs):
             
     lattice = Lattice(
         coords=hydro.coords(),
-        dims = len(hydro.resolution()),
+        dims = dims,
         bc_x1=hydro.bc_x1(),
         bc_x2=hydro.bc_x2(),
         bc_x3=hydro.bc_x3(),

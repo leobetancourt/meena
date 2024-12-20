@@ -306,20 +306,41 @@ def read_csv(path, compress=False):
 
 
 def save_to_h5(filename, t, U, hydro, lattice):
-    rho, momx1, momx2, E = U[..., 0], U[..., 1], U[..., 2], U[..., 3]
-    with h5py.File(filename, "w") as f:
-        # metadata
-        f.attrs["coords"] = lattice.coords
-        f.attrs["gamma"] = hydro.gamma()
-        f.attrs["x1"] = lattice.x1
-        f.attrs["x2"] = lattice.x2
-        f.attrs["t"] = t
+    if U.shape[-1] == 8:
+        rho, momx1, momx2, momx3, E, Bx, By, Bz = U[..., 0], U[..., 1], U[..., 2], U[..., 3], U[..., 4], U[..., 5], U[..., 6], U[..., 7]
+        with h5py.File(filename, "w") as f:
+            # metadata
+            f.attrs["coords"] = lattice.coords
+            f.attrs["gamma"] = hydro.gamma()
+            f.attrs["x1"] = lattice.x1
+            f.attrs["x2"] = lattice.x2
+            f.attrs["x3"] = lattice.x2
+            f.attrs["t"] = t
 
-        # create h5 datasets for conserved variables
-        f.create_dataset("rho", data=rho, dtype="float64")
-        f.create_dataset("momx1", data=momx1, dtype="float64")
-        f.create_dataset("momx2", data=momx2, dtype="float64")
-        f.create_dataset("E", data=E, dtype="float64")
+            # create h5 datasets for conserved variables
+            f.create_dataset("rho", data=rho, dtype="float64")
+            f.create_dataset("momx1", data=momx1, dtype="float64")
+            f.create_dataset("momx2", data=momx2, dtype="float64")
+            f.create_dataset("momx3", data=momx3, dtype="float64")
+            f.create_dataset("E", data=E, dtype="float64")  
+            f.create_dataset("Bx", data=Bx, dtype="float64")
+            f.create_dataset("By", data=By, dtype="float64")
+            f.create_dataset("Bz", data=Bz, dtype="float64")
+    else:
+        rho, momx1, momx2, E = U[..., 0], U[..., 1], U[..., 2], U[..., 3]
+        with h5py.File(filename, "w") as f:
+            # metadata
+            f.attrs["coords"] = lattice.coords
+            f.attrs["gamma"] = hydro.gamma()
+            f.attrs["x1"] = lattice.x1
+            f.attrs["x2"] = lattice.x2
+            f.attrs["t"] = t
+
+            # create h5 datasets for conserved variables
+            f.create_dataset("rho", data=rho, dtype="float64")
+            f.create_dataset("momx1", data=momx1, dtype="float64")
+            f.create_dataset("momx2", data=momx2, dtype="float64")
+            f.create_dataset("E", data=E, dtype="float64")
 
 
 def create_csv_file(filename, headers):

@@ -2,14 +2,12 @@ from dataclasses import dataclass
 
 import jax.numpy as jnp
 from jax import Array
-from jax.typing import ArrayLike
 
 from meena import Hydro, Lattice, Prims, Cons, BoundaryCondition
-from src.common.helpers import cartesian_to_spherical
 
 @dataclass(frozen=True)
 class BlastWave(Hydro):
-    L: float = 2
+    L: float = 1
       
     def initialize(self, lattice: Lattice) -> Array:
         radius = 0.1
@@ -20,11 +18,11 @@ class BlastWave(Hydro):
         rho_0 = jnp.ones_like(x)
         v_0 = jnp.zeros_like(x)
         p_0 = 0.1 * jnp.ones_like(x)
-        p_b = 100 * jnp.ones_like(x)
+        p_b = 10 * jnp.ones_like(x)
         Bx = jnp.ones_like(x_intf) * 1/jnp.sqrt(2)
         By = jnp.ones_like(y_intf) * 1/jnp.sqrt(2)
         Bz = jnp.zeros_like(z_intf)
-        bx, by, bz = 0.5 * (Bx[:-1] + Bx[1:]), 0.5 * (By[:, :-1] + Bx[: 1:]), 0.5 * (Bz[:, :, :-1] + Bz[:, :, 1:])
+        bx, by, bz = 0.5 * (Bx[:-1] + Bx[1:]), 0.5 * (By[:, :-1] + By[:, 1:]), 0.5 * (Bz[:, :, :-1] + Bz[:, :, 1:])
         
         prims_0 = (rho_0, v_0, v_0, v_0, p_0, bx, by, bz)
         prims_b = (rho_0, v_0, v_0, v_0, p_b, bx, by, bz)
@@ -65,7 +63,7 @@ class BlastWave(Hydro):
         return 0.4
         
     def t_end(self) -> float:
-        return 10
+        return 1
     
     def regime(self) -> str:
         return "MHD"
@@ -80,10 +78,10 @@ class BlastWave(Hydro):
         return 0.01
         
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
-        return ((-0.5 * self.L, 0.5 * self.L), (-0.75 * self.L, 0.75*self.L), (-0.5 * self.L, 0.5 * self.L))
+        return ((-0.5 * self.L, 0.5 * self.L), (-0.75 * self.L, 0.75*self.L))
         
     def resolution(self) -> tuple[int, int]:
-        return (100, 150, 100)
+        return (400, 600)
     
     def bc_x1(self) -> BoundaryCondition:
         return ("periodic", "periodic")

@@ -195,7 +195,7 @@ def run(hydro, lattice, U, B=None, t=0, T=1, N=None, plot=None, plot_range=None,
     
             # at each checkpoint, save the conserved variables in every zone
             if saving and t >= next_checkpoint:
-                filename = f"{out}/checkpoints/out_{t:.2f}.h5"
+                filename = f"{out}/checkpoints/out_{t:.3f}.h5"
                 save_to_h5(filename, t, U, hydro, lattice)
                 next_checkpoint += save_interval
 

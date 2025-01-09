@@ -37,6 +37,9 @@ class Shear(Hydro):
     def gamma(self) -> float:
         return self.gamma_ad
 
+    def nu(self) -> float:
+        return 1e-3
+
     def t_end(self) -> float:
         return 0.1
 

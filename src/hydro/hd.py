@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 from jax import Array
 from jax.typing import ArrayLike
-from ..common.helpers import add_ghost_cells, apply_bcs, minmod, enthalpy, finite_difference_x1, finite_difference_x2
+from ..common.helpers import add_ghost_cells, apply_bcs, minmod, enthalpy
 
 def get_prims(hydro, U, *args):
     rho = U[..., 0]
@@ -193,52 +193,6 @@ def hllc_flux_x2(hydro, G_L: ArrayLike, G_R: ArrayLike, U_L: ArrayLike, U_R: Arr
 
     return G
 
-
-def viscosity(hydro, lattice, U: ArrayLike, x1_g: ArrayLike, x2_g: ArrayLike) -> tuple[Array, Array, Array, Array]:
-    g = lattice.num_g
-    rho = U[..., 0]
-    u, v = U[..., 1] / rho, U[..., 2] / rho
-    dudx = finite_difference_x1(lattice, u, x1_g, x2_g)
-    dudy = finite_difference_x2(lattice, u, x1_g, x2_g)
-    dvdx = finite_difference_x1(lattice, v, x1_g, x2_g)
-    dvdy = finite_difference_x2(lattice, v, x1_g, x2_g)
-
-    zero = jnp.zeros((lattice.nx1, lattice.nx2))
-
-    rho_l = (rho[(g-1):-(g+1), g:-g] + rho[g:-g, g:-g]) / 2
-    rho_r = (rho[g:-g, g:-g] + rho[(g+1):-(g-1), g:-g]) / 2
-    Fv_l = -hydro.nu() * jnp.array([
-        zero,
-        rho_l * dudx[:-1, :],
-        rho_l * dvdx[:-1, :],
-        zero
-    ]).transpose((1, 2, 0))
-
-    Fv_r = -hydro.nu() * jnp.array([
-        zero,
-        rho_r * dudx[1:, :],
-        rho_r * dvdx[1:, :],
-        zero
-    ]).transpose((1, 2, 0))
-
-    rho_l = (rho[g:-g, (g-1):-(g+1)] + rho[g:-g, g:-g]) / 2
-    rho_r = (rho[g:-g, g:-g] + rho[g:-g, (g+1):-(g-1)]) / 2
-    Gv_l = -hydro.nu() * jnp.array([
-        zero,
-        rho_l * dudy[:, :-1],
-        rho_l * dvdy[:, :-1],
-        zero
-    ]).transpose((1, 2, 0))
-
-    Gv_r = -hydro.nu() * jnp.array([
-        zero,
-        rho_r * dudy[:, 1:],
-        rho_r * dvdy[:, 1:],
-        zero
-    ]).transpose((1, 2, 0))
-
-    return Fv_l, Fv_r, Gv_l, Gv_r
-
 def plm_grad(yl, y0, yr, theta):
     return minmod(theta * (y0 - yl), 0.5 * (yr - yl), theta * (yr - y0))
 
@@ -314,10 +268,10 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
         
         # left cell interface (i-1/2)
         # left-biased state
-        gxli = plm_grad(prims_ki, prims_li, prims_cc)
+        gxli = plm_grad(prims_ki, prims_li, prims_cc, theta)
         prims_lim = prims_li + 0.5 * gxli
         # right-biased state
-        gxcc = plm_grad(prims_li, prims_cc, prims_ri)
+        gxcc = plm_grad(prims_li, prims_cc, prims_ri, theta)
         prims_lip = prims_cc - 0.5 * gxcc
         
         # right cell interface (i+1/2)
@@ -325,7 +279,7 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
         prims_rim = prims_cc + 0.5 * gxcc
         
         # right-biased state
-        gxri = plm_grad(prims_cc, prims_ri, prims_ti)
+        gxri = plm_grad(prims_cc, prims_ri, prims_ti, theta)
         prims_rip = prims_ri - 0.5 * gxri
 
         # maybe for rl and lr i need to use X1_C and X2_C
@@ -344,17 +298,17 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
 
         # left cell interface (j-1/2)
         # left-biased state
-        gylj = plm_grad(prims_kj, prims_lj, prims_cc)
+        gylj = plm_grad(prims_kj, prims_lj, prims_cc, theta)
         prims_ljm = prims_lj + 0.5 * gylj
         # right-biased state
-        gycc = plm_grad(prims_lj, prims_cc, prims_rj)
+        gycc = plm_grad(prims_lj, prims_cc, prims_rj, theta)
         prims_ljp = prims_cc - 0.5 * gycc
 
         # right cell interface (j+1/2)
         # left-biased state
         prims_rjm = prims_cc + 0.5 * gycc
         # right-biased state
-        gyrj = plm_grad(prims_cc, prims_rj, prims_tj)
+        gyrj = plm_grad(prims_cc, prims_rj, prims_tj, theta)
         prims_rjp = prims_rj - 0.5 * gyrj
 
         G_ll, G_lr, G_rl, G_rr = G_from_prim(hydro, prims_ljm, X1_C, X2_L, t), G_from_prim(
@@ -379,7 +333,7 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
             gxlj = plm_grad(prims_ll, prims_lj, prims_rl, theta)
             gxrj = plm_grad(prims_lr, prims_rj, prims_rr, theta)
             
-            dx = x1[1] - x1[0], dy = x2[1] - x2[0]
+            dx, dy = x1[1] - x1[0], x2[1] - x2[0]
             
             sli = shear_strain(gxli, gyli, dx, dy)
             sri = shear_strain(gxri, gyri, dx, dy)
@@ -387,14 +341,14 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
             srj = shear_strain(gxrj, gyrj, dx, dy)
             scc = shear_strain(gxcc, gycc, dx, dy)
             
-            F_l[..., 1] -= 0.5 * nu * (prims_li[0] * sli[0] + prims_cc[0] * scc[0])
-            F_l[..., 2] -= 0.5 * nu * (prims_li[0] * sli[1] + prims_cc[0] * scc[1])
-            F_r[..., 1] -= 0.5 * nu * (prims_cc[0] * scc[0] + prims_ri[0] * sri[0])
-            F_r[..., 2] -= 0.5 * nu * (prims_cc[0] * scc[1] + prims_ri[0] * sri[1])
-            G_l[..., 1] -= 0.5 * nu * (prims_lj[0] * slj[2] + prims_cc[0] * scc[2])
-            G_l[..., 2] -= 0.5 * nu * (prims_lj[0] * slj[3] + prims_cc[0] * scc[3])
-            G_r[..., 1] -= 0.5 * nu * (prims_cc[0] * scc[2] + prims_rj[0] * srj[2])
-            G_r[..., 2] -= 0.5 * nu * (prims_cc[0] * scc[3] + prims_rj[0] * srj[3])
+            F_l = F_l.at[..., 1].add(-0.5 * nu * (prims_li[0] * sli[0] + prims_cc[0] * scc[0]))
+            F_l = F_l.at[..., 2].add(-0.5 * nu * (prims_li[0] * sli[1] + prims_cc[0] * scc[1]))
+            F_r = F_r.at[..., 1].add(-0.5 * nu * (prims_cc[0] * scc[0] + prims_ri[0] * sri[0]))
+            F_r = F_r.at[..., 2].add(-0.5 * nu * (prims_cc[0] * scc[1] + prims_ri[0] * sri[1]))
+            G_l = G_l.at[..., 1].add(-0.5 * nu * (prims_lj[0] * slj[2] + prims_cc[0] * scc[2]))
+            G_l = G_l.at[..., 2].add(-0.5 * nu * (prims_lj[0] * slj[3] + prims_cc[0] * scc[3]))
+            G_r = G_r.at[..., 1].add(-0.5 * nu * (prims_cc[0] * scc[2] + prims_rj[0] * srj[2]))
+            G_r = G_r.at[..., 2].add(-0.5 * nu * (prims_cc[0] * scc[3] + prims_rj[0] * srj[3]))
     else:
         prims = get_prims(hydro, U, X1, X2, t)
         F = F_from_prim(hydro, prims, X1, X2, t)

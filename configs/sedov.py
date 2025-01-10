@@ -17,15 +17,21 @@ class SedovBlast(Hydro):
         U = jnp.zeros(shape=(X1.shape[0], X1.shape[1], 4))
         
         U = U.at[r < radius].set(jnp.array([1, 0, 0, 10]))
-        U = U.at[r >= radius].set(jnp.array([1, 0, 0, self.E((1, 1e-4, 0, 0))]))
+        U = U.at[r >= radius].set(jnp.array([1, 0, 0, self.E((1, 0, 0, 1e-4))]))
         
         return U
         
     def t_end(self) -> float:
         return 10
     
+    def gamma(self) -> float:
+        return 1.4
+    
     def PLM(self) -> float:
         return True
+    
+    def time_order(self) -> int:
+        return 2
     
     def solver(self) -> float:
         return "hll"
@@ -34,16 +40,16 @@ class SedovBlast(Hydro):
         return "cartesian"
     
     def save_interval(self) -> float:
-        return 0.1
+        return 1
         
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
-        return ((0, 1), (0, 1))
+        return ((-1, 1), (-1, 1))
         
     def resolution(self) -> tuple[int, int]:
-        return (300, 300)
+        return (600, 600)
     
     def bc_x1(self) -> BoundaryCondition:
-        return ("reflective", "reflective")
+        return ("outflow", "outflow")
 
     def bc_x2(self) -> BoundaryCondition:
-        return ("reflective", "reflective")
+        return ("outflow", "outflow")

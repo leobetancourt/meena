@@ -14,8 +14,8 @@ if TYPE_CHECKING:
     from meena import Hydro, Lattice
     
 from ..common.log import Logger
-from ..common.helpers import get_prims, plot_grid, append_row_csv, create_csv_file, save_to_h5
-from .hd import interface_flux
+from ..common.helpers import plot_grid, append_row_csv, create_csv_file, save_to_h5
+from .hd import get_prims, interface_flux
 
 def gravity_mesh(hydro: Hydro, lattice: Lattice, U: ArrayLike) -> Array:
     """

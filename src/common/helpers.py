@@ -201,49 +201,8 @@ def apply_bcs(lattice, U):
 def enthalpy(rho: ArrayLike, p: ArrayLike, e: ArrayLike):
     return (e + p) / rho
 
-def get_prims(hydro, U, X1, X2, t):
-    rho = U[..., 0]
-    u, v = U[..., 1] / rho, U[..., 2] / rho
-    e = U[..., 3]
-    p = hydro.P((rho, u, v, e), X1, X2, t)
-    return rho, u, v, p
-
-
-def U_from_prim(hydro, prims, X1, X2, t):
-    rho, u, v, _ = prims
-    e = hydro.E(prims, X1, X2, t)
-    return jnp.array([
-        rho,
-        rho * u,
-        rho * v,
-        e
-    ]).transpose((1, 2, 0))
-
-
-def F_from_prim(hydro, prims, X1, X2, t):
-    rho, u, v, p = prims
-    e = hydro.E(prims, X1, X2, t)
-    return jnp.array([
-        rho * u,
-        rho * (u ** 2) + p,
-        rho * u * v,
-        (e + p) * u
-    ]).transpose((1, 2, 0))
-
-
-def G_from_prim(hydro, prims, X1, X2, t):
-    rho, u, v, p = prims
-    e = hydro.E(prims, X1, X2, t)
-    return jnp.array([
-        rho * v,
-        rho * u * v,
-        rho * (v ** 2) + p,
-        (e + p) * v
-    ]).transpose((1, 2, 0))
-
-
 def minmod(x, y, z):
-    return (1 / 4) * jnp.absolute(jnp.sign(x) + jnp.sign(y)) * (jnp.sign(x) + jnp.sign(z)) * jnp.minimum(jnp.minimum(jnp.absolute(x), jnp.absolute(y)), jnp.absolute(z))
+    return 0.25 * jnp.absolute(jnp.sign(x) + jnp.sign(y)) * (jnp.sign(x) + jnp.sign(z)) * jnp.minimum(jnp.minimum(jnp.absolute(x), jnp.absolute(y)), jnp.absolute(z))
 
 def find_latest_checkpoint(output_dir):
     """

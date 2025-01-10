@@ -43,7 +43,7 @@ class KH(Hydro):
         ]).transpose((1, 2, 0))
 
     def theta_PLM(self) -> float:
-        return 2
+        return 1.8
 
     def gamma(self) -> float:
         return self.gamma_ad
@@ -58,7 +58,7 @@ class KH(Hydro):
         return True
 
     def save_interval(self) -> float:
-        return 0.01
+        return 1
 
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
         return ((-0.5, 0.5), (-0.5, 0.5))

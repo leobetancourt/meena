@@ -118,7 +118,7 @@ class Hydro(ABC):
         return (Boundary.OUTFLOW, Boundary.OUTFLOW)
 
     def gamma(self) -> float:
-        return 5/3
+        return 5.0 / 3.0
 
     def nu(self) -> float:
         return None
@@ -128,11 +128,12 @@ class Hydro(ABC):
         return (p / (self.gamma() - 1)) + (0.5 * rho * (u ** 2 + v ** 2))
 
     def c_s(self, prims: Primitives, X1: ArrayLike = None, X2: ArrayLike = None, t: float = None) -> Array:
-        rho, u, v, p = prims
+        rho, _, _, p = prims
         return jnp.sqrt(self.gamma() * p / rho)
 
     def P(self, cons: Conservatives, X1: ArrayLike = None, X2: ArrayLike = None, t: float = None) -> Array:
-        rho, u, v, e = cons
+        rho, mom_x, mom_y, e = cons
+        u, v = mom_x / rho, mom_y / rho
         return (self.gamma() - 1) * (e - (0.5 * rho * (u ** 2 + v ** 2)))
 
     def source(self, U: ArrayLike, X1: ArrayLike = None, X2: ArrayLike = None, t: float = None) -> Array:

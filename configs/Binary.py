@@ -6,7 +6,7 @@ from jax import Array, jit
 import jax.numpy as jnp
 
 from meena import Hydro, Lattice, Primitives, Conservatives, BoundaryCondition
-from src.common.helpers import cartesian_to_polar, get_prims
+from src.common.helpers import cartesian_to_polar
 
 
 @partial(jit, static_argnames=["hydro", "lattice"])
@@ -61,7 +61,8 @@ def get_eccentricity(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[A
     x, y = lattice.X1, lattice.X2
     r = jnp.sqrt(x ** 2 + y ** 2)
 
-    rho, u, v, p = get_prims(hydro, U, x, y, t)
+    rho = U[..., 0]
+    u, v = U[..., 1] / rho, U[..., 2] / rho
     j = x * v - y * u
     e_x = (j * v / (hydro.G * hydro.M)) - (x / r)
     e_y = -(j * u / (hydro.G * hydro.M)) - (y / r)
@@ -98,10 +99,10 @@ class Binary(Hydro):
     eps: float = 0.05 * a
     omega_B: float = 1
     t_sink: float = 1 / (10 * omega_B)
-    cfl_num: float = 0.4
+    cfl_num: float = 0.3
     size: float = 20
     res: float = 2000
-    plm: float = 1.5
+    plm: float = 1.8
 
     def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
         t = 0
@@ -141,7 +142,7 @@ class Binary(Hydro):
         return (self.res, self.res)
 
     def t_end(self) -> float:
-        return 1000 * 2 * jnp.pi
+        return 800 * 2 * jnp.pi
     
     def PLM(self) -> bool:
         return True

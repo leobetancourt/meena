@@ -1,5 +1,6 @@
 import jax.numpy as jnp
 from jax import Array
+from jax import debug
 from jax.typing import ArrayLike
 from ..common.helpers import add_ghost_cells, apply_bcs, minmod, enthalpy
 
@@ -50,8 +51,10 @@ def alphas(v_L: ArrayLike, v_R: ArrayLike, c_s_L: ArrayLike, c_s_R: ArrayLike) -
     lambda_L = lambdas(v_L, c_s_L)
     lambda_R = lambdas(v_R, c_s_R)
 
-    alpha_m = jnp.minimum(0, jnp.minimum(lambda_L[0], lambda_R[0]))
-    alpha_p = jnp.maximum(0, jnp.minimum(lambda_L[1], lambda_R[1]))
+    # alpha_m = jnp.minimum(0, jnp.minimum(lambda_L[0], lambda_R[0]))
+    # alpha_p = jnp.maximum(0, jnp.maximum(lambda_L[1], lambda_R[1]))
+    alpha_m = jnp.maximum(0, jnp.maximum(-lambda_L[0], -lambda_R[0]))
+    alpha_p = jnp.maximum(0, jnp.maximum(lambda_L[1], lambda_R[1]))
 
     return alpha_p, alpha_m
 
@@ -63,9 +66,9 @@ def hll_flux_x1(F_L: ArrayLike, F_R: ArrayLike,
     v_L, v_R = U_L[..., 1] / rho_L, U_R[..., 1] / rho_R
 
     a_p, a_m = alphas(v_L, v_R, c_s_L, c_s_R)
-    a_p, a_m = a_p[..., None], a_m[..., None]
+    a_p, a_m = a_p[..., jnp.newaxis], a_m[..., jnp.newaxis]
 
-    return (a_p * F_L - a_m * F_R - (U_L - U_R) * a_p * a_m) / (a_p - a_m)
+    return (a_p * F_L + a_m * F_R - a_p * a_m * (U_R - U_L)) / (a_p + a_m)
 
 
 def hll_flux_x2(F_L: ArrayLike, F_R: ArrayLike, U_L: ArrayLike, U_R: ArrayLike, c_s_L: ArrayLike, c_s_R: ArrayLike) -> Array:
@@ -73,9 +76,9 @@ def hll_flux_x2(F_L: ArrayLike, F_R: ArrayLike, U_L: ArrayLike, U_R: ArrayLike, 
     v_L, v_R = U_L[..., 2] / rho_L, U_R[..., 2] / rho_R
 
     a_p, a_m = alphas(v_L, v_R, c_s_L, c_s_R)
-    a_p, a_m = a_p[..., None], a_m[..., None]
+    a_p, a_m = a_p[..., jnp.newaxis], a_m[..., jnp.newaxis]
 
-    return (a_p * F_L - a_m * F_R - (U_L - U_R) * a_p * a_m) / (a_p - a_m)
+    return (a_p * F_L + a_m * F_R - a_p * a_m * (U_R - U_L)) / (a_p + a_m)
 
 
 def F_star_x1(hydro, F_k, S_k, S_M, U_k, *args):
@@ -194,7 +197,7 @@ def hllc_flux_x2(hydro, G_L: ArrayLike, G_R: ArrayLike, U_L: ArrayLike, U_R: Arr
     return G
 
 def plm_grad(yl, y0, yr, theta):
-    return minmod(theta * (y0 - yl), 0.5 * (yr - yl), theta * (yr - y0))
+    return 0 # minmod(theta * (y0 - yl), 0.5 * (yr - yl), theta * (yr - y0))
 
 def shear_strain(gx, gy, dx, dy):
     sxx = 4.0 / 3.0 * gx[1] / dx - 2.0 / 3.0 * gy[2] / dy
@@ -294,7 +297,7 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
             F_l, F_r = hll_flux_x1(F_ll, F_lr, U_ll, U_lr, c_s_ll, c_s_lr), hll_flux_x1(
                 F_rl, F_rr, U_rl, U_rr, c_s_rl, c_s_rr)
         elif hydro.solver() == "hllc":
-            F_l, F_r = hllc_flux_x1(hydro, F_ll, F_lr, U_ll, U_lr, c_s_ll, c_s_lr, X1_L, X1_C, X2_C, t), hllc_flux_x1(hydro, F_rl, F_rr, U_rl, U_rr, c_s_rl, c_s_rr, X1_C, X1_R, X2_C, t)
+            F_l, F_r = hllc_flux_x1(hydro, F_ll, F_lr, U_ll, U_lr, c_s_ll, c_s_lr, X1_L, X2_C, t), hllc_flux_x1(hydro, F_rl, F_rr, U_rl, U_rr, c_s_rl, c_s_rr, X1_R, X2_C, t)
 
         # left cell interface (j-1/2)
         # left-biased state
@@ -322,10 +325,10 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
             G_l, G_r = hll_flux_x2(G_ll, G_lr, U_ll, U_lr, c_s_ll, c_s_lr), hll_flux_x2(
                 G_rl, G_rr, U_rl, U_rr, c_s_rl, c_s_rr)
         elif hydro.solver() == "hllc":
-            G_l, G_r = hllc_flux_x2(hydro, G_ll, G_lr, U_ll, U_lr, c_s_ll, c_s_lr, X1_C, X2_L, X2_C, t), hllc_flux_x2(
-                hydro, G_rl, G_rr, U_rl, U_rr, c_s_rl, c_s_rr, X1_C, X2_C, X2_R, t)
+            G_l, G_r = hllc_flux_x2(hydro, G_ll, G_lr, U_ll, U_lr, c_s_ll, c_s_lr, X1_C, X2_L, t), hllc_flux_x2(
+                hydro, G_rl, G_rr, U_rl, U_rr, c_s_rl, c_s_rr, X1_C, X2_R, t)
         
-        if hydro.nu():
+        if False:
             nu = hydro.nu()
             # compute additional PLM gradients
             gyli = plm_grad(prims_ll, prims_li, prims_lr, theta)
@@ -383,9 +386,9 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
             F_r = hll_flux_x1(F_C, F_R, U_C, U_R, c_s_C, c_s_R)
         elif hydro.solver() == "hllc":
             F_l = hllc_flux_x1(hydro, F_L, F_C, U_L, U_C,
-                               c_s_L, c_s_C, X1_L, X1_C, X2_C, t)
+                               c_s_L, c_s_C, X1_L, X2_C, t)
             F_r = hllc_flux_x1(hydro, F_C, F_R, U_C, U_R,
-                               c_s_C, c_s_R, X1_C, X1_R, X2_C, t)
+                               c_s_C, c_s_R, X1_R, X2_C, t)
 
         U_L = U[g:-g, (g-1):-(g+1), :]
         U_C = U[g:-g, g:-g, :]
@@ -404,9 +407,9 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
         elif hydro.solver() == "hllc":
             # G_(i-1/2)
             G_l = hllc_flux_x2(hydro, G_L, G_C, U_L, U_C,
-                               c_s_L, c_s_C, X1_C, X2_L, X2_C, t)
+                               c_s_L, c_s_C, X1_C, X2_L, t)
             # F_(i+1/2)
             G_r = hllc_flux_x2(hydro, G_C, G_R, U_C, U_R,
-                               c_s_C, c_s_R, X1_C, X2_C, X2_R, t)
+                               c_s_C, c_s_R, X1_C, X2_R, t)
 
     return F_l, F_r, G_l, G_r

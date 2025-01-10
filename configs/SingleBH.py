@@ -57,7 +57,7 @@ class SingleBH(Hydro):
     t_sink: float = 1 / (10 * omega_B)
     sink_rate: float = 10 * omega_B
     R_0: float = 2 * a
-    sigma: float = 0.05 * a
+    sigma: float = 0.01 * a
     cfl_num: float = 0.3
     size: float = 10
     res: int = 1000
@@ -194,7 +194,7 @@ class SingleBH(Hydro):
         S += self.BH_sink(U, X1, X2, x1, x2)
         
         # buffer
-        # S += self.buffer(U, X1, X2)
+        S += self.buffer(U, X1, X2)
         
         return S
 

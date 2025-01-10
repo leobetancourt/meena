@@ -52,7 +52,7 @@ class KH(Hydro):
         return 30
 
     def solver(self) -> str:
-        return "hllc"
+        return "hll"
 
     def PLM(self) -> float:
         return True

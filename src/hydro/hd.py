@@ -51,10 +51,10 @@ def alphas(v_L: ArrayLike, v_R: ArrayLike, c_s_L: ArrayLike, c_s_R: ArrayLike) -
     lambda_L = lambdas(v_L, c_s_L)
     lambda_R = lambdas(v_R, c_s_R)
 
-    # alpha_m = jnp.minimum(0, jnp.minimum(lambda_L[0], lambda_R[0]))
-    # alpha_p = jnp.maximum(0, jnp.maximum(lambda_L[1], lambda_R[1]))
-    alpha_m = jnp.maximum(0, jnp.maximum(-lambda_L[0], -lambda_R[0]))
+    alpha_m = jnp.minimum(0, jnp.minimum(lambda_L[0], lambda_R[0]))
     alpha_p = jnp.maximum(0, jnp.maximum(lambda_L[1], lambda_R[1]))
+    # alpha_m = jnp.maximum(0, jnp.maximum(-lambda_L[0], -lambda_R[0]))
+    # alpha_p = jnp.maximum(0, jnp.maximum(lambda_L[1], lambda_R[1]))
 
     return alpha_p, alpha_m
 
@@ -68,7 +68,7 @@ def hll_flux_x1(F_L: ArrayLike, F_R: ArrayLike,
     a_p, a_m = alphas(v_L, v_R, c_s_L, c_s_R)
     a_p, a_m = a_p[..., jnp.newaxis], a_m[..., jnp.newaxis]
 
-    return (a_p * F_L + a_m * F_R - a_p * a_m * (U_R - U_L)) / (a_p + a_m)
+    return (a_p * F_L - a_m * F_R - a_p * a_m * (U_L - U_R)) / (a_p - a_m)
 
 
 def hll_flux_x2(F_L: ArrayLike, F_R: ArrayLike, U_L: ArrayLike, U_R: ArrayLike, c_s_L: ArrayLike, c_s_R: ArrayLike) -> Array:
@@ -78,7 +78,7 @@ def hll_flux_x2(F_L: ArrayLike, F_R: ArrayLike, U_L: ArrayLike, U_R: ArrayLike, 
     a_p, a_m = alphas(v_L, v_R, c_s_L, c_s_R)
     a_p, a_m = a_p[..., jnp.newaxis], a_m[..., jnp.newaxis]
 
-    return (a_p * F_L + a_m * F_R - a_p * a_m * (U_R - U_L)) / (a_p + a_m)
+    return (a_p * F_L - a_m * F_R - a_p * a_m * (U_L - U_R)) / (a_p - a_m)
 
 
 def F_star_x1(hydro, F_k, S_k, S_M, U_k, *args):
@@ -197,7 +197,11 @@ def hllc_flux_x2(hydro, G_L: ArrayLike, G_R: ArrayLike, U_L: ArrayLike, U_R: Arr
     return G
 
 def plm_grad(yl, y0, yr, theta):
-    return 0 # minmod(theta * (y0 - yl), 0.5 * (yr - yl), theta * (yr - y0))
+    # return minmod(theta * (y0 - yl), 0.5 * (yr - yl), theta * (yr - y0))
+    a = (y0 - yl) * theta
+    b = (yr - yl) * 0.5
+    c = (yr - y0) * theta
+    return 0.25 * jnp.absolute(jnp.sign(a) + jnp.sign(b)) * (jnp.sign(a) + jnp.sign(c)) * jnp.minimum(jnp.absolute(a), jnp.minimum(jnp.absolute(b), jnp.absolute(c)))
 
 def shear_strain(gx, gy, dx, dy):
     sxx = 4.0 / 3.0 * gx[1] / dx - 2.0 / 3.0 * gy[2] / dy
@@ -328,7 +332,7 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
             G_l, G_r = hllc_flux_x2(hydro, G_ll, G_lr, U_ll, U_lr, c_s_ll, c_s_lr, X1_C, X2_L, t), hllc_flux_x2(
                 hydro, G_rl, G_rr, U_rl, U_rr, c_s_rl, c_s_rr, X1_C, X2_R, t)
         
-        if False:
+        if hydro.nu():
             nu = hydro.nu()
             # compute additional PLM gradients
             gyli = plm_grad(prims_ll, prims_li, prims_lr, theta)

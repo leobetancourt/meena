@@ -37,9 +37,9 @@ class KH(Hydro):
 
         return jnp.array([
             rho,
-            rho * u,
-            rho * v,
-            self.E((rho, u, v, p))
+            u,
+            v,
+            p
         ]).transpose((1, 2, 0))
 
     def theta_PLM(self) -> float:
@@ -52,7 +52,7 @@ class KH(Hydro):
         return 30
 
     def solver(self) -> str:
-        return "hll"
+        return "hllc"
 
     def PLM(self) -> float:
         return True

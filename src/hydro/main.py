@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     
 from ..common.log import Logger
 from ..common.helpers import plot_grid, append_row_csv, create_csv_file, save_to_h5
-from .hd import get_prims, interface_flux
+from .hd import U_from_prim, get_prims, interface_flux
 
 def gravity_mesh(hydro: Hydro, lattice: Lattice, U: ArrayLike) -> Array:
     """
@@ -49,8 +49,9 @@ def gravity_mesh(hydro: Hydro, lattice: Lattice, U: ArrayLike) -> Array:
     ]).transpose((1, 2, 0))
 
 def cartesian_timestep(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> float:
-    rho, u, v, p = get_prims(hydro, U, lattice.X1, lattice.X2, t)
-    c_s = hydro.c_s((rho, u, v, p), lattice.X1, lattice.X2, t)
+    prims = get_prims(hydro, U, lattice.X1, lattice.X2, t)
+    c_s = hydro.c_s(prims, lattice.X1, lattice.X2, t)
+    u, v = prims[..., 1], prims[..., 2]
     dt1 = jnp.min(lattice.dX1 / (jnp.abs(u) + c_s))
     dt2 = jnp.min(lattice.dX2 / (jnp.abs(v) + c_s))
     return hydro.cfl() * jnp.minimum(dt1, dt2)
@@ -117,20 +118,19 @@ def step(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> tuple[Array,
 
     L1, flux = solve(hydro, lattice, U, t)
     S1 = hydro.source(U, lattice.X1, lattice.X2, t)
-    G1 = gravity_mesh(hydro, lattice, U) if hydro.self_gravity() else 0
     if hydro.time_order() == 1: # forward Euler
-        U = U + L1 * dt + S1 * dt + G1 * dt
+        U = U + L1 * dt + S1 * dt
     elif hydro.time_order() == 2: # RK2
-        U2 = U + (L1 * dt / 2) + (S1 * dt / 2) + (G1 * dt / 2)
+        U2 = U + (L1 * dt / 2) + (S1 * dt / 2)
         L2, flux = solve(hydro, lattice, U2, t + (dt / 2))
         S2 = hydro.source(U2, lattice.X1, lattice.X2, t + (dt / 2))
-        G2 = gravity_mesh(hydro, lattice, U2) if hydro.self_gravity() else 0
-        U = U + L2 * dt + S2 * dt + G2 * dt
+        U = U + L2 * dt + S2 * dt
     return U, flux, dt
 
 
 def get_matrix_to_plot(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float, plot: str):
-    rho, u, v, p = get_prims(hydro, U, lattice.X1, lattice.X2, t)
+    prims = get_prims(hydro, U, lattice.X1, lattice.X2, t)
+    rho, u, v, p = prims[..., 0], prims[..., 1], prims[..., 2], prims[..., 3]
     e = U[:, :, 3]
     if plot == "density":
         matrix = rho
@@ -147,7 +147,7 @@ def get_matrix_to_plot(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float, p
         
     return matrix
 
-def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, plot_range=None, out="./out", save_interval=None, diagnostics: ArrayLike = []):
+def run(hydro, lattice, prims, t=0, T=1, N=None, plot=None, plot_range=None, out="./out", save_interval=None, diagnostics: ArrayLike = []):
     labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$",
               "v": r"$v$", "pressure": r"$P$", "energy": r"$E$", }
 
@@ -166,6 +166,7 @@ def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, plot_range=None, out="./
             headers.extend([name for name, _ in diagnostics])
             create_csv_file(diag_file, headers)
 
+    U = U_from_prim(hydro, prims, lattice.X1, lattice.X2, t)
     if plot:
         matrix = get_matrix_to_plot(hydro, lattice, U, t, plot)
         fig, ax, c, cb = plot_grid(
@@ -189,7 +190,8 @@ def run(hydro, lattice, U, t=0, T=1, N=None, plot=None, plot_range=None, out="./
             # at each checkpoint, save the conserved variables in every zone
             if saving and t >= next_checkpoint:
                 filename = f"{out}/checkpoints/out_{t:.2f}.h5"
-                save_to_h5(filename, t, U, hydro, lattice)
+                prims = get_prims(hydro, U, lattice.X1, lattice.X2, t)
+                save_to_h5(filename, t, prims, hydro, lattice)
                 next_checkpoint += save_interval
 
             U = U_

@@ -43,10 +43,10 @@ class SedovBlast(Hydro):
         return 1
         
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
-        return ((-1, 1), (-1, 1))
+        return ((0, 1), (0, 1))
         
     def resolution(self) -> tuple[int, int]:
-        return (600, 600)
+        return (300, 300)
     
     def bc_x1(self) -> BoundaryCondition:
         return ("outflow", "outflow")

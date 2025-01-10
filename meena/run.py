@@ -37,9 +37,9 @@ def run_config(config_file, checkpoint, plot, plot_range, output_dir, **kwargs):
     )
 
     if checkpoint:  # user specifies a checkpoint file to run from
-        U, t = load_U(checkpoint)
+        prims, t = load_U(checkpoint)
     else:
-        U, t = hydro.initialize(
+        prims, t = hydro.initialize(
             lattice.X1, lattice.X2), hydro.t_start()
 
     out = output_dir if output_dir else f"./output/{Path(config_file).stem}"
@@ -47,7 +47,7 @@ def run_config(config_file, checkpoint, plot, plot_range, output_dir, **kwargs):
     run(
         hydro,
         lattice,
-        U=U,
+        prims=prims,
         t=t,
         T=hydro.t_end(),
         N=None,

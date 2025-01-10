@@ -124,20 +124,20 @@ class Hydro(ABC):
         return None
 
     def E(self, prims: Primitives, X1: ArrayLike = None, X2: ArrayLike = None, t: float = None) -> Array:
-        rho, u, v, p = prims
-        return (p / (self.gamma() - 1)) + (0.5 * rho * (u ** 2 + v ** 2))
+        rho, u, v, p = prims[..., 0], prims[..., 1], prims[..., 2], prims[..., 3]
+        return p / (self.gamma() - 1) + 0.5 * rho * (u ** 2 + v ** 2)
 
     def c_s(self, prims: Primitives, X1: ArrayLike = None, X2: ArrayLike = None, t: float = None) -> Array:
-        rho, _, _, p = prims
+        rho, p = prims[..., 0], prims[..., 3]
         return jnp.sqrt(self.gamma() * p / rho)
 
     def P(self, cons: Conservatives, X1: ArrayLike = None, X2: ArrayLike = None, t: float = None) -> Array:
-        rho, mom_x, mom_y, e = cons
+        rho, mom_x, mom_y, e = cons[..., 0], cons[..., 1], cons[..., 2], cons[..., 3]
         u, v = mom_x / rho, mom_y / rho
         return (self.gamma() - 1) * (e - (0.5 * rho * (u ** 2 + v ** 2)))
 
-    def source(self, U: ArrayLike, X1: ArrayLike = None, X2: ArrayLike = None, t: float = None) -> Array:
-        return jnp.zeros_like(U)
+    def source(self, prims: ArrayLike, X1: ArrayLike = None, X2: ArrayLike = None, t: float = None) -> Array:
+        return jnp.zeros_like(prims)
     
     def self_gravity(self) -> bool:
         return False

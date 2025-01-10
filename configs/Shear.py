@@ -41,7 +41,7 @@ class Shear(Hydro):
         return 1e-3
 
     def t_end(self) -> float:
-        return 0.1
+        return 10
 
     def solver(self) -> str:
         return "hll"
@@ -50,7 +50,7 @@ class Shear(Hydro):
         return True
  
     def save_interval(self) -> float:
-        return 0.01
+        return 1
 
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
         return ((-0.5, 0.5), (-0.5, 0.5))

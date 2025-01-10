@@ -14,7 +14,6 @@ class RayleighTaylor(Hydro):
     nx: int = 200
     
     def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
-        t = 0
         x, y = X1, X2
         # velocity perturbation is 5% of characteristic sound speed
         v = 0.01 * (1 + jnp.cos(4 * jnp.pi * x)) * (1 + jnp.cos(3 * jnp.pi * y)) / 4
@@ -26,8 +25,8 @@ class RayleighTaylor(Hydro):
         return jnp.array([
             rho,
             jnp.zeros_like(x),
-            rho * v,
-            self.E((rho, 0, v, p))
+            v,
+            p
         ]).transpose((1, 2, 0))
 
     def gamma(self) -> float:
@@ -43,10 +42,10 @@ class RayleighTaylor(Hydro):
         return "hllc"
 
     def PLM(self) -> float:
-        return True
+        return False
 
     def save_interval(self) -> float:
-        return 0.05
+        return 1
         
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
         return ((-0.25, 0.25), (-0.75, 0.75))

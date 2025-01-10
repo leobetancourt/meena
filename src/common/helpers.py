@@ -65,8 +65,8 @@ def read_csv(path, compress=False):
     return numpy_arrays
 
 
-def save_to_h5(filename, t, U, hydro, lattice):
-    rho, momx1, momx2, E = U[..., 0], U[..., 1], U[..., 2], U[..., 3]
+def save_to_h5(filename, t, prims, hydro, lattice):
+    rho, u, v, p = prims[..., 0], prims[..., 1], prims[..., 2], prims[..., 3]
     with h5py.File(filename, "w") as f:
         # metadata
         f.attrs["coords"] = lattice.coords
@@ -77,9 +77,9 @@ def save_to_h5(filename, t, U, hydro, lattice):
 
         # create h5 datasets for conserved variables
         f.create_dataset("rho", data=rho, dtype="float64")
-        f.create_dataset("momx1", data=momx1, dtype="float64")
-        f.create_dataset("momx2", data=momx2, dtype="float64")
-        f.create_dataset("E", data=E, dtype="float64")
+        f.create_dataset("u", data=u, dtype="float64")
+        f.create_dataset("v", data=v, dtype="float64")
+        f.create_dataset("p", data=p, dtype="float64")
 
 
 def create_csv_file(filename, headers):

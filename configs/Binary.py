@@ -10,11 +10,11 @@ from src.common.helpers import cartesian_to_polar
 
 
 @partial(jit, static_argnames=["hydro", "lattice"])
-def get_accr_rate(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
+def get_accr_rate(hydro: Hydro, lattice: Lattice, prims: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
     dA = lattice.dX1 * lattice.dX2
     x1_1, x2_1, x1_2, x2_2 = hydro.get_positions(t)
-    sink_source = hydro.BH_sink(U, lattice.X1, lattice.X2, x1_1, x2_1) + \
-            hydro.BH_sink(U, lattice.X1, lattice.X2, x1_2, x2_2)
+    sink_source = hydro.BH_sink(prims, lattice.X1, lattice.X2, x1_1, x2_1) + \
+            hydro.BH_sink(prims, lattice.X1, lattice.X2, x1_2, x2_2)
     m_dot = (sink_source[..., 0] * dA)
     return jnp.sum(m_dot)
 
@@ -101,15 +101,14 @@ class Binary(Hydro):
     t_sink: float = 1 / (10 * omega_B)
     cfl_num: float = 0.3
     size: float = 20
-    res: float = 2000
+    res: float = 1000
     plm: float = 1.8
 
     def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
-        t = 0
         r, theta = cartesian_to_polar(X1, X2)
 
         def f(r):
-            return 1 # - 1 / (1 + jnp.exp(-2 * (r - self.R_out) / self.a))
+            return 1 - 1 / (1 + jnp.exp(-2 * (r - self.R_out) / self.a))
         # surface density
         rho = self.Sigma_0 * \
             ((1 - self.delta_0) * jnp.exp(-(self.R_cav /
@@ -132,7 +131,7 @@ class Binary(Hydro):
             rho,
             rho * u,
             rho * v,
-            self.E((rho, u, v, jnp.zeros_like(rho)), X1, X2, t)
+            rho * self.c_s(None, X1, X2, 0) ** 2
         ]).transpose((1, 2, 0))
 
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
@@ -169,7 +168,7 @@ class Binary(Hydro):
         return 1e-3 * (self.a ** 2) * self.omega_B
 
     def E(self, prims: Primitives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
-        rho, u, v, p = prims
+        rho, u, v = prims[..., 0], prims[..., 1], prims[..., 2]
         e_internal = rho * (self.c_s(prims, X1, X2, t) ** 2)
         e_kinetic = 0.5 * rho * (u ** 2 + v ** 2)
         return e_internal + e_kinetic
@@ -190,7 +189,7 @@ class Binary(Hydro):
         return cs
 
     def P(self, cons: Conservatives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
-        rho, _, _, _ = cons
+        rho = cons[..., 0]
         return rho * self.c_s(cons, X1, X2, t) ** 2
     
     def get_positions(self, t):

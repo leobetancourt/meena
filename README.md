@@ -5,7 +5,7 @@
 A GPU-accelerated Godunov hydrodynamics code written in [JAX](https://github.com/jax-ml/jax).
 
 
-https://github.com/user-attachments/assets/84a619fa-9aa4-4db3-b62e-e9f622faba4d
+https://github.com/user-attachments/assets/8b385861-83c6-4992-ac9e-7e0aa51888ae
 
 
 This code supports Newtonian hydrodynamics up to 2D and compiles on CPU/GPU/TPU from the same Python code base. See [just-in-time compilation](https://jax.readthedocs.io/en/latest/jit-compilation.html).

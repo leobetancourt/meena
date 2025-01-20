@@ -67,18 +67,18 @@ def plot(checkpoint_file, var, range, title, dpi, cmap, c_range, t_factor, t_uni
         coords = f.attrs["coords"]
         x1 = f.attrs["x1"]
         x2 = f.attrs["x2"]
-        rho, momx1, momx2, e = np.array(f["rho"]), np.array(f["momx1"]), np.array(f["momx2"]), np.array(f["E"])
+        rho, u, v, p = np.array(f["rho"]), np.array(f["u"]), np.array(f["v"]), np.array(f["p"])
         
         if var == "density":
             matrix = rho
         elif var == "log density":
             matrix = np.log10(rho)
         elif var == "u":
-            matrix = momx1 / rho
+            matrix = u
         elif var == "v":
-            matrix = momx2 / rho
-        elif var == "energy":
-            matrix = e
+            matrix = v
+        elif var == "pressure":
+            matrix = p
 
         if range:
             x1_min, x1_max = range[0], range[1]
@@ -103,7 +103,7 @@ def plot(checkpoint_file, var, range, title, dpi, cmap, c_range, t_factor, t_uni
 @click.command()
 @click.argument("checkpoint_path", type=click.Path(exists=True))
 @click.option("-t", "--t-range", type=(float, float))
-@click.option("-v", "--var", type=click.Choice(["density", "log density", "u", "v", "energy"]), default="density")
+@click.option("-v", "--var", type=click.Choice(["density", "log density", "u", "v", "pressure"]), default="density")
 @click.option("-r", "--range", type=(float, float, float, float), default=None)
 @click.option("--title", type=str, default="")
 @click.option("--fps", type=int, default=24)

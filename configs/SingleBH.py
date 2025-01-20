@@ -51,31 +51,36 @@ class SingleBH(Hydro):
     M: float = 1
     mach: float = 10
     a: float = 1
-    m: float = 1 # mass of ring
+    m: float = 1
     eps: float = 0.05 * a
     omega_B: float = 1
-    t_sink: float = 1 / (10 * omega_B)
-    sink_rate: float = 10 * omega_B
-    R_0: float = 2 * a
-    sigma: float = 0.01 * a
+    R_0: float = 1 * a
+    sigma: float = 0.1 * a
+    nu_vis: float = 1e-3 * (a ** 2) * omega_B
     cfl_num: float = 0.3
     size: float = 10
     res: int = 1000
     retrograde: bool = 0
+    
+    sink_rate: float = 10 * omega_B
+    sink_prescription: str = "acceleration-free"
+
 
     def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
-        t = 0
         r, theta = cartesian_to_polar(X1, X2)
 
         # surface density
         A = self.m / (2 * jnp.pi * self.R_0 * jnp.sqrt(2 * jnp.pi * self.sigma**2))
         gaussian = A * jnp.exp(- ((r - self.R_0) ** 2) / (2 * (self.sigma ** 2)))
         
-        floor = 1e-6
+        floor = 1e-3
         rho = jnp.maximum(floor, gaussian)
 
         v_r = jnp.zeros_like(rho)
-        v_theta = jnp.sqrt(self.G * self.M / r) # keplerian velocity
+        # v_theta = jnp.sqrt(self.G * self.M / r) # keplerian velocity
+        kep = self.G * self.M / r
+        press = -(r - self.R_0) / self.sigma**2 * self.G * self.M / self.mach**2 - self.G * self.M / (self.mach**2 * r)
+        v_theta = jnp.sqrt(kep + press)
         if self.retrograde:
             v_theta *= -1
         u = v_r * jnp.cos(theta) - v_theta * jnp.sin(theta)
@@ -83,9 +88,9 @@ class SingleBH(Hydro):
 
         return jnp.array([
             rho,
-            rho * u,
-            rho * v,
-            self.E((rho, u, v, jnp.zeros_like(rho)), X1, X2, t)
+            u,
+            v,
+            rho * self.c_s(None, X1, X2, 0) ** 2
         ]).transpose((1, 2, 0))
 
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
@@ -95,7 +100,7 @@ class SingleBH(Hydro):
         return (self.res, self.res)
 
     def t_end(self) -> float:
-        return 171
+        return (0.002 / (12 * self.nu_vis * self.R_0**-2)) * 513 * 2
     
     def PLM(self) -> bool:
         return True
@@ -103,8 +108,8 @@ class SingleBH(Hydro):
     def theta_PLM(self) -> float:
         return 1.8
     
-    def time_order(self) -> int:
-        return 2
+    # def time_order(self) -> int:
+    #     return 2
     
     def cfl(self) -> float:
         return self.cfl_num
@@ -119,10 +124,10 @@ class SingleBH(Hydro):
         return ("outflow", "outflow")
 
     def nu(self) -> float:
-        return 1e-3 * (self.a ** 2) * self.omega_B
+        return self.nu_vis
 
     def E(self, prims: Primitives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
-        rho, u, v, p = prims
+        rho, u, v = prims[..., 0], prims[..., 1], prims[..., 2]
         e_internal = rho * (self.c_s(prims, X1, X2, t) ** 2)
         e_kinetic = 0.5 * rho * (u ** 2 + v ** 2)
         return e_internal + e_kinetic
@@ -139,7 +144,7 @@ class SingleBH(Hydro):
         return cs
 
     def P(self, cons: Conservatives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
-        rho, _, _, _ = cons
+        rho = cons[..., 0]
         return rho * self.c_s(cons, X1, X2, t) ** 2
     
     def get_BH_position(self, t):
@@ -169,18 +174,26 @@ class SingleBH(Hydro):
         s_rate = jnp.where(r < (4 * r_sink), self.sink_rate * jnp.exp(-jnp.pow(r / r_sink, 4)), jnp.zeros_like(r))
         mdot = jnp.where(s_rate > 0, -s_rate * rho, -s_rate)
         
-        u, v = U[..., 1] / rho, U[..., 2] / rho
-        u0, v0 = 0, 0 # velocity of black hole?
-        rhatx = dx / (r + 1e-12)
-        rhaty = dy / (r + 1e-12)
-        dvdotrhat = (u - u0) * rhatx + (v - v0) * rhaty
-        ustar = dvdotrhat * rhatx + u0
-        vstar = dvdotrhat * rhaty + v0
-        
         S = jnp.zeros_like(U)
-        S = S.at[:, :, 0].set(mdot)
-        S = S.at[:, :, 1].set(mdot * ustar)
-        S = S.at[:, :, 2].set(mdot * vstar)
+        u, v = U[..., 1] / rho, U[..., 2] / rho
+          
+        if self.sink_prescription == "acceleration-free":
+            S = S.at[..., 0].set(mdot)
+            S = S.at[..., 1].set(mdot * u)
+            S = S.at[..., 2].set(mdot * v)
+        elif self.sink_prescription == "torque-free":
+            u_bh, v_bh = 0, 0
+            rhatx = dx / (r + 1e-12)
+            rhaty = dy / (r + 1e-12)
+            dvdotrhat = (u - u_bh) * rhatx + (v - v_bh) * rhaty
+            ustar = dvdotrhat * rhatx + u_bh
+            vstar = dvdotrhat * rhaty + v_bh
+            S = S.at[..., 0].set(mdot)
+            S = S.at[..., 1].set(mdot * ustar)
+            S = S.at[..., 2].set(mdot * vstar)
+        else:
+            raise AttributeError("Invalid sink prescription")
+
         return S
 
     def source(self, U: ArrayLike, X1, X2, t: float) -> Array:
@@ -194,12 +207,12 @@ class SingleBH(Hydro):
         S += self.BH_sink(U, X1, X2, x1, x2)
         
         # buffer
-        S += self.buffer(U, X1, X2)
+        S += self.buffer(U, X1, X2, t)
         
         return S
 
     # Buffer implementation adapted from Westernacher-Schneider et al. 2022
-    def buffer(self, U: ArrayLike, X1, X2) -> Array:
+    def buffer(self, U: ArrayLike, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
         D = self.size / 2
         r, _ = cartesian_to_polar(X1, X2)
 
@@ -208,7 +221,15 @@ class SingleBH(Hydro):
             linear = (r - (D - 0.1 * self.a)) * (1000 / (0.1 * self.a))
             return jnp.where((r >= D - 0.1 * self.a) & (r <= D), linear, 0)
         
-        U_0 = self.initialize(X1, X2)
+        prims_0 = self.initialize(X1, X2)
+        rho_0, u_0, v_0 = prims_0[..., 0], prims_0[..., 1], prims_0[..., 2]
+        E_0 = self.E(prims_0, X1, X2, t)
+        U_0 = jnp.array([
+            rho_0,
+            rho_0 * u_0,
+            rho_0 * v_0,
+            E_0
+        ]).transpose((1, 2, 0))
         omega_naught = jnp.sqrt((self.G * self.M / (D ** 3 + self.eps ** 3))
                                 * (1 - (1 / (self.mach ** 2))))
         omega_D = ((omega_naught ** -4) + (self.omega_B ** -4)) ** (-1/4)
@@ -221,4 +242,4 @@ class SingleBH(Hydro):
         return diagnostics
 
     def save_interval(self):
-        return 0.67
+        return 0.002 / (12 * self.nu_vis * self.R_0**-2)

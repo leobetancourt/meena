@@ -82,7 +82,7 @@ class Hydro(ABC):
         return ((0, 1), (0, 1))
 
     def num_g(self) -> int:
-        return 2
+        return 2 if self.PLM() else 1
 
     def log_x1(self) -> bool:
         return False

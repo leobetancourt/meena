@@ -80,10 +80,10 @@ def hll_flux_x2(hydro, prims_L: ArrayLike, prims_R: ArrayLike, *args) -> Array:
     a_p, a_m = alphas(v_L, v_R, c_s_L, c_s_R)
     a_p, a_m = a_p[..., jnp.newaxis], a_m[..., jnp.newaxis]
     
-    F_L, F_R = F_from_prim(hydro, prims_L, *args), F_from_prim(hydro, prims_R, *args)
+    G_L, G_R = G_from_prim(hydro, prims_L, *args), G_from_prim(hydro, prims_R, *args)
     U_L, U_R = U_from_prim(hydro, prims_L, *args), U_from_prim(hydro, prims_R, *args)
 
-    return (a_p * F_L - a_m * F_R - a_p * a_m * (U_L - U_R)) / (a_p - a_m)
+    return (a_p * G_L - a_m * G_R - a_p * a_m * (U_L - U_R)) / (a_p - a_m)
 
 
 def F_star_x1(F_k, S_k, S_M, prims_k, U_k):
@@ -238,14 +238,16 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
     prims = add_ghost_cells(prims, g, axis=0)
     prims = apply_bcs(lattice, prims)
 
-    X1_L = X1[(g-1):-(g+1), g:-g]
-    X1_C = X1[g:-g, g:-g]
-    X1_R = X1[(g+1):-(g-1), g:-g]
-    X2_L = X2[g:-g, (g-1):-(g+1)]
-    X2_C = X2[g:-g, g:-g]
-    X2_R = X2[g:-g, (g+1):-(g-1)]
+
 
     if hydro.PLM():
+        X1_L = X1[(g-1):-(g+1), g:-g]
+        X1_C = X1[g:-g, g:-g]
+        X1_R = X1[(g+1):-(g-1), g:-g]
+        X2_L = X2[g:-g, (g-1):-(g+1)]
+        X2_C = X2[g:-g, g:-g]
+        X2_R = X2[g:-g, (g+1):-(g-1)]
+        
         theta = hydro.theta_PLM()
 
         prims_cc = prims[g:-g, g:-g]
@@ -305,60 +307,76 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
         elif hydro.solver() == "hllc":
             G_l, G_r = hllc_flux_x2(hydro, prims_ljm, prims_ljp, X1_C, X2_L, t), hllc_flux_x2(hydro, prims_rjm, prims_rjp, X1_C, X2_R, t)
         
-        if hydro.nu():
-            nu = hydro.nu()
-            # compute additional PLM gradients
-            gyli = plm_grad(prims_ll, prims_li, prims_lr, theta)
-            gyri = plm_grad(prims_rl, prims_ri, prims_rr, theta)
-            gxlj = plm_grad(prims_ll, prims_lj, prims_rl, theta)
-            gxrj = plm_grad(prims_lr, prims_rj, prims_rr, theta)
-            
-            dx, dy = x1[1] - x1[0], x2[1] - x2[0]
-            
-            sli = shear_strain(gxli, gyli, dx, dy)
-            sri = shear_strain(gxri, gyri, dx, dy)
-            slj = shear_strain(gxlj, gylj, dy, dy)
-            srj = shear_strain(gxrj, gyrj, dx, dy)
-            scc = shear_strain(gxcc, gycc, dx, dy)
-            
-            F_l = F_l.at[..., 1].add(-0.5 * nu * (prims_li[..., 0] * sli[0] + prims_cc[..., 0] * scc[0]))
-            F_l = F_l.at[..., 2].add(-0.5 * nu * (prims_li[..., 0] * sli[1] + prims_cc[..., 0] * scc[1]))
-            F_r = F_r.at[..., 1].add(-0.5 * nu * (prims_cc[..., 0] * scc[0] + prims_ri[..., 0] * sri[0]))
-            F_r = F_r.at[..., 2].add(-0.5 * nu * (prims_cc[..., 0] * scc[1] + prims_ri[..., 0] * sri[1]))
-            G_l = G_l.at[..., 1].add(-0.5 * nu * (prims_lj[..., 0] * slj[2] + prims_cc[..., 0] * scc[2]))
-            G_l = G_l.at[..., 2].add(-0.5 * nu * (prims_lj[..., 0] * slj[3] + prims_cc[..., 0] * scc[3]))
-            G_r = G_r.at[..., 1].add(-0.5 * nu * (prims_cc[..., 0] * scc[2] + prims_rj[..., 0] * srj[2]))
-            G_r = G_r.at[..., 2].add(-0.5 * nu * (prims_cc[..., 0] * scc[3] + prims_rj[..., 0] * srj[3]))
+        # compute additional PLM gradients
+        gyli = plm_grad(prims_ll, prims_li, prims_lr, theta)
+        gyri = plm_grad(prims_rl, prims_ri, prims_rr, theta)
+        gxlj = plm_grad(prims_ll, prims_lj, prims_rl, theta)
+        gxrj = plm_grad(prims_lr, prims_rj, prims_rr, theta)
     else:
         X1_L = X1[(g-1):-(g+1), g:-g]
         X1_C = X1[g:-g, g:-g]
-        X1_R = X1[(g+1):-(g-1), g:-g]
+        X1_R = X1[(g+1):, g:-g]
         X2_L = X2[g:-g, (g-1):-(g+1)]
         X2_C = X2[g:-g, g:-g]
-        X2_R = X2[g:-g, (g+1):-(g-1)]
-
-        prims_L = prims[(g-1):-(g+1), g:-g]
-        prims_C = prims[g:-g, g:-g]
-        prims_R = prims[(g+1):-(g-1), g:-g, :]
+        X2_R = X2[g:-g, (g+1):]
+        
+        prims_cc = prims[g:-g, g:-g]
+        prims_li = prims[(g-1):-(g+1), g:-g]
+        prims_ri = prims[(g+1):, g:-g]
+        
+        prims_lj = prims[g:-g, (g-1):-(g+1)]
+        prims_rj = prims[g:-g, (g+1):]
+        
+        prims_ll = prims[(g-1):-(g+1), (g-1):-(g+1)]
+        prims_lr = prims[(g-1):-(g+1), (g+1):]
+        prims_rr = prims[(g+1):, (g+1):]
+        prims_rl = prims[(g+1):, (g-1):-(g+1)]
+        
         if hydro.solver() == "hll":
-            # F_(i-1/2)
-            F_l = hll_flux_x1(hydro, prims_L, prims_C, X1_L, X2_C, t)
-            # F_(i+1/2)
-            F_r = hll_flux_x1(hydro, prims_C, prims_R, X1_R, X2_C, t)
+            F_l = hll_flux_x1(hydro, prims_li, prims_cc, X1_L, X2_C, t)
+            F_r = hll_flux_x1(hydro, prims_cc, prims_ri, X1_R, X2_C, t)
+            
+            G_l = hll_flux_x2(hydro, prims_lj, prims_cc, X1_C, X2_L, t)
+            G_r = hll_flux_x2(hydro, prims_cc, prims_rj, X1_C, X2_R, t)
         elif hydro.solver() == "hllc":
-            F_l = hllc_flux_x1(hydro, prims_L, prims_C, X1_L, X2_C, t)
-            F_r = hllc_flux_x1(hydro, prims_C, prims_R, X1_R, X2_C, t)
+            F_l = hllc_flux_x1(hydro, prims_li, prims_cc, X1_L, X2_C, t)
+            F_r = hllc_flux_x1(hydro, prims_cc, prims_ri, X1_R, X2_C, t)
+            
+            G_l = hllc_flux_x2(hydro, prims_lj, prims_cc, X1_C, X2_L, t)
+            G_r = hllc_flux_x2(hydro, prims_cc, prims_rj, X1_C, X2_R, t)
 
-        prims_L = prims[g:-g, (g-1):-(g+1)]
-        prims_C = prims[g:-g, g:-g]
-        prims_R = prims[g:-g, (g+1):-(g-1)]
-        if hydro.solver() == "hll":
-            # F_(i-1/2)
-            G_l = hll_flux_x2(hydro, prims_L, prims_C, X1_C, X2_L, t)
-            # F_(i+1/2)
-            G_r = hll_flux_x2(hydro, prims_C, prims_R, X1_C, X2_R, t)
-        elif hydro.solver() == "hllc":
-            G_l = hllc_flux_x2(hydro, prims_L, prims_C, X1_C, X2_L, t)
-            G_r = hllc_flux_x2(hydro, prims_C, prims_R, X1_C, X2_R, t)
+        gxli = prims_cc - prims_li
+        gxcc = (prims_ri - prims_li) / 2
+        gxri = prims_ri - prims_cc
+        
+        gylj = prims_cc - prims_lj
+        gycc = (prims_rj - prims_lj) / 2
+        gyrj = prims_rj - prims_cc
+        
+        gyli = (prims_lr - prims_ll) / 2
+        gyri = (prims_rr - prims_rl) / 2
+        gxlj = (prims_rl - prims_ll) / 2
+        gxrj = (prims_rr - prims_lr) / 2
+            
+    if hydro.nu():
+        nu = hydro.nu()
+
+        dx, dy = x1[1] - x1[0], x2[1] - x2[0]
+        
+        sli = shear_strain(gxli, gyli, dx, dy)
+        sri = shear_strain(gxri, gyri, dx, dy)
+        slj = shear_strain(gxlj, gylj, dy, dy)
+        srj = shear_strain(gxrj, gyrj, dx, dy)
+        scc = shear_strain(gxcc, gycc, dx, dy)
+        
+        F_l = F_l.at[..., 1].add(-0.5 * nu * (prims_li[..., 0] * sli[0] + prims_cc[..., 0] * scc[0]))
+        F_l = F_l.at[..., 2].add(-0.5 * nu * (prims_li[..., 0] * sli[1] + prims_cc[..., 0] * scc[1]))
+        F_r = F_r.at[..., 1].add(-0.5 * nu * (prims_cc[..., 0] * scc[0] + prims_ri[..., 0] * sri[0]))
+        F_r = F_r.at[..., 2].add(-0.5 * nu * (prims_cc[..., 0] * scc[1] + prims_ri[..., 0] * sri[1]))
+        G_l = G_l.at[..., 1].add(-0.5 * nu * (prims_lj[..., 0] * slj[2] + prims_cc[..., 0] * scc[2]))
+        G_l = G_l.at[..., 2].add(-0.5 * nu * (prims_lj[..., 0] * slj[3] + prims_cc[..., 0] * scc[3]))
+        G_r = G_r.at[..., 1].add(-0.5 * nu * (prims_cc[..., 0] * scc[2] + prims_rj[..., 0] * srj[2]))
+        G_r = G_r.at[..., 2].add(-0.5 * nu * (prims_cc[..., 0] * scc[3] + prims_rj[..., 0] * srj[3]))
+            
 
     return F_l, F_r, G_l, G_r

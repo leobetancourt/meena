@@ -11,7 +11,7 @@ from meena import Hydro, BoundaryCondition
 class RayleighTaylor(Hydro):
     g: float = -0.1
     gamma_ad: float = 1.4
-    nx: int = 200
+    nx: int = 500
     
     def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
         x, y = X1, X2
@@ -42,10 +42,10 @@ class RayleighTaylor(Hydro):
         return "hllc"
 
     def PLM(self) -> float:
-        return False
+        return True
 
     def save_interval(self) -> float:
-        return 1
+        return 0.1
         
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
         return ((-0.25, 0.25), (-0.75, 0.75))

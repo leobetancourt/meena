@@ -97,16 +97,16 @@ def append_row_csv(filename, row):
 def load_U(file):
     with h5py.File(file, 'r') as f:
         t = f.attrs["t"]
-        rho, momx1, momx2, e = f["rho"], f["momx1"], f["momx2"], f["E"]
+        rho, u, v, p = f["rho"], f["u"], f["v"], f["p"]
 
-        U = jnp.array([
+        prims = jnp.array([
             rho,
-            momx1,
-            momx2,
-            e
+            u,
+            v,
+            p
         ]).transpose((1, 2, 0))
 
-        return U, t
+        return prims, t
 
 
 def plot_grid(matrix, label, coords, x1, x2, vmin=None, vmax=None, cmap="magma"):
@@ -135,6 +135,7 @@ def plot_grid(matrix, label, coords, x1, x2, vmin=None, vmax=None, cmap="magma")
         c = ax.pcolormesh(Theta, R, matrix, shading='auto',
                           cmap=cmap, vmin=vmin, vmax=vmax)
 
+    plt.tight_layout()
     cb = plt.colorbar(c, ax=ax, label=label)
 
     return fig, ax, c, cb

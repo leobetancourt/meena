@@ -3,6 +3,7 @@ import os
 import h5py
 import re
 import numpy as np
+from scipy.special import iv
 
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
@@ -29,24 +30,24 @@ def get_h5_files_in_range(directory, t_min, t_max):
 def generate_movie(checkpoint_path, t_min, t_max, var, grid_range, title, fps, vmin, vmax, dpi, bitrate, cmap, t_factor, t_units):
     file_list = get_h5_files_in_range(checkpoint_path, t_min, t_max)
     labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma / \Sigma_0$",
-              "u": r"$u$", "v": r"$v$", "energy": r"$E$"}
+              "u": r"$u$", "v": r"$v$", "pressure": r"$P$"}
     with h5py.File(file_list[0], 'r') as f:
         coords = f.attrs["coords"]
         x1 = f.attrs["x1"]
         x2 = f.attrs["x2"]
         t = f.attrs["t"]
-        rho, momx1, momx2, e = np.array(f["rho"]), np.array(
-            f["momx1"]), np.array(f["momx2"]), np.array(f["E"])
+        rho, u, v, p = np.array(f["rho"]), np.array(
+            f["u"]), np.array(f["v"]), np.array(f["p"])
         if var == "density":
             matrix = rho
         elif var == "log density":
             matrix = np.log10(rho)
         elif var == "u":
-            matrix = momx1 / rho
+            matrix = u
         elif var == "v":
-            matrix = momx2 / rho
-        elif var == "energy":
-            matrix = e
+            matrix = v
+        elif var == "pressure":
+            matrix = p
 
         if grid_range:
             x1_min, x1_max = grid_range[0], grid_range[1]
@@ -77,18 +78,17 @@ def generate_movie(checkpoint_path, t_min, t_max, var, grid_range, title, fps, v
             file_path = file_list[i]
             with h5py.File(file_path, 'r') as f:
                 t = f.attrs["t"]
-                rho, momx1, momx2, e = np.array(f["rho"]), np.array(
-                    f["momx1"]), np.array(f["momx2"]), np.array(f["E"])
+                rho, u, v, p = np.array(f["rho"]), np.array(f["u"]), np.array(f["v"]), np.array(f["p"])
                 if var == "density":
                     matrix = rho
                 elif var == "log density":
                     matrix = np.log10(rho)
                 elif var == "u":
-                    matrix = momx1 / rho
+                    matrix = u
                 elif var == "v":
-                    matrix = momx2 / rho
+                    matrix = v
                 elif var == "energy":
-                    matrix = e
+                    matrix = p
 
                 if grid_range:
                     matrix = matrix[x1_min_i:x1_max_i+1, x2_min_i:x2_max_i+1]
@@ -103,7 +103,88 @@ def generate_movie(checkpoint_path, t_min, t_max, var, grid_range, title, fps, v
                 else:
                     ax.set_title(title + f", t = {(t*t_factor):.2f} {t_units}")
                 fig.canvas.draw()
+                plt.tight_layout()
                 writer.grab_frame()
 
                 print_progress_bar(i, len(file_list),
                                    suffix="complete", length=25)
+
+# def analytic_sigma(x, tau, m, R_0):
+#     x = np.maximum(x, 1e-10)
+#     ln_prefactor = np.log(m) - np.log(np.pi) - 2 * np.log(R_0) - np.log(tau) - 0.25 * np.log(x)
+#     ln_exponential = -(1 + x**2) / tau
+    
+#     bessel_arg = 2 * x / tau
+#     large_bessel = bessel_arg > 100
+#     ln_bessel_term = np.where(
+#         large_bessel,
+#         bessel_arg - 0.5 * np.log(2 * np.pi * bessel_arg),
+#         np.log(iv(0.25, bessel_arg))
+#     )
+    
+#     ln_sigma = ln_prefactor + ln_exponential + ln_bessel_term
+#     return np.exp(ln_sigma)
+
+# def generate_movie(checkpoint_path, t_min, t_max, var, grid_range, title, fps, vmin, vmax, dpi, bitrate, cmap, t_factor, t_units):
+#     file_list = get_h5_files_in_range(checkpoint_path, t_min, t_max)
+#     labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma / \Sigma_0$",
+#               "u": r"$u$", "v": r"$v$", "pressure": r"$P$"}
+#     fig, ax = plt.subplots()
+
+#     FFMpegWriter = animation.writers['ffmpeg']
+#     writer = FFMpegWriter(fps=fps, bitrate=bitrate)
+#     PATH = checkpoint_path.split("checkpoints/")[0]
+#     if not os.path.exists(PATH):
+#         os.makedirs(PATH)
+#     cm = writer.saving(fig, f"{PATH}/movie.mp4", dpi)
+
+#     title = "Viscous Ring (Single BH)"
+#     with cm:
+#         for i in range(len(file_list)):
+#             file_path = file_list[i]
+#             with h5py.File(file_path, 'r') as f:
+#                 R_0, nu, m = 1, 1e-3, 1
+#                 t = f.attrs["t"]
+#                 coords = f.attrs["coords"]
+#                 rho = np.array(f["rho"])
+
+#                 x1, x2 = f.attrs['x1'], f.attrs['x2']
+
+#                 X1, X2 = np.meshgrid(x1, x2, indexing='ij')
+#                 R = np.sqrt(X1**2 + X2**2)
+#                 R_max = np.max(R)
+#                 num_bins = 500  # Adjust the number of bins as needed
+#                 R_bins = np.linspace(0, R_max, num_bins + 1)
+
+#                 # Digitize the radial distances into bins
+#                 r_indices = np.digitize(R, R_bins) - 1  # Bin indices, subtract 1 to make them 0-indexed
+
+#                 # Compute average densities in each radial bin
+#                 sigma = np.zeros(num_bins)
+#                 for j in range(num_bins):
+#                     mask = r_indices == j  # Select points in the current radial bin
+#                     if np.any(mask):  # Avoid dividing by zero
+#                         sigma[j] = np.mean(rho[mask])
+                
+#                 tau = 12 * nu * t * (R_0**-2)
+#                 x = R_bins[:-1] / R_0
+#                 density_norm = np.pi * sigma * (R_0 ** 2) / m
+#                 analytic_density = np.pi * analytic_sigma(x, tau, m, R_0) * (R_0 ** 2) / m
+#                 ax.plot(x, density_norm, color="red", label="Meena")
+#                 ax.plot(x, analytic_density, color="black", alpha=0.5, label="Pringle Eq. (2.13)")
+#                 ax.set_xlim(0, 3)
+#                 ax.set_xlabel(r"$R/R_0$")
+#                 ax.set_yscale("log")
+#                 ax.set_ylim(1e-4, 1e1)
+#                 sigma_label = r"$\pi \Sigma R_0^2/ m$"
+#                 ax.set_ylabel(sigma_label)
+#                 ax.legend()
+                
+#                 ax.set_title(rf"Viscous Ring (Single BH), $R_0=1a, \sigma=0.1a, \tau={tau:.3f}$")
+#                 fig.canvas.draw()
+#                 plt.tight_layout()
+#                 writer.grab_frame()
+#                 ax.cla()
+
+#                 print_progress_bar(i, len(file_list),
+#                                    suffix="complete", length=25)

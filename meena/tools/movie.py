@@ -87,7 +87,7 @@ def generate_movie(checkpoint_path, t_min, t_max, var, grid_range, title, fps, v
                     matrix = u
                 elif var == "v":
                     matrix = v
-                elif var == "energy":
+                elif var == "pressure":
                     matrix = p
 
                 if grid_range:

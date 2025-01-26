@@ -57,9 +57,9 @@ class SingleBH(Hydro):
     R_0: float = 1 * a
     sigma: float = 0.1 * a
     nu_vis: float = 1e-3 * (a ** 2) * omega_B
-    cfl_num: float = 0.3
-    size: float = 10
-    res: int = 1000
+    cfl_num: float = 0.1
+    size: float = 5
+    res: int = 500
     retrograde: bool = 0
     
     sink_rate: float = 10 * omega_B
@@ -83,7 +83,7 @@ class SingleBH(Hydro):
         u = v_r * jnp.cos(theta) - v_theta * jnp.sin(theta)
         v = v_r * jnp.sin(theta) + v_theta * jnp.cos(theta)
         
-        p = jnp.ones_like(X1) * 0.1
+        p = jnp.ones_like(X1) * 1
 
         return jnp.array([
             rho,
@@ -100,6 +100,9 @@ class SingleBH(Hydro):
 
     def t_end(self) -> float:
         return (0.002 / (12 * self.nu_vis * self.R_0**-2)) * 513
+    
+    def save_interval(self):
+        return 0.002 / (12 * self.nu_vis * self.R_0**-2)
     
     def PLM(self) -> bool:
         return True
@@ -218,6 +221,3 @@ class SingleBH(Hydro):
         diagnostics = []
         diagnostics.append(("m_dot", get_accr_rate))
         return diagnostics
-
-    def save_interval(self):
-        return 0.002 / (12 * self.nu_vis * self.R_0**-2)

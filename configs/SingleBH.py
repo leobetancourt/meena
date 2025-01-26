@@ -77,20 +77,19 @@ class SingleBH(Hydro):
         rho = jnp.maximum(floor, gaussian)
 
         v_r = jnp.zeros_like(rho)
-        # v_theta = jnp.sqrt(self.G * self.M / r) # keplerian velocity
-        kep = self.G * self.M / r
-        press = -(r - self.R_0) / self.sigma**2 * self.G * self.M / self.mach**2 - self.G * self.M / (self.mach**2 * r)
-        v_theta = jnp.sqrt(kep + press)
+        v_theta = jnp.sqrt(self.G * self.M / r) # keplerian velocity
         if self.retrograde:
             v_theta *= -1
         u = v_r * jnp.cos(theta) - v_theta * jnp.sin(theta)
         v = v_r * jnp.sin(theta) + v_theta * jnp.cos(theta)
+        
+        p = jnp.ones_like(X1) * 0.1
 
         return jnp.array([
             rho,
             u,
             v,
-            rho * self.c_s(None, X1, X2, 0) ** 2
+            p
         ]).transpose((1, 2, 0))
 
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
@@ -100,16 +99,16 @@ class SingleBH(Hydro):
         return (self.res, self.res)
 
     def t_end(self) -> float:
-        return (0.002 / (12 * self.nu_vis * self.R_0**-2)) * 513 * 2
+        return (0.002 / (12 * self.nu_vis * self.R_0**-2)) * 513
     
     def PLM(self) -> bool:
         return True
     
     def theta_PLM(self) -> float:
-        return 1.8
+        return 1.5
     
-    # def time_order(self) -> int:
-    #     return 2
+    def time_order(self) -> int:
+        return 1
     
     def cfl(self) -> float:
         return self.cfl_num
@@ -125,27 +124,6 @@ class SingleBH(Hydro):
 
     def nu(self) -> float:
         return self.nu_vis
-
-    def E(self, prims: Primitives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
-        rho, u, v = prims[..., 0], prims[..., 1], prims[..., 2]
-        e_internal = rho * (self.c_s(prims, X1, X2, t) ** 2)
-        e_kinetic = 0.5 * rho * (u ** 2 + v ** 2)
-        return e_internal + e_kinetic
-
-    def c_s(self, prims: Primitives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
-        x1, x2 = self.get_BH_position(t)
-        r, theta = cartesian_to_polar(X1, X2)
-        r1, theta1 = cartesian_to_polar(x1, x2)
-
-        dist1 = jnp.sqrt(r ** 2 + r1 ** 2 - 2 * r *
-                         r1 * jnp.cos(theta - theta1))
-
-        cs = jnp.sqrt(((self.G * self.M / jnp.sqrt(dist1 ** 2 + self.eps ** 2))) / (self.mach ** 2))
-        return cs
-
-    def P(self, cons: Conservatives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
-        rho = cons[..., 0]
-        return rho * self.c_s(cons, X1, X2, t) ** 2
     
     def get_BH_position(self, t):
         return 0, 0

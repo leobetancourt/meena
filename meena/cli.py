@@ -48,7 +48,7 @@ def run(config_file, checkpoint, plot, plot_range, output_dir, resume, **kwargs)
 
 @click.command()
 @click.argument("checkpoint_file", type=click.Path(exists=True))
-@click.option("-v", "--var", type=click.Choice(["density", "log density", "u", "v", "energy"]), default="density")
+@click.option("-v", "--var", type=click.Choice(["density", "log density", "u", "v", "pressure"]), default="density")
 @click.option("-r", "--range", type=(float, float, float, float), default=None)
 @click.option("--title", type=str, default="")
 @click.option("--dpi", type=int, default=500)
@@ -57,7 +57,7 @@ def run(config_file, checkpoint, plot, plot_range, output_dir, resume, **kwargs)
 @click.option("--t-factor", type=float, default=1)
 @click.option("--t-units", type=str, default="")
 def plot(checkpoint_file, var, range, title, dpi, cmap, c_range, t_factor, t_units):
-    labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$", "v": r"$v$", "energy": r"$E$"}
+    labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$", "v": r"$v$", "pressure": r"$P$"}
     vmin, vmax = None, None
     if c_range:
         vmin, vmax = c_range

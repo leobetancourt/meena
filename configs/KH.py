@@ -43,7 +43,7 @@ class KH(Hydro):
         ]).transpose((1, 2, 0))
 
     def theta_PLM(self) -> float:
-        return 1.8
+        return 1.5
 
     def gamma(self) -> float:
         return self.gamma_ad

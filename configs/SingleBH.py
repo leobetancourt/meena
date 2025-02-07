@@ -5,7 +5,10 @@ from jax.typing import ArrayLike
 from jax import Array, jit
 import jax.numpy as jnp
 
+from scipy.special import iv
+
 from meena import Hydro, Lattice, Primitives, Conservatives, BoundaryCondition
+
 from src.common.helpers import cartesian_to_polar
 
 
@@ -17,32 +20,24 @@ def get_accr_rate(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[Arra
     m_dot = (sink_source[..., 0] * dA)
     return jnp.sum(m_dot)
 
-def get_eccentricity(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
-    x, y = lattice.X1, lattice.X2
-    r = jnp.sqrt(x ** 2 + y ** 2)
+# def pringle(x, tau, m, R0):
+#     x = jnp.maximum(x, 1e-10)
+#     ln_prefactor = jnp.log(m) - jnp.log(jnp.pi) - 2 * jnp.log(R0) - jnp.log(tau) - 0.25 * jnp.log(x)
+#     ln_exponential = -(1 + x**2) / tau
+    
+#     bessel_arg = 2 * x / tau
+#     large_bessel = bessel_arg > 100
+#     ln_bessel_term = jnp.where(
+#         large_bessel,
+#         bessel_arg - 0.5 * jnp.log(2 * jnp.pi * bessel_arg),  # Log of asymptotic form
+#         jnp.log(iv(0.25, bessel_arg))  # Exact log for small bessel_arg
+#     )
+    
+#     ln_sigma = ln_prefactor + ln_exponential + ln_bessel_term
+#     return jnp.exp(ln_sigma)  # Return Sigma in normal space
 
-    rho = U[..., 0]
-    u, v = U[..., 1] / rho, U[..., 2] / rho
-    j = x * v - y * u
-    e_x = (j * v / (hydro.G * hydro.M)) - (x / r)
-    e_y = -(j * u / (hydro.G * hydro.M)) - (y / r)
-    dA = lattice.dX1 * lattice.dX2
-
-    bounds = jnp.logical_and(r >= hydro.a, r <= 6 * hydro.a)
-    ec_x = jnp.where(bounds, e_x * rho * dA, 0).sum() / \
-        (35 * jnp.pi * hydro.Sigma_0 * (hydro.a ** 2))
-    ec_y = jnp.where(bounds, e_y * rho * dA, 0).sum() / \
-        (35 * jnp.pi * hydro.Sigma_0 * (hydro.a ** 2))
-    return ec_x, ec_y
-
-@partial(jit, static_argnames=["hydro", "lattice"])
-def get_eccentricity_x(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
-    return get_eccentricity(hydro, lattice, U, flux, t)[0]
-
-
-@partial(jit, static_argnames=["hydro", "lattice"])
-def get_eccentricity_y(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
-    return get_eccentricity(hydro, lattice, U, flux, t)[1]
+def pringle(x, tau, m, R0):
+    return m / (jnp.pi * R0**2) * tau**-1 * x**(-1/4) * jnp.exp(-(1 + x**2) / tau) * iv(0.25, 2 * x / tau)
 
 
 @dataclass(frozen=True)
@@ -51,42 +46,49 @@ class SingleBH(Hydro):
     M: float = 1
     mach: float = 10
     a: float = 1
-    m: float = 1
-    eps: float = 0.05 * a
     omega_B: float = 1
-    R_0: float = 1 * a
-    sigma: float = 0.1 * a
     nu_vis: float = 1e-3 * (a ** 2) * omega_B
-    cfl_num: float = 0.1
-    size: float = 5
-    res: int = 500
-    retrograde: bool = 0
-    
     sink_rate: float = 10 * omega_B
     sink_prescription: str = "acceleration-free"
+    m: float = 1
+    Sigma_floor: float = 1e-3
+    R_0: float = 1 * a
+    sigma: float = 0.1 * a
+    
+    size: float = 5
+    res: int = 500
+    eps: float = 0.05 * a
+    cfl_num: float = 0.1
 
+    retrograde: bool = 0
+    
+    tau_0 = 0.032
+    
+    def tau_to_t(self, tau: float) -> float:
+        return tau / (12 * self.nu_vis * self.R_0**-2)
+    
+    def t_to_tau(self, t: float) -> float:
+        return 12 * t * self.nu_vis * self.R_0**-2
 
     def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
         r, theta = cartesian_to_polar(X1, X2)
 
         # surface density
-        A = self.m / (2 * jnp.pi * self.R_0 * jnp.sqrt(2 * jnp.pi * self.sigma**2))
-        gaussian = A * jnp.exp(- ((r - self.R_0) ** 2) / (2 * (self.sigma ** 2)))
+        Sigma_pringle = jnp.nan_to_num(pringle(r / self.R_0, self.tau_0, self.m, self.R_0), nan=1e-3)
         
-        floor = 1e-3
-        rho = jnp.maximum(floor, gaussian)
+        Sigma = jnp.maximum(self.Sigma_floor, Sigma_pringle)
 
-        v_r = jnp.zeros_like(rho)
+        v_r = jnp.zeros_like(X1)
         v_theta = jnp.sqrt(self.G * self.M / r) # keplerian velocity
         if self.retrograde:
             v_theta *= -1
         u = v_r * jnp.cos(theta) - v_theta * jnp.sin(theta)
         v = v_r * jnp.sin(theta) + v_theta * jnp.cos(theta)
         
-        p = jnp.ones_like(X1) * 1
+        p = jnp.ones_like(X1) * 1e-2
 
         return jnp.array([
-            rho,
+            Sigma,
             u,
             v,
             p
@@ -97,12 +99,15 @@ class SingleBH(Hydro):
 
     def resolution(self) -> tuple[int, int]:
         return (self.res, self.res)
+    
+    def t_start(self) -> float:
+        return self.tau_to_t(self.tau_0)
 
     def t_end(self) -> float:
-        return (0.002 / (12 * self.nu_vis * self.R_0**-2)) * 513
+        return self.tau_to_t(0.002) * 1025
     
     def save_interval(self):
-        return 0.002 / (12 * self.nu_vis * self.R_0**-2)
+        return self.tau_to_t(self.tau_0) / 4
     
     def PLM(self) -> bool:
         return True
@@ -149,19 +154,26 @@ class SingleBH(Hydro):
 
     def BH_sink(self, U, x, y, x_bh, y_bh):
         rho = U[..., 0]
+        pres = self.P(U)
+        eps = pres / rho / (self.gamma() - 1)
         dx, dy = x - x_bh, y - y_bh
         r = jnp.sqrt(dx ** 2 + dy ** 2)
         r_sink = self.eps
+        r_soft = self.eps
         s_rate = jnp.where(r < (4 * r_sink), self.sink_rate * jnp.exp(-jnp.pow(r / r_sink, 4)), jnp.zeros_like(r))
-        mdot = jnp.where(s_rate > 0, -s_rate * rho, -s_rate)
+        
+        mdot = rho * s_rate * -1
+        fgrav_num = rho * self.M * jnp.pow(r**2 + r_soft**2, -1.5)
+        fx, fy = -fgrav_num * dx, -fgrav_num * dy
         
         S = jnp.zeros_like(U)
         u, v = U[..., 1] / rho, U[..., 2] / rho
           
         if self.sink_prescription == "acceleration-free":
             S = S.at[..., 0].set(mdot)
-            S = S.at[..., 1].set(mdot * u)
-            S = S.at[..., 2].set(mdot * v)
+            S = S.at[..., 1].set(mdot * u + fx)
+            S = S.at[..., 2].set(mdot * v + fy)
+            S = S.at[..., 3].set(mdot * eps + 0.5 * mdot * (u*u + v*v) + (fx * u + fy * v))
         elif self.sink_prescription == "torque-free":
             u_bh, v_bh = 0, 0
             rhatx = dx / (r + 1e-12)
@@ -195,20 +207,30 @@ class SingleBH(Hydro):
     # Buffer implementation adapted from Westernacher-Schneider et al. 2022
     def buffer(self, U: ArrayLike, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
         D = self.size / 2
-        r, _ = cartesian_to_polar(X1, X2)
+        r, theta = cartesian_to_polar(X1, X2)
 
         # f(r) increases linearly from 0 at r = D - 0.1a to 1000 at r = D (and otherwise 0)
         def f(r):
             linear = (r - (D - 0.1 * self.a)) * (1000 / (0.1 * self.a))
             return jnp.where((r >= D - 0.1 * self.a) & (r <= D), linear, 0)
         
-        prims_0 = self.initialize(X1, X2)
-        rho_0, u_0, v_0 = prims_0[..., 0], prims_0[..., 1], prims_0[..., 2]
-        E_0 = self.E(prims_0, X1, X2, t)
+        Sigma_0 = jnp.ones_like(X1) * self.Sigma_floor
+        v_r = jnp.zeros_like(X1)
+        v_theta = jnp.sqrt(self.G * self.M / r) # keplerian velocity
+        u_0 = v_r * jnp.cos(theta) - v_theta * jnp.sin(theta)
+        v_0 = v_r * jnp.sin(theta) + v_theta * jnp.cos(theta)
+        p_0 = jnp.ones_like(X1) * 1e-2
+        prims = jnp.array([
+            Sigma_0,
+            u_0,
+            v_0,
+            p_0
+        ]).transpose((1, 2, 0))
+        E_0 = self.E(prims, X1, X2, t)
         U_0 = jnp.array([
-            rho_0,
-            rho_0 * u_0,
-            rho_0 * v_0,
+            Sigma_0,
+            Sigma_0 * u_0,
+            Sigma_0 * v_0,
             E_0
         ]).transpose((1, 2, 0))
         omega_naught = jnp.sqrt((self.G * self.M / (D ** 3 + self.eps ** 3))

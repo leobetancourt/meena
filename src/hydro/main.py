@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from meena import Hydro, Lattice
     
 from ..common.log import Logger
-from ..common.helpers import plot_grid, append_row_csv, create_csv_file, save_to_h5
+from ..common.helpers import plot_grid, append_row_csv, create_csv_file, save_to_h5, cartesian_to_polar
 from .hd import U_from_prim, get_prims, interface_flux
 
 def gravity_mesh(hydro: Hydro, lattice: Lattice, U: ArrayLike) -> Array:
@@ -144,12 +144,15 @@ def get_matrix_to_plot(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float, p
         matrix = p
     elif plot == "energy":
         matrix = e
+    elif plot == "dt":
+        c_s = hydro.c_s(prims, lattice.X1, lattice.X2, t)
+        matrix = jnp.log(jnp.minimum(lattice.dX1 / (jnp.abs(u) + c_s), lattice.dX2 / (jnp.abs(v) + c_s)))
         
     return matrix
 
 def run(hydro, lattice, prims, t=0, T=1, N=None, plot=None, plot_range=None, out="./out", save_interval=None, diagnostics: ArrayLike = []):
     labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$",
-              "v": r"$v$", "pressure": r"$P$", "energy": r"$E$", }
+              "v": r"$v$", "pressure": r"$P$", "energy": r"$E$", "dt": r"$\log dt$"}
 
     saving = save_interval is not None
 

@@ -28,7 +28,7 @@ class DynamicCommand(click.Command):
 @click.command(cls=DynamicCommand)
 @click.argument("config_file", type=click.Path(exists=True))
 @click.option("--checkpoint", type=click.Path(), help="Path to a specific checkpoint file.")
-@click.option("--plot", type=click.Choice(["density", "log density", "u", "v", "pressure", "energy"]))
+@click.option("--plot", type=click.Choice(["density", "log density", "u", "v", "pressure", "energy", "dt"]))
 @click.option("--plot-range", type=(float, float))
 @click.option("--output-dir", type=click.Path())
 @click.option("--resume", is_flag=True, help="Resume simulation from the latest checkpoint in given output directory.")
@@ -57,7 +57,7 @@ def run(config_file, checkpoint, plot, plot_range, output_dir, resume, **kwargs)
 @click.option("--t-factor", type=float, default=1)
 @click.option("--t-units", type=str, default="")
 def plot(checkpoint_file, var, range, title, dpi, cmap, c_range, t_factor, t_units):
-    labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$", "v": r"$v$", "pressure": r"$P$"}
+    labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$", "v": r"$v$", "pressure": r"$P$", "dt": r"$dt$"}
     vmin, vmax = None, None
     if c_range:
         vmin, vmax = c_range

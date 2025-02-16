@@ -20,22 +20,6 @@ def get_accr_rate(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[Arra
     m_dot = (sink_source[..., 0] * dA)
     return jnp.sum(m_dot)
 
-# def pringle(x, tau, m, R0):
-#     x = jnp.maximum(x, 1e-10)
-#     ln_prefactor = jnp.log(m) - jnp.log(jnp.pi) - 2 * jnp.log(R0) - jnp.log(tau) - 0.25 * jnp.log(x)
-#     ln_exponential = -(1 + x**2) / tau
-    
-#     bessel_arg = 2 * x / tau
-#     large_bessel = bessel_arg > 100
-#     ln_bessel_term = jnp.where(
-#         large_bessel,
-#         bessel_arg - 0.5 * jnp.log(2 * jnp.pi * bessel_arg),  # Log of asymptotic form
-#         jnp.log(iv(0.25, bessel_arg))  # Exact log for small bessel_arg
-#     )
-    
-#     ln_sigma = ln_prefactor + ln_exponential + ln_bessel_term
-#     return jnp.exp(ln_sigma)  # Return Sigma in normal space
-
 def pringle(x, tau, m, R0):
     # Clip tau to avoid numerical issues (ensures it's not too small)
     tau = jnp.clip(tau, 1e-6, None)
@@ -72,7 +56,7 @@ class SingleBH(Hydro):
     sink_rate: float = 10 * omega_B
     sink_prescription: str = "acceleration-free"
     m: float = 1
-    Sigma_floor: float = 1e-3
+    Sigma_floor: float = 1e-4
     R_0: float = 2 * a
     sigma: float = 0.1 * a
     
@@ -95,7 +79,7 @@ class SingleBH(Hydro):
         r, theta = cartesian_to_polar(X1, X2)
 
         # surface density
-        Sigma_pringle = jnp.nan_to_num(pringle(r / self.R_0, self.tau_0, self.m, self.R_0), nan=1e-3)
+        Sigma_pringle = jnp.nan_to_num(pringle(r / self.R_0, self.tau_0, self.m, self.R_0), nan=self.Sigma_floor)
         Sigma = jnp.maximum(self.Sigma_floor, Sigma_pringle)
         Sigma = jnp.where(Sigma > 10, self.Sigma_floor, Sigma)
 
@@ -106,8 +90,7 @@ class SingleBH(Hydro):
         u = v_r * jnp.cos(theta) - v_theta * jnp.sin(theta)
         v = v_r * jnp.sin(theta) + v_theta * jnp.cos(theta)
         
-        # p = jnp.ones_like(X1) * 1e-2
-        p = Sigma * self.c_s(None, X1, X2, 0)**2
+        p = jnp.ones_like(X1) * 1e-2
 
         return jnp.array([
             Sigma,
@@ -129,10 +112,10 @@ class SingleBH(Hydro):
         return self.tau_to_t(0.002) * 1025
     
     def save_interval(self):
-        return self.tau_to_t(self.tau_0) / 2
-    
+        return 0.1
+
     def PLM(self) -> bool:
-        return True
+        return False
     
     def theta_PLM(self) -> float:
         return 1.5
@@ -155,26 +138,8 @@ class SingleBH(Hydro):
     def nu(self) -> float:
         return self.nu_vis
     
-    def E(self, prims: Primitives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
-        rho, u, v = prims[..., 0], prims[..., 1], prims[..., 2]
-        e_internal = rho * (self.c_s(prims, X1, X2, t) ** 2)
-        e_kinetic = 0.5 * rho * (u ** 2 + v ** 2)
-        return e_internal + e_kinetic
-
-    def c_s(self, prims: Primitives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
-        x1, x2 = self.get_BH_position(t)
-        r, theta = cartesian_to_polar(X1, X2)
-        r1, theta1 = cartesian_to_polar(x1, x2)
-
-        dist1 = jnp.sqrt(r ** 2 + r1 ** 2 - 2 * r *
-                         r1 * jnp.cos(theta - theta1))
-
-        cs = jnp.sqrt(((self.G * self.M / jnp.sqrt(dist1 ** 2 + self.eps ** 2))) / (self.mach ** 2))
-        return cs
-
-    def P(self, cons: Conservatives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
-        rho = cons[..., 0]
-        return rho * self.c_s(cons, X1, X2, t) ** 2
+    def gamma(self) -> float:
+        return 5 / 3
     
     def get_BH_position(self, t):
         return 0, 0
@@ -197,17 +162,17 @@ class SingleBH(Hydro):
 
     def BH_sink(self, U, x, y, x_bh, y_bh):
         rho = U[..., 0]
-        # pres = self.P(U)
-        # eps = pres / rho / (self.gamma() - 1)
+        pres = self.P(U)
+        eps = pres / rho / (self.gamma() - 1)
         dx, dy = x - x_bh, y - y_bh
         r = jnp.sqrt(dx ** 2 + dy ** 2)
         r_sink = self.eps
         r_soft = self.eps
         s_rate = jnp.where(r < (4 * r_sink), self.sink_rate * jnp.exp(-jnp.pow(r / r_sink, 4)), jnp.zeros_like(r))
         
-        mdot = jnp.where(s_rate > 0, -s_rate * rho, -s_rate)
         fgrav_num = rho * self.M * jnp.pow(r**2 + r_soft**2, -1.5)
         fx, fy = -fgrav_num * dx, -fgrav_num * dy
+        mdot = rho * s_rate * -1
         
         S = jnp.zeros_like(U)
         u, v = U[..., 1] / rho, U[..., 2] / rho
@@ -216,7 +181,7 @@ class SingleBH(Hydro):
             S = S.at[..., 0].set(mdot)
             S = S.at[..., 1].set(mdot * u)
             S = S.at[..., 2].set(mdot * v)
-            # S = S.at[..., 3].set(mdot * eps + 0.5 * mdot * (u*u + v*v) + (fx * u + fy * v))
+            S = S.at[..., 3].set(mdot * eps + 0.5 * mdot * (u*u + v*v) + (fx * u + fy * v))
         elif self.sink_prescription == "torque-free":
             u_bh, v_bh = 0, 0
             rhatx = dx / (r + 1e-12)
@@ -227,6 +192,7 @@ class SingleBH(Hydro):
             S = S.at[..., 0].set(mdot)
             S = S.at[..., 1].set(mdot * ustar)
             S = S.at[..., 2].set(mdot * vstar)
+            S = S.at[..., 3].set((mdot * eps + 0.5 * mdot * (ustar * ustar + vstar * vstar)) + (fx * u + fy * v))
         else:
             raise AttributeError("Invalid sink prescription")
 

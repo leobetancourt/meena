@@ -48,7 +48,8 @@ def run(config_file, checkpoint, plot, plot_range, output_dir, resume, **kwargs)
 
 @click.command()
 @click.argument("checkpoint_file", type=click.Path(exists=True))
-@click.option("-v", "--var", type=click.Choice(["density", "log density", "u", "v", "pressure"]), default="density")
+@click.option("-v", "--var", type=click.Choice(["density", "u", "v", "pressure", "dt"]), default="density")
+@click.option("--log", is_flag=True, default=False)
 @click.option("-r", "--range", type=(float, float, float, float), default=None)
 @click.option("--title", type=str, default="")
 @click.option("--dpi", type=int, default=500)
@@ -56,8 +57,8 @@ def run(config_file, checkpoint, plot, plot_range, output_dir, resume, **kwargs)
 @click.option("--c-range", type=(float, float))
 @click.option("--t-factor", type=float, default=1)
 @click.option("--t-units", type=str, default="")
-def plot(checkpoint_file, var, range, title, dpi, cmap, c_range, t_factor, t_units):
-    labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$", "v": r"$v$", "pressure": r"$P$", "dt": r"$dt$"}
+def plot(checkpoint_file, var, log, range, title, dpi, cmap, c_range, t_factor, t_units):
+    labels = {"density": r"$\rho$", "u": r"$u$", "v": r"$v$", "pressure": r"$P$", "dt": r"$dt$"}
     vmin, vmax = None, None
     if c_range:
         vmin, vmax = c_range
@@ -71,15 +72,20 @@ def plot(checkpoint_file, var, range, title, dpi, cmap, c_range, t_factor, t_uni
         
         if var == "density":
             matrix = rho
-        elif var == "log density":
-            matrix = np.log10(rho)
         elif var == "u":
             matrix = u
         elif var == "v":
             matrix = v
         elif var == "pressure":
             matrix = p
-
+        elif var == "dt":
+            gamma = 5 / 3
+            dx, dy = x1[1] - x1[0], x2[1] - x2[0]
+            cs = np.sqrt(gamma * p / rho)
+            dt1 = dx / (np.abs(u) + cs)
+            dt2 = dy / (np.abs(v) + cs)
+            matrix = np.minimum(dt1, dt2)
+        
         if range:
             x1_min, x1_max = range[0], range[1]
             x2_min, x2_max = range[2], range[3]
@@ -91,7 +97,13 @@ def plot(checkpoint_file, var, range, title, dpi, cmap, c_range, t_factor, t_uni
             matrix = matrix[x1_min_i:x1_max_i+1, x2_min_i:x2_max_i+1]
             x1, x2 = x1[(x1 >= x1_min) & (x1 <= x1_max)], x2[(x2 >= x2_min) & (x2 <= x2_max)]
         
-        fig, ax, c, cb = plot_grid(matrix, labels[var], coords, x1, x2, vmin, vmax, cmap)
+        label = labels[var]
+        if log:
+            matrix = np.log10(matrix)
+            label = label.replace("$", "")
+            label = rf"$\log_{{10}}{label}$"
+        
+        fig, ax, c, cb = plot_grid(matrix, label, coords, x1, x2, vmin, vmax, cmap)
         if title == "":
             ax.set_title(f"t = {(t*t_factor):.2f} {t_units}")
         else:

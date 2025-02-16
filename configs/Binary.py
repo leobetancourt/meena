@@ -101,11 +101,11 @@ class Binary(Hydro):
     omega_B: float = 1
     t_sink: float = 1 / (10 * omega_B)
     sink_rate: float = 10 * omega_B
-    sink_prescription: str = "torque-free"
+    sink_prescription: str = "acceleration-free"
     
     cfl_num: float = 0.3
-    size: float = 20
-    res: float = 2000
+    size: float = 10
+    res: float = 1000
     plm: bool = 0
     plm_theta: float = 1.8
     t_order: int = 1
@@ -147,7 +147,7 @@ class Binary(Hydro):
         return (self.res, self.res)
 
     def t_end(self) -> float:
-        return 800 * 2 * jnp.pi
+        return 10 * 2 * jnp.pi
     
     def PLM(self) -> bool:
         return self.plm
@@ -311,4 +311,4 @@ class Binary(Hydro):
         return diagnostics
 
     def save_interval(self):
-        return 10
+        return 0.26

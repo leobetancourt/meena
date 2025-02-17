@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 from . import run_config, load_config
 from .tools import generate_movie
-from src.common.helpers import plot_grid, find_latest_checkpoint
+from src.common.helpers import plot_grid, plot_matrix, find_latest_checkpoint
 
 @click.group()
 def cli():
@@ -48,7 +48,7 @@ def run(config_file, checkpoint, plot, plot_range, output_dir, resume, **kwargs)
 
 @click.command()
 @click.argument("checkpoint_file", type=click.Path(exists=True))
-@click.option("-v", "--var", type=click.Choice(["density", "u", "v", "pressure", "dt"]), default="density")
+@click.option("-v", "--var", type=click.Choice(["density", "u", "v", "pressure", "dt"]), default=None)
 @click.option("--log", is_flag=True, default=False)
 @click.option("-r", "--range", type=(float, float, float, float), default=None)
 @click.option("--title", type=str, default="")
@@ -96,18 +96,20 @@ def plot(checkpoint_file, var, log, range, title, dpi, cmap, c_range, t_factor, 
 
             matrix = matrix[x1_min_i:x1_max_i+1, x2_min_i:x2_max_i+1]
             x1, x2 = x1[(x1 >= x1_min) & (x1 <= x1_max)], x2[(x2 >= x2_min) & (x2 <= x2_max)]
-        
-        label = labels[var]
-        if log:
-            matrix = np.log10(matrix)
-            label = label.replace("$", "")
-            label = rf"$\log_{{10}}{label}$"
-        
-        fig, ax, c, cb = plot_grid(matrix, label, coords, x1, x2, vmin, vmax, cmap)
+    
+        if var is None:
+            fig, _ = plot_grid((rho, u, v, p), x1, x2, cmap)
+        else: 
+            label = labels[var]
+            if log:
+                matrix = np.log10(matrix)
+                label = label.replace("$", "")
+                label = rf"$\log_{{10}}{label}$"
+                fig, _, _, _ = plot_matrix(matrix, label, coords, x1, x2, vmin, vmax, cmap)
         if title == "":
-            ax.set_title(f"t = {(t*t_factor):.2f} {t_units}")
+            fig.suptitle(f"t = {(t*t_factor):.2f} {t_units}", fontsize=16)
         else:
-            ax.set_title(title + f", t = {(t*t_factor):.2f} {t_units}")
+            fig.suptitle(title + f", t = {(t*t_factor):.2f} {t_units}", fontsize=16)
         PATH = checkpoint_file.split("checkpoints/")[0]
         plt.savefig(f"{PATH}/t={t:.2f}.png", bbox_inches="tight", dpi=dpi)
         plt.show()

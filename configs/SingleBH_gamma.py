@@ -63,7 +63,7 @@ class SingleBH(Hydro):
     size: float = 10
     res: int = 1000
     eps: float = 0.05 * a
-    cfl_num: float = 0.3
+    cfl_num: float = 0.1
 
     retrograde: bool = 0
     
@@ -115,7 +115,7 @@ class SingleBH(Hydro):
         return 0.1
 
     def PLM(self) -> bool:
-        return False
+        return True
     
     def theta_PLM(self) -> float:
         return 1.5

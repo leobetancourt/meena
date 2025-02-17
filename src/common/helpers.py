@@ -108,8 +108,7 @@ def load_U(file):
 
         return prims, t
 
-
-def plot_grid(matrix, label, coords, x1, x2, vmin=None, vmax=None, cmap="magma"):
+def plot_matrix(matrix, label, coords, x1, x2, vmin=None, vmax=None, cmap="magma"):
     extent = [x1[0], x1[-1], x2[0], x2[-1]]
 
     if coords == "cartesian":
@@ -135,10 +134,29 @@ def plot_grid(matrix, label, coords, x1, x2, vmin=None, vmax=None, cmap="magma")
         c = ax.pcolormesh(Theta, R, matrix, shading='auto',
                           cmap=cmap, vmin=vmin, vmax=vmax)
 
-    plt.tight_layout()
     cb = plt.colorbar(c, ax=ax, label=label)
 
     return fig, ax, c, cb
+
+def plot_grid(matrices, x1, x2, cmap="magma"):
+    rho, u, v, p = matrices
+    extent = [x1[0], x1[-1], x2[0], x2[-1]]
+
+    fig, axs = plt.subplots(2, 2, figsize=(10, 8))
+    c1 = axs[0, 0].imshow(jnp.transpose(rho), cmap=cmap, interpolation='nearest',
+                origin='lower', extent=extent)
+    fig.colorbar(c1, ax=axs[0, 0], label=r"$\rho$",)
+    c2 = axs[0, 1].imshow(jnp.transpose(u), cmap=cmap, interpolation='nearest',
+                origin='lower', extent=extent)
+    fig.colorbar(c2, ax=axs[0, 1], label=r"$u$")
+    c3 = axs[1, 1].imshow(jnp.transpose(v), cmap=cmap, interpolation='nearest',
+                origin='lower', extent=extent)
+    fig.colorbar(c3, ax=axs[1, 1], label=r"$v$",)
+    c4 = axs[1, 0].imshow(jnp.transpose(p), cmap=cmap, interpolation='nearest',
+                origin='lower', extent=extent)
+    fig.colorbar(c4, ax=axs[1, 0], label=r"$P$")
+        
+    return fig, axs
 
 
 def cartesian_to_polar(x, y):

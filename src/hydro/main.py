@@ -5,7 +5,7 @@ import os
 
 import jax.numpy as jnp
 from jax.typing import ArrayLike
-from jax import jit, Array
+from jax import jit, Array, debug
 import matplotlib.pyplot as plt
 
 
@@ -150,7 +150,7 @@ def get_matrix_to_plot(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float, p
         
     return matrix
 
-def run(hydro, lattice, prims, t=0, T=1, N=None, plot=None, plot_range=None, out="./out", save_interval=None, diagnostics: ArrayLike = []):
+def run(hydro, lattice, prims, t=0, T=1, N=None, plot=None, save_plots=False, plot_range=None, out="./out", save_interval=None, diagnostics: ArrayLike = []):
     labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma$", "u": r"$u$",
               "v": r"$v$", "pressure": r"$P$", "energy": r"$E$", "dt": r"$\log dt$"}
 
@@ -158,9 +158,12 @@ def run(hydro, lattice, prims, t=0, T=1, N=None, plot=None, plot_range=None, out
 
     if saving or len(diagnostics) > 0:
         os.makedirs(out, exist_ok=True)
-
+    
     if saving:
         os.makedirs(f"{out}/checkpoints", exist_ok=True)
+    
+    if save_plots:
+        os.makedirs(f"{out}/plots", exist_ok=True)
 
     if len(diagnostics) > 0:
         diag_file = f"{out}/diagnostics.csv"
@@ -192,9 +195,8 @@ def run(hydro, lattice, prims, t=0, T=1, N=None, plot=None, plot_range=None, out
     
             # at each checkpoint, save the conserved variables in every zone
             if saving and t >= next_checkpoint:
-                filename = f"{out}/checkpoints/out_{t:.4f}.h5"
                 prims = get_prims(hydro, U, lattice.X1, lattice.X2, t)
-                save_to_h5(filename, t, prims, hydro, lattice)
+                save_to_h5(out, t, prims, hydro, lattice, save_plots)
                 next_checkpoint += save_interval
 
             U = U_

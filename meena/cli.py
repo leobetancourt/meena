@@ -29,10 +29,11 @@ class DynamicCommand(click.Command):
 @click.argument("config_file", type=click.Path(exists=True))
 @click.option("--checkpoint", type=click.Path(), help="Path to a specific checkpoint file.")
 @click.option("--plot", type=click.Choice(["density", "log density", "u", "v", "pressure", "energy", "dt"]))
+@click.option("--save-plots", is_flag=True, default=False)
 @click.option("--plot-range", type=(float, float))
 @click.option("--output-dir", type=click.Path())
 @click.option("--resume", is_flag=True, help="Resume simulation from the latest checkpoint in given output directory.")
-def run(config_file, checkpoint, plot, plot_range, output_dir, resume, **kwargs):
+def run(config_file, checkpoint, plot, save_plots, plot_range, output_dir, resume, **kwargs):
     ctx = click.get_current_context()
     dynamic_command = ctx.command
     og_kwargs = {}
@@ -44,7 +45,7 @@ def run(config_file, checkpoint, plot, plot_range, output_dir, resume, **kwargs)
     if resume:
         checkpoint = find_latest_checkpoint(output_dir)    
     
-    run_config(config_file, checkpoint, plot, plot_range, output_dir, **og_kwargs)
+    run_config(config_file, checkpoint, plot, save_plots, plot_range, output_dir, **og_kwargs)
 
 @click.command()
 @click.argument("checkpoint_file", type=click.Path(exists=True))

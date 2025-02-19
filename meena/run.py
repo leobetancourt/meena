@@ -19,7 +19,7 @@ def load_config(config_file):
                 return obj
     return None
 
-def run_config(config_file, checkpoint, plot, plot_range, output_dir, **kwargs):
+def run_config(config_file, checkpoint, plot, save_plots, plot_range, output_dir, **kwargs):
     config_class = load_config(config_file)
     hydro = config_class(**kwargs)
     
@@ -52,6 +52,7 @@ def run_config(config_file, checkpoint, plot, plot_range, output_dir, **kwargs):
         T=hydro.t_end(),
         N=None,
         plot=plot,
+        save_plots=save_plots,
         plot_range=plot_range,
         out=out,
         save_interval=hydro.save_interval(),

@@ -356,25 +356,31 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
         gxlj = (prims_rl - prims_ll) / 2
         gxrj = (prims_rr - prims_lr) / 2
             
-    if hydro.nu():
-        nu = hydro.nu()
+    nu = hydro.nu()
 
-        dx, dy = x1[1] - x1[0], x2[1] - x2[0]
-        
-        sli = shear_strain(gxli, gyli, dx, dy)
-        sri = shear_strain(gxri, gyri, dx, dy)
-        slj = shear_strain(gxlj, gylj, dy, dy)
-        srj = shear_strain(gxrj, gyrj, dx, dy)
-        scc = shear_strain(gxcc, gycc, dx, dy)
-        
-        F_l = F_l.at[..., 1].add(-0.5 * nu * (prims_li[..., 0] * sli[0] + prims_cc[..., 0] * scc[0]))
-        F_l = F_l.at[..., 2].add(-0.5 * nu * (prims_li[..., 0] * sli[1] + prims_cc[..., 0] * scc[1]))
-        F_r = F_r.at[..., 1].add(-0.5 * nu * (prims_cc[..., 0] * scc[0] + prims_ri[..., 0] * sri[0]))
-        F_r = F_r.at[..., 2].add(-0.5 * nu * (prims_cc[..., 0] * scc[1] + prims_ri[..., 0] * sri[1]))
-        G_l = G_l.at[..., 1].add(-0.5 * nu * (prims_lj[..., 0] * slj[2] + prims_cc[..., 0] * scc[2]))
-        G_l = G_l.at[..., 2].add(-0.5 * nu * (prims_lj[..., 0] * slj[3] + prims_cc[..., 0] * scc[3]))
-        G_r = G_r.at[..., 1].add(-0.5 * nu * (prims_cc[..., 0] * scc[2] + prims_rj[..., 0] * srj[2]))
-        G_r = G_r.at[..., 2].add(-0.5 * nu * (prims_cc[..., 0] * scc[3] + prims_rj[..., 0] * srj[3]))
-            
+    dx, dy = x1[1] - x1[0], x2[1] - x2[0]
+    
+    sli = shear_strain(gxli, gyli, dx, dy)
+    sri = shear_strain(gxri, gyri, dx, dy)
+    slj = shear_strain(gxlj, gylj, dx, dy)
+    srj = shear_strain(gxrj, gyrj, dx, dy)
+    scc = shear_strain(gxcc, gycc, dx, dy)
+    F_l = F_l.at[..., 1].subtract(0.5 * nu * (prims_li[..., 0] * sli[0] + prims_cc[..., 0] * scc[0]))
+    F_l = F_l.at[..., 2].subtract(0.5 * nu * (prims_li[..., 0] * sli[1] + prims_cc[..., 0] * scc[1]))
+    F_r = F_r.at[..., 1].subtract(0.5 * nu * (prims_cc[..., 0] * scc[0] + prims_ri[..., 0] * sri[0]))
+    F_r = F_r.at[..., 2].subtract(0.5 * nu * (prims_cc[..., 0] * scc[1] + prims_ri[..., 0] * sri[1]))
+    G_l = G_l.at[..., 1].subtract(0.5 * nu * (prims_lj[..., 0] * slj[2] + prims_cc[..., 0] * scc[2]))
+    G_l = G_l.at[..., 2].subtract(0.5 * nu * (prims_lj[..., 0] * slj[3] + prims_cc[..., 0] * scc[3]))
+    G_r = G_r.at[..., 1].subtract(0.5 * nu * (prims_cc[..., 0] * scc[2] + prims_rj[..., 0] * srj[2]))
+    G_r = G_r.at[..., 2].subtract(0.5 * nu * (prims_cc[..., 0] * scc[3] + prims_rj[..., 0] * srj[3]))
+    
+    F_l = F_l.at[..., 3].subtract(0.5 * nu * (prims_li[..., 0] * sli[0] * prims_li[..., 1] + prims_cc[..., 0] * scc[0] * prims_cc[..., 1]))
+    F_r = F_r.at[..., 3].subtract(0.5 * nu * (prims_cc[..., 0] * scc[0] * prims_cc[..., 1] + prims_ri[..., 0] * sri[0] * prims_ri[..., 1]))
+    F_l = F_l.at[..., 3].subtract(0.5 * nu * (prims_li[..., 0] * sli[1] * prims_li[..., 2] + prims_cc[..., 0] * scc[1] * prims_cc[..., 2]))
+    F_r = F_r.at[..., 3].subtract(0.5 * nu * (prims_cc[..., 0] * scc[1] * prims_cc[..., 2] + prims_ri[..., 0] * sri[1] * prims_ri[..., 2]))
+    G_l = G_l.at[..., 3].subtract(0.5 * nu * (prims_lj[..., 0] * slj[2] * prims_lj[..., 1] + prims_cc[..., 0] * scc[2] * prims_cc[..., 1]))
+    G_r = G_r.at[..., 3].subtract(0.5 * nu * (prims_cc[..., 0] * scc[2] * prims_cc[..., 1] + prims_rj[..., 0] * srj[2] * prims_rj[..., 1]))
+    G_l = G_l.at[..., 3].subtract(0.5 * nu * (prims_lj[..., 0] * slj[3] * prims_lj[..., 2] + prims_cc[..., 0] * scc[3] * prims_cc[..., 2]))
+    G_r = G_r.at[..., 3].subtract(0.5 * nu * (prims_cc[..., 0] * scc[3] * prims_cc[..., 2] + prims_rj[..., 0] * srj[3] * prims_rj[..., 2]))
 
     return F_l, F_r, G_l, G_r

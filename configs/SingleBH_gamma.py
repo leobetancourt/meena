@@ -90,8 +90,8 @@ class SingleBH(Hydro):
         u = v_r * jnp.cos(theta) - v_theta * jnp.sin(theta)
         v = v_r * jnp.sin(theta) + v_theta * jnp.cos(theta)
         
-        p = jnp.ones_like(X1) * 1e-2
-
+        h = 0.1
+        p = jnp.ones_like(X1) * 1e-2 # h**2 * v_theta**2 * Sigma / self.gamma()
         return jnp.array([
             Sigma,
             u,

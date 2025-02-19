@@ -65,8 +65,9 @@ def read_csv(path, compress=False):
     return numpy_arrays
 
 
-def save_to_h5(filename, t, prims, hydro, lattice):
+def save_to_h5(out, t, prims, hydro, lattice, save_plots):
     rho, u, v, p = prims[..., 0], prims[..., 1], prims[..., 2], prims[..., 3]
+    filename = f"{out}/checkpoints/out_{t:.4f}.h5"
     with h5py.File(filename, "w") as f:
         # metadata
         f.attrs["coords"] = lattice.coords
@@ -80,6 +81,11 @@ def save_to_h5(filename, t, prims, hydro, lattice):
         f.create_dataset("u", data=u, dtype="float64")
         f.create_dataset("v", data=v, dtype="float64")
         f.create_dataset("p", data=p, dtype="float64")
+    
+    if save_plots:
+        fig, _ = plot_grid((rho, u, v, p), lattice.x1, lattice.x2)
+        fig.suptitle(f"t = {t:.2f}", fontsize=16)
+        plt.savefig(f"{out}/plots/t={t:.2f}.png", bbox_inches="tight", dpi=300)    
 
 
 def create_csv_file(filename, headers):

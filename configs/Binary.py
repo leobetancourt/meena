@@ -101,14 +101,15 @@ class Binary(Hydro):
     omega_B: float = 1
     t_sink: float = 1 / (10 * omega_B)
     sink_rate: float = 10 * omega_B
-    sink_prescription: str = "acceleration-free"
+    sink_prescription: str = "torque-free"
     
-    cfl_num: float = 0.3
-    size: float = 10
-    res: float = 1000
-    plm: bool = 0
-    plm_theta: float = 1.8
+    cfl_num: float = 0.1
+    size: float = 20
+    res: float = 2000
+    plm: bool = 1
+    plm_theta: float = 1.5
     t_order: int = 1
+    buff: bool = 1
 
     def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
         r, theta = cartesian_to_polar(X1, X2)
@@ -147,7 +148,7 @@ class Binary(Hydro):
         return (self.res, self.res)
 
     def t_end(self) -> float:
-        return 10 * 2 * jnp.pi
+        return 1000 * 2 * jnp.pi
     
     def PLM(self) -> bool:
         return self.plm
@@ -272,34 +273,43 @@ class Binary(Hydro):
         S += self.BH_sink(U, X1, X2, x1_1, x2_1, u_1, v_1) + self.BH_sink(U, X1, X2, x1_2, x2_2, u_2, v_2)
         
         # buffer
-        S += self.buffer(U, X1, X2, t)
+        if self.buff:
+            S += self.buffer(U, X1, X2, t)
         
         return S
 
-    # Buffer implementation adapted from Westernacher-Schneider et al. 2022
+    # Buffer implementation adapted from Sailfish
     def buffer(self, U: ArrayLike, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
-        D = self.size / 2
-        r, _ = cartesian_to_polar(X1, X2)
+        x, y = X1, X2
+        r, _ = cartesian_to_polar(x, y)
 
-        # f(r) increases linearly from 0 at r = D - 0.1a to 1000 at r = D (and otherwise 0)
-        def f(r):
-            linear = (r - (D - 0.1 * self.a)) * (1000 / (0.1 * self.a))
-            return jnp.where((r >= D - 0.1 * self.a) & (r <= D), linear, 0)
+        surface_density = jnp.ones_like(x) * self.delta_0
+        driving_rate = 100
+        outer_radius = self.size / 2
+        onset_width = 1
+        onset_radius = outer_radius - onset_width
         
-        prims_0 = self.initialize(X1, X2)
-        rho_0, u_0, v_0 = prims_0[..., 0], prims_0[..., 1], prims_0[..., 2]
-        E_0 = self.E(prims_0, X1, X2, t)
-        U_0 = jnp.array([
-            rho_0,
-            rho_0 * u_0,
-            rho_0 * v_0,
-            E_0
+        v_kep = jnp.sqrt(self.G * self.M / r)
+        u, v = (-y / r) * v_kep, (x / r) * v_kep
+        px = surface_density * u
+        py = surface_density * v
+        prims = jnp.array([
+            surface_density,
+            px,
+            py,
+            jnp.zeros_like(x)
         ]).transpose((1, 2, 0))
-        omega_naught = jnp.sqrt((self.G * self.M / (D ** 3 + self.eps ** 3))
-                                * (1 - (1 / (self.mach ** 2))))
-        omega_D = ((omega_naught ** -4) + (self.omega_B ** -4)) ** (-1/4)
+        U_0 = jnp.array([
+            surface_density,
+            px,
+            py,
+            self.E(prims, X1, X2, t)
+        ]).transpose((1, 2, 0))
+        omega_outer = jnp.sqrt(self.M * jnp.pow(onset_radius, -3.0))
+        buffer_rate = driving_rate * omega_outer * (r - onset_radius) / (outer_radius - onset_radius)
+        buffer_rate = jnp.where(r > onset_radius, buffer_rate, 0)
         
-        return - f(r)[..., jnp.newaxis] * omega_D * (U - U_0)
+        return -(U - U_0) * buffer_rate[..., jnp.newaxis]
 
     def diagnostics(self):
         diagnostics = []
@@ -311,4 +321,4 @@ class Binary(Hydro):
         return diagnostics
 
     def save_interval(self):
-        return 0.26
+        return 1

@@ -101,8 +101,43 @@ def append_row_csv(filename, row):
 
 
 def load_U(file):
+    if os.path.exists(file):
+        return _load_file(file)
+    
+    # Extract directory and target time from filename
+    directory, filename = os.path.split(file)
+    try:
+        target_t = float(filename.split("out_")[1].split(".h5")[0])
+    except (IndexError, ValueError):
+        raise ValueError("Invalid file format. Expected 'out_x.xxxx.h5'")
+    
+    # Get all available files in the directory
+    files = glob.glob(os.path.join(directory, "out_*.h5"))
+    
+    if not files:
+        raise FileNotFoundError("No output files found in the directory.")
+    
+    # Extract times from filenames
+    times = []
+    for f in files:
+        try:
+            t = float(os.path.basename(f).split("out_")[1].split(".h5")[0])
+            times.append((t, f))
+        except (IndexError, ValueError):
+            continue
+    
+    if not times:
+        raise FileNotFoundError("No valid output files found in the directory.")
+    
+    # Find the closest file in time
+    closest_file = min(times, key=lambda x: abs(x[0] - target_t))[1]
+    
+    return _load_file(closest_file)
+
+def _load_file(file):
     with h5py.File(file, 'r') as f:
         t = f.attrs["t"]
+        x1, x2 = f.attrs["x1"], f.attrs["x2"]
         rho, u, v, p = f["rho"], f["u"], f["v"], f["p"]
 
         prims = jnp.array([
@@ -111,8 +146,8 @@ def load_U(file):
             v,
             p
         ]).transpose((1, 2, 0))
-
-        return prims, t
+    
+    return prims, x1, x2, t
 
 def plot_matrix(matrix, label, coords, x1, x2, vmin=None, vmax=None, cmap="magma"):
     extent = [x1[0], x1[-1], x2[0], x2[-1]]

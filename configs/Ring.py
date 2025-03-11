@@ -6,22 +6,23 @@ from jax import Array, jit
 import jax.numpy as jnp
 
 from meena import Hydro, Lattice, Primitives, Conservatives, BoundaryCondition
-from src.common.helpers import cartesian_to_polar, get_prims
+from src.common.helpers import cartesian_to_polar
 
 
 @partial(jit, static_argnames=["hydro", "lattice"])
 def get_accr_rate(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
     dA = lattice.dX1 * lattice.dX2
-    x1_1, x2_1, x1_2, x2_2 = hydro.get_positions(t)
-    sink_source = hydro.BH_sink(U, lattice.X1, lattice.X2, x1_1, x2_1) + \
-            hydro.BH_sink(U, lattice.X1, lattice.X2, x1_2, x2_2)
+    x_1, y_1, x_2, y_2 = hydro.get_bh_positions(t)
+    u_1, v_1, u_2, v_2 = hydro.get_bh_positions(t)
+    sink_source = hydro.BH_sink(U, lattice.X1, lattice.X2, x_1, y_1, u_1, v_1) + \
+            hydro.BH_sink(U, lattice.X1, lattice.X2, x_2, y_2, u_2, v_2)
     m_dot = (-sink_source[..., 0] * dA)
     return jnp.sum(m_dot)
 
 
 @partial(jit, static_argnames=["hydro", "lattice"])
 def get_torque1(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
-    x1_1, x2_1, x1_2, x2_2 = hydro.get_positions(t)
+    x1_1, x2_1, x1_2, x2_2 = hydro.get_bh_positions(t)
     rho = U[..., 0]
     x_bh, y_bh = x1_1, x2_1
     dA = lattice.dX1 * lattice.dX2
@@ -40,7 +41,7 @@ def get_torque1(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayL
 
 @partial(jit, static_argnames=["hydro", "lattice"])
 def get_torque2(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
-    x1_1, x2_1, x1_2, x2_2 = hydro.get_positions(t)
+    x1_1, x2_1, x1_2, x2_2 = hydro.get_bh_positions(t)
     rho = U[..., 0]
     x_bh, y_bh = x1_2, x2_2
     dA = lattice.dX1 * lattice.dX2
@@ -56,35 +57,6 @@ def get_torque2(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayL
     T = jnp.sum((hydro.a / 2) * Fg_theta)
     return T
 
-
-def get_eccentricity(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
-    x, y = lattice.X1, lattice.X2
-    r = jnp.sqrt(x ** 2 + y ** 2)
-
-    rho, u, v, p = get_prims(hydro, U, x, y, t)
-    j = x * v - y * u
-    e_x = (j * v / (hydro.G() * hydro.M)) - (x / r)
-    e_y = -(j * u / (hydro.G() * hydro.M)) - (y / r)
-    dA = lattice.dX1 * lattice.dX2
-
-    bounds = jnp.logical_and(r >= hydro.a, r <= 6 * hydro.a)
-    ec_x = jnp.where(bounds, e_x * rho * dA, 0).sum() / \
-        (35 * jnp.pi * hydro.Sigma_0 * (hydro.a ** 2))
-    ec_y = jnp.where(bounds, e_y * rho * dA, 0).sum() / \
-        (35 * jnp.pi * hydro.Sigma_0 * (hydro.a ** 2))
-    return ec_x, ec_y
-
-
-@partial(jit, static_argnames=["hydro", "lattice"])
-def get_eccentricity_x(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
-    return get_eccentricity(hydro, lattice, U, flux, t)[0]
-
-
-@partial(jit, static_argnames=["hydro", "lattice"])
-def get_eccentricity_y(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
-    return get_eccentricity(hydro, lattice, U, flux, t)[1]
-
-
 @dataclass(frozen=True)
 class Ring(Hydro):
     M: float = 1
@@ -94,12 +66,15 @@ class Ring(Hydro):
     eps: float = 0.05 * a
     omega_B: float = 1
     t_sink: float = 1 / (10 * omega_B)
-    R_0: float = 2 * a
-    sigma: float = 0.2 * a
-    CFL_num: float = 0.4
-    domain_size: float = 10
-    res: int = 2000
+    sink_rate: float = 10 * omega_B
+    sink_prescription: str = "torque-free"
+    R_0: float = 1 * a
+    sigma: float = 0.1 * a
     retrograde: bool = 0
+    
+    CFL_num: float = 0.1
+    size: float = 20
+    res: int = 2000
 
     def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
         t = 0
@@ -107,7 +82,7 @@ class Ring(Hydro):
 
         # surface density
         gaussian = self.Sigma_0 * jnp.exp(- ((r - self.R_0) ** 2) / (2 * (self.sigma ** 2)))
-        floor = 0.01
+        floor = 1e-4
         rho = jnp.maximum(floor, gaussian)
 
         v_r = jnp.zeros_like(rho)
@@ -121,20 +96,26 @@ class Ring(Hydro):
             rho,
             rho * u,
             rho * v,
-            self.E((rho, u, v, jnp.zeros_like(rho)), X1, X2, t)
+            rho * (self.c_s(None, X1, X2, 0) ** 2)
         ]).transpose((1, 2, 0))
 
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
-        return ((-self.domain_size, self.domain_size), (-self.domain_size, self.domain_size))
+        return ((-self.size/2, self.size/2), (-self.size/2, self.size/2))
 
     def resolution(self) -> tuple[int, int]:
         return (self.res, self.res)
 
     def t_end(self) -> float:
-        return 20 * 2 * jnp.pi
+        return 1000 * (2 * jnp.pi)
     
     def PLM(self) -> bool:
         return True
+    
+    def theta_PLM(self) -> bool:
+        return 1.5
+    
+    def time_order(self) -> int:
+        return 1
     
     def cfl(self) -> float:
         return self.CFL_num
@@ -153,18 +134,15 @@ class Ring(Hydro):
     
     def G(self) -> float:
         return 1
-    
-    def self_gravity(self) -> bool:
-        return True
 
     def E(self, prims: Primitives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
-        rho, u, v, p = prims
+        rho, u, v = prims[..., 0], prims[..., 1], prims[..., 2]
         e_internal = rho * (self.c_s(prims, X1, X2, t) ** 2)
         e_kinetic = 0.5 * rho * (u ** 2 + v ** 2)
         return e_internal + e_kinetic
 
     def c_s(self, prims: Primitives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
-        x1_1, x2_1, x1_2, x2_2 = self.get_positions(t)
+        x1_1, x2_1, x1_2, x2_2 = self.get_bh_positions(t)
         r, theta = cartesian_to_polar(X1, X2)
         r1, theta1 = cartesian_to_polar(x1_1, x2_1)
         r2, theta2 = cartesian_to_polar(x1_2, x2_2)
@@ -179,8 +157,8 @@ class Ring(Hydro):
         return cs
 
     def P(self, cons: Conservatives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
-        rho, _, _, _ = cons
-        return rho * self.c_s(cons, X1, X2, t) ** 2
+        rho = cons[..., 0]
+        return rho * (self.c_s(cons, X1, X2, t) ** 2)
 
     def BH_gravity(self, U, x, y, x_bh, y_bh):
         dx, dy = x - x_bh, y - y_bh
@@ -198,44 +176,108 @@ class Ring(Hydro):
             rho * (u * g_x + v * g_y)
         ]).transpose((1, 2, 0))
 
-    def BH_sink(self, U, x, y, x_bh, y_bh):
+    def BH_sink(self, U, x, y, x_bh, y_bh, u_bh, v_bh):
         rho = U[..., 0]
         dx, dy = x - x_bh, y - y_bh
         r = jnp.sqrt(dx ** 2 + dy ** 2)
         r_sink = self.eps
-        sink = jnp.exp(-((r / r_sink) ** 6)) * (self.t_sink ** -1) * rho
-        S = jnp.zeros_like(U).at[:, :, 0].set(-sink)
+        s_rate = jnp.where(r < (4 * r_sink), self.sink_rate * jnp.exp(-jnp.pow(r / r_sink, 4)), jnp.zeros_like(r))
+        mdot = rho * s_rate * -1
+        
+        S = jnp.zeros_like(U)
+        u, v = U[..., 1] / rho, U[..., 2] / rho
+        if self.sink_prescription == "acceleration-free":
+            S = S.at[..., 0].set(mdot)
+            S = S.at[..., 1].set(mdot * u)
+            S = S.at[..., 2].set(mdot * v)
+        elif self.sink_prescription == "torque-free":
+            rhatx = dx / (r + 1e-12)
+            rhaty = dy / (r + 1e-12)
+            dvdotrhat = (u - u_bh) * rhatx + (v - v_bh) * rhaty
+            ustar = dvdotrhat * rhatx + u_bh
+            vstar = dvdotrhat * rhaty + v_bh
+            S = S.at[..., 0].set(mdot)
+            S = S.at[..., 1].set(mdot * ustar)
+            S = S.at[..., 2].set(mdot * vstar)
+        elif self.sink_prescription == "force-free":
+            S = S.at[..., 0].set(mdot)
+        else:
+            raise AttributeError("Invalid sink prescription")
 
         return S
 
     def source(self, U: ArrayLike, X1, X2, t: float) -> Array:
         S = jnp.zeros_like(U)
-        x1_1, x2_1, x1_2, x2_2 = self.get_positions(t)
+        x_1, y_1, x_2, y_2 = self.get_bh_positions(t)
+        u_1, v_1, u_2, v_2 = self.get_bh_velocities(t)
  
         # gravity
-        S += self.BH_gravity(U, X1, X2, x1_1, x2_1) + \
-            self.BH_gravity(U, X1, X2, x1_2, x2_2)
+        S += self.BH_gravity(U, X1, X2, x_1, y_1) + \
+            self.BH_gravity(U, X1, X2, x_2, y_2)
 
         # sinks
-        S += self.BH_sink(U, X1, X2, x1_1, x2_1) + self.BH_sink(U, X1, X2, x1_2, x2_2)
+        S += self.BH_sink(U, X1, X2, x_1, y_1, u_1, v_1) + \
+            self.BH_sink(U, X1, X2, x_2, y_2, u_2, v_2)
+            
+        # buffer
+        S += self.buffer(U, X1, X2, t)
 
         return S
 
-    def get_positions(self, t):
+    # Buffer implementation from Sailfish
+    def buffer(self, U: ArrayLike, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
+        x, y = X1, X2
+        r, _ = cartesian_to_polar(x, y)
+
+        surface_density = jnp.ones_like(x) * 1e-4
+        driving_rate = 100
+        outer_radius = self.size / 2
+        onset_width = 1
+        onset_radius = outer_radius - onset_width
+        
+        v_kep = jnp.sqrt(self.G() * self.M / r)
+        u, v = (-y / r) * v_kep, (x / r) * v_kep
+        px = surface_density * u
+        py = surface_density * v
+        prims = jnp.array([
+            surface_density,
+            px,
+            py,
+            jnp.zeros_like(x)
+        ]).transpose((1, 2, 0))
+        U_0 = jnp.array([
+            surface_density,
+            px,
+            py,
+            self.E(prims, X1, X2, t)
+        ]).transpose((1, 2, 0))
+        omega_outer = jnp.sqrt(self.M * jnp.pow(onset_radius, -3.0))
+        buffer_rate = driving_rate * omega_outer * (r - onset_radius) / (outer_radius - onset_radius)
+        buffer_rate = jnp.where(r > onset_radius, buffer_rate, 0)
+        
+        return -(U - U_0) * buffer_rate[..., jnp.newaxis]
+
+    def get_bh_positions(self, t):
         delta = jnp.pi
-        x1_1, x2_1 = (self.a / 2) * jnp.cos(self.omega_B *
-                                            t), (self.a / 2) * jnp.sin(self.omega_B * t)
-        x1_2, x2_2 = (self.a / 2) * jnp.cos(self.omega_B * t +
-                                            delta), (self.a / 2) * jnp.sin(self.omega_B * t + delta)
+        x1_1, x2_1 = (self.a / 2) * jnp.cos(self.omega_B * t), \
+                     (self.a / 2) * jnp.sin(self.omega_B * t)
+        x1_2, x2_2 = (self.a / 2) * jnp.cos(self.omega_B * t + delta), \
+                     (self.a / 2) * jnp.sin(self.omega_B * t + delta)
         return x1_1, x2_1, x1_2, x2_2
+
+    def get_bh_velocities(self, t):
+        delta = jnp.pi
+        u_1, v_1 = -(self.a / 2) * self.omega_B * jnp.sin(self.omega_B * t), \
+                    (self.a / 2) * self.omega_B * jnp.cos(self.omega_B * t)
+        u_2, v_2 = -(self.a / 2) * self.omega_B * jnp.sin(self.omega_B * t + delta), \
+                    (self.a / 2) * self.omega_B * jnp.cos(self.omega_B * t + delta)
+        return u_1, v_1, u_2, v_2
 
     def diagnostics(self):
         diagnostics = []
         diagnostics.append(("m_dot", get_accr_rate))
         diagnostics.append(("torque_1", get_torque1))
         diagnostics.append(("torque_2", get_torque2))
-        diagnostics.append(("e_x", get_eccentricity_x))
-        diagnostics.append(("e_y", get_eccentricity_y))
         return diagnostics
 
     def save_interval(self):

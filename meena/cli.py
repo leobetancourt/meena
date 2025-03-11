@@ -106,7 +106,7 @@ def plot(checkpoint_file, var, log, range, title, dpi, cmap, c_range, t_factor, 
                 matrix = np.log10(matrix)
                 label = label.replace("$", "")
                 label = rf"$\log_{{10}}{label}$"
-                fig, _, _, _ = plot_matrix(matrix, label, coords, x1, x2, vmin, vmax, cmap)
+            fig, _, _, _ = plot_matrix(matrix, label, coords, x1, x2, vmin, vmax, cmap)
         if title == "":
             fig.suptitle(f"t = {(t*t_factor):.2f} {t_units}", fontsize=16)
         else:

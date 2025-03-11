@@ -1,4 +1,4 @@
-from src.common.helpers import plot_grid, print_progress_bar
+from src.common.helpers import plot_matrix, print_progress_bar
 import os
 import h5py
 import re
@@ -60,7 +60,7 @@ def generate_movie(checkpoint_path, t_min, t_max, var, grid_range, title, fps, v
             matrix = matrix[x1_min_i:x1_max_i+1, x2_min_i:x2_max_i+1]
             x1, x2 = x1[(x1 >= x1_min) & (x1 <= x1_max)], x2[(x2 >= x2_min) & (x2 <= x2_max)]
 
-    fig, ax, c, cb = plot_grid(
+    fig, ax, c, cb = plot_matrix(
         matrix, labels[var], coords, x1, x2, vmin, vmax, cmap)
     if title == "":
         ax.set_title(f"t = {(t*t_factor):.2f} {t_units}")

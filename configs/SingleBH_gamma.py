@@ -112,7 +112,7 @@ class SingleBH(Hydro):
         return self.tau_to_t(0.002) * 1025
     
     def save_interval(self):
-        return 0.1
+        return 0.2
 
     def PLM(self) -> bool:
         return True

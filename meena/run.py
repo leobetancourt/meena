@@ -37,7 +37,7 @@ def run_config(config_file, checkpoint, plot, save_plots, plot_range, output_dir
     )
 
     if checkpoint:  # user specifies a checkpoint file to run from
-        prims, t = load_U(checkpoint)
+        prims, _, _, t = load_U(checkpoint)
     else:
         prims, t = hydro.initialize(
             lattice.X1, lattice.X2), hydro.t_start()

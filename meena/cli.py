@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 from . import run_config, load_config
 from .tools import generate_movie
-from src.common.helpers import plot_grid, plot_matrix, find_latest_checkpoint
+from src.common.helpers import plot_2d_grid, plot_1d_grid, plot_matrix, plot_1d, find_latest_checkpoint
 
 @click.group()
 def cli():
@@ -68,8 +68,13 @@ def plot(checkpoint_file, var, log, range, title, dpi, cmap, c_range, t_factor, 
         t = f.attrs["t"]
         coords = f.attrs["coords"]
         x1 = f.attrs["x1"]
-        x2 = f.attrs["x2"]
-        rho, u, v, p = np.array(f["rho"]), np.array(f["u"]), np.array(f["v"]), np.array(f["p"])
+        if "x2" in f.attrs:
+            x2 = f.attrs["x2"]
+        rho, u, p = np.array(f["rho"]), np.array(f["u"]), np.array(f["p"])
+        if "v" in f:
+            v = np.array(f["v"])
+        
+        dim = len(rho.shape)
         
         if var == "density":
             matrix = rho
@@ -99,14 +104,20 @@ def plot(checkpoint_file, var, log, range, title, dpi, cmap, c_range, t_factor, 
             x1, x2 = x1[(x1 >= x1_min) & (x1 <= x1_max)], x2[(x2 >= x2_min) & (x2 <= x2_max)]
     
         if var is None:
-            fig, _ = plot_grid((rho, u, v, p), x1, x2, cmap)
+            if dim == 1:
+                fig, _ = plot_1d_grid((rho, u, p), x1)
+            else:
+                fig, _ = plot_2d_grid((rho, u, v, p), x1, x2, cmap)
         else: 
             label = labels[var]
             if log:
                 matrix = np.log10(matrix)
                 label = label.replace("$", "")
                 label = rf"$\log_{{10}}{label}$"
-            fig, _, _, _ = plot_matrix(matrix, label, coords, x1, x2, vmin, vmax, cmap)
+            if dim == 1:
+                fig, _ = plot_1d(matrix, label, x1)
+            else:
+                fig, _, _, _ = plot_matrix(matrix, label, coords, x1, x2, vmin, vmax, cmap)
         if title == "":
             fig.suptitle(f"t = {(t*t_factor):.2f} {t_units}", fontsize=16)
         else:

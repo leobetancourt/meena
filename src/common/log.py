@@ -28,7 +28,10 @@ class Logger(Live):
         
     def panel(self, lattice, n, t):
         elapsed = time.time() - self.log_start
-        mzps = (lattice.nx1 * lattice.nx2 * (n - self.n_start) / elapsed) / 1e6
+        res = lattice.nx1
+        if lattice.nx2:
+            res *= lattice.nx2
+        mzps = (res * (n - self.n_start) / elapsed) / 1e6
 
         left_grid = Table.grid(expand=True)
         left_grid.add_column(ratio=1, justify="left")
@@ -70,6 +73,8 @@ class Logger(Live):
     
     def print_summary(self, lattice, n):
         elapsed = time.time() - self.run_start
-        mzps = (lattice.nx1 * lattice.nx2 * n / elapsed) / 1e6
+        if lattice.nx2:
+            res *= lattice.nx2
+        mzps = (res * (n - self.n_start) / elapsed) / 1e6
         self.console.print(f"[bold]time elapsed[/bold] {time.strftime('%H:%M:%S', time.gmtime(elapsed))}")
         self.console.print(f"[bold]average speed[/bold] {mzps:.2e} mzps")

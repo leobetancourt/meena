@@ -206,7 +206,7 @@ class Ring(Hydro):
 
         return S
 
-    def source(self, U: ArrayLike, X1, X2, t: float) -> Array:
+    def source(self, U: ArrayLike, X1, X2, t: float) -> Array: # change to pass lattice, not X1, X2
         S = jnp.zeros_like(U)
         x_1, y_1, x_2, y_2 = self.get_bh_positions(t)
         u_1, v_1, u_2, v_2 = self.get_bh_velocities(t)

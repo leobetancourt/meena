@@ -24,14 +24,13 @@ BoundaryCondition = tuple[str, str]
 
 
 class Lattice:
-    def __init__(self, coords: str, bc_x1: BoundaryCondition, bc_x2: BoundaryCondition, nx1: int, nx2: int, x1_range: tuple[float, float], x2_range: tuple[float, float], num_g: int = 2, log_x1: bool = False, log_x2: bool = False):
+    def __init__(self, coords: str, bc_x1: BoundaryCondition, nx1: int, x1_range: tuple[float, float], log_x1: bool = False, num_g: int = 2, bc_x2: BoundaryCondition = None, nx2: int = None, x2_range: tuple[float, float] = None, log_x2: bool = False):
         self.coords = coords
         self.num_g = num_g
         self.bc_x1 = bc_x1
-        self.bc_x2 = bc_x2
-        self.nx1, self.nx2 = nx1, nx2
+        self.nx1 = nx1
+        self.nx2 = None
         self.x1_min, self.x1_max = x1_range
-        self.x2_min, self.x2_max = x2_range
 
         if log_x1:
             self.x1, self.x1_intf = logspace_cells(
@@ -39,17 +38,26 @@ class Lattice:
         else:
             self.x1, self.x1_intf = linspace_cells(
                 self.x1_min, self.x1_max, num=nx1)
-        if log_x2:
-            self.x2, self.x2_intf = logspace_cells(
-                self.x2_min, self.x2_max, num=nx2)
-        else:
-            self.x2, self.x2_intf = linspace_cells(
-                self.x2_min, self.x2_max, num=nx2)
-        self.X1, self.X2 = jnp.meshgrid(self.x1, self.x2, indexing="ij")
-        self.X1_INTF, _ = jnp.meshgrid(self.x1_intf, self.x2, indexing="ij")
-        _, self.X2_INTF = jnp.meshgrid(self.x1, self.x2_intf, indexing="ij")
-        self.dX1 = self.X1_INTF[1:, :] - self.X1_INTF[:-1, :]
-        self.dX2 = self.X2_INTF[:, 1:] - self.X2_INTF[:, :-1]
+        
+        if nx2: # 2D
+            self.bc_x2 = bc_x2
+            self.nx2 = nx2
+            self.x2_min, self.x2_max = x2_range
+            if log_x2:
+                self.x2, self.x2_intf = logspace_cells(
+                    self.x2_min, self.x2_max, num=nx2)
+            else:
+                self.x2, self.x2_intf = linspace_cells(
+                    self.x2_min, self.x2_max, num=nx2)
+            self.X1, self.X2 = jnp.meshgrid(self.x1, self.x2, indexing="ij")
+            self.X1_INTF, _ = jnp.meshgrid(self.x1_intf, self.x2, indexing="ij")
+            _, self.X2_INTF = jnp.meshgrid(self.x1, self.x2_intf, indexing="ij")
+            self.dX1 = self.X1_INTF[1:, :] - self.X1_INTF[:-1, :]
+            self.dX2 = self.X2_INTF[:, 1:] - self.X2_INTF[:, :-1]
+        else: # 1D
+            self.X1 = self.x1
+            self.X1_INTF = self.x1_intf
+            self.dX1 = self.X1_INTF[1:] - self.X1_INTF[:-1]
 
 
 class Hydro(ABC):
@@ -65,6 +73,9 @@ class Hydro(ABC):
     @abstractmethod
     def resolution(self) -> tuple[int, int]:
         pass
+    
+    def dim(self) -> int:
+        return 2
 
     def t_start(self) -> float:
         return 0
@@ -136,7 +147,7 @@ class Hydro(ABC):
         u, v = mom_x / rho, mom_y / rho
         return (self.gamma() - 1) * (e - (0.5 * rho * (u ** 2 + v ** 2)))
 
-    def source(self, prims: ArrayLike, X1: ArrayLike = None, X2: ArrayLike = None, t: float = None) -> Array:
+    def source(self, prims: ArrayLike, lattice: Lattice, t: float = None) -> Array:
         return jnp.zeros_like(prims)
     
     def self_gravity(self) -> bool:

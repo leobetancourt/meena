@@ -66,26 +66,46 @@ def read_csv(path, compress=False):
 
 
 def save_to_h5(out, t, prims, hydro, lattice, save_plots):
-    rho, u, v, p = prims[..., 0], prims[..., 1], prims[..., 2], prims[..., 3]
-    filename = f"{out}/checkpoints/out_{t:.4f}.h5"
-    with h5py.File(filename, "w") as f:
-        # metadata
-        f.attrs["coords"] = lattice.coords
-        f.attrs["gamma"] = hydro.gamma()
-        f.attrs["x1"] = lattice.x1
-        f.attrs["x2"] = lattice.x2
-        f.attrs["t"] = t
+    if hydro.dim() == 2:
+        rho, u, v, p = prims[..., 0], prims[..., 1], prims[..., 2], prims[..., 3]
+        filename = f"{out}/checkpoints/out_{t:.4f}.h5"
+        with h5py.File(filename, "w") as f:
+            # metadata
+            f.attrs["coords"] = lattice.coords
+            f.attrs["gamma"] = hydro.gamma()
+            f.attrs["x1"] = lattice.x1
+            f.attrs["x2"] = lattice.x2
+            f.attrs["t"] = t
 
-        # create h5 datasets for conserved variables
-        f.create_dataset("rho", data=rho, dtype="float64")
-        f.create_dataset("u", data=u, dtype="float64")
-        f.create_dataset("v", data=v, dtype="float64")
-        f.create_dataset("p", data=p, dtype="float64")
-    
-    if save_plots:
-        fig, _ = plot_grid((rho, u, v, p), lattice.x1, lattice.x2)
-        fig.suptitle(f"t = {t:.2f}", fontsize=16)
-        plt.savefig(f"{out}/plots/t={t:.2f}.png", bbox_inches="tight", dpi=300)    
+            # create h5 datasets for conserved variables
+            f.create_dataset("rho", data=rho, dtype="float64")
+            f.create_dataset("u", data=u, dtype="float64")
+            f.create_dataset("v", data=v, dtype="float64")
+            f.create_dataset("p", data=p, dtype="float64")
+        
+        if save_plots:
+            fig, _ = plot_grid((rho, u, v, p), lattice.x1, lattice.x2)
+            fig.suptitle(f"t = {t:.2f}", fontsize=16)
+            plt.savefig(f"{out}/plots/t={t:.2f}.png", bbox_inches="tight", dpi=300) 
+    else:
+        rho, u, p = prims[..., 0], prims[..., 1], prims[..., 2]
+        filename = f"{out}/checkpoints/out_{t:.4f}.h5"
+        with h5py.File(filename, "w") as f:
+            # metadata
+            f.attrs["coords"] = lattice.coords
+            f.attrs["gamma"] = hydro.gamma()
+            f.attrs["x1"] = lattice.x1
+            f.attrs["t"] = t
+
+            # create h5 datasets for conserved variables
+            f.create_dataset("rho", data=rho, dtype="float64")
+            f.create_dataset("u", data=u, dtype="float64")
+            f.create_dataset("p", data=p, dtype="float64")
+        
+        if save_plots:
+            fig, _ = plot_grid((rho, u, p), lattice.x1)
+            fig.suptitle(f"t = {t:.2f}", fontsize=16)
+            plt.savefig(f"{out}/plots/t={t:.2f}.png", bbox_inches="tight", dpi=300) 
 
 
 def create_csv_file(filename, headers):
@@ -137,17 +157,29 @@ def load_U(file):
 def _load_file(file):
     with h5py.File(file, 'r') as f:
         t = f.attrs["t"]
-        x1, x2 = f.attrs["x1"], f.attrs["x2"]
-        rho, u, v, p = f["rho"], f["u"], f["v"], f["p"]
-
-        prims = jnp.array([
-            rho,
-            u,
-            v,
-            p
-        ]).transpose((1, 2, 0))
+        x1 = f.attrs["x1"]
+        if "x2" in f.attrs:
+            x2 = f.attrs["x2"]
+        
+        rho, u, p = f["rho"], f["u"], f["p"]
+        if "v" in f:
+            v = f["v"]
+            prims = jnp.array([
+                rho,
+                u,
+                v,
+                p
+            ]).transpose((1, 2, 0))
+            
+            return prims, x1, x2, t
+        else:
+            prims = jnp.array([
+                rho,
+                u,
+                p
+            ]).transpose((1, 2, 0))
     
-    return prims, x1, x2, t
+            return prims, x1, t
 
 def plot_matrix(matrix, label, coords, x1, x2, vmin=None, vmax=None, cmap="magma"):
     extent = [x1[0], x1[-1], x2[0], x2[-1]]
@@ -179,7 +211,32 @@ def plot_matrix(matrix, label, coords, x1, x2, vmin=None, vmax=None, cmap="magma
 
     return fig, ax, c, cb
 
-def plot_grid(matrices, x1, x2, cmap="magma"):
+def plot_1d(data, label, x1):
+    fig, ax = plt.subplots()
+    ax.plot(x1, data)
+    ax.set_xlabel(r"$x$")
+    ax.set_ylabel(label)
+    return fig, ax
+
+def plot_1d_grid(matrices, x1):
+    rho, u, p = matrices
+    fig, axs = plt.subplots(2, 2, figsize=(10, 8))
+    
+    axs[0, 0].plot(x1, rho)
+    axs[0, 0].set_xlabel(r"$x$")
+    axs[0, 0].set_ylabel(r"$\rho$")
+    
+    axs[0, 1].plot(x1, u)
+    axs[0, 1].set_xlabel(r"$x$")
+    axs[0, 1].set_ylabel(r"$u$")
+    
+    axs[1, 0].plot(x1, p)
+    axs[1, 0].set_xlabel(r"$x$")
+    axs[1, 0].set_ylabel(r"$p$")
+    
+    return fig, axs
+
+def plot_2d_grid(matrices, x1, x2, cmap="magma"):
     rho, u, v, p = matrices
     extent = [x1[0], x1[-1], x2[0], x2[-1]]
 
@@ -209,15 +266,15 @@ def cartesian_to_polar(x, y):
 def add_ghost_cells(arr, num_g, axis=0):
     if axis == 0:
         # add ghost cells to the first coordinate direction
-        return jnp.vstack((jnp.repeat(arr[:1, :, :], num_g, axis), arr, jnp.repeat(
-            arr[-1:, :, :], num_g, axis)))
+        return jnp.vstack((jnp.repeat(arr[:1], num_g, axis), arr, jnp.repeat(
+            arr[-1:], num_g, axis)))
     elif axis == 1:
         # add ghost cells to the second coordinate direction
-        return jnp.hstack((jnp.repeat(arr[:, :1, :], num_g, axis), arr, jnp.repeat(
-            arr[:, -1:, :], num_g, axis)))
+        return jnp.hstack((jnp.repeat(arr[:, :1], num_g, axis), arr, jnp.repeat(
+            arr[:, -1:], num_g, axis)))
 
 
-def apply_bcs(lattice, U):
+def apply_bcs_2d(lattice, U):
     g = lattice.num_g
     bc_x1, bc_x2 = lattice.bc_x1, lattice.bc_x2
     if bc_x1[0] == "outflow":
@@ -256,6 +313,29 @@ def apply_bcs(lattice, U):
     elif bc_x2[1] == "periodic":
         U = U.at[:, -g:, :].set(U[:, g:(2*g), :])
 
+    return U
+
+def apply_bcs_1d(lattice, U):
+    g = lattice.num_g
+    bc_x1 = lattice.bc_x1
+    if bc_x1[0] == "outflow":
+        U = U.at[:g, :].set(U[g:(g+1), :])
+    elif bc_x1[0] == "reflective":
+        U = U.at[:g, :].set(jnp.flip(U[g:(2*g), :], axis=0))
+        # invert x1 momentum
+        U = U.at[:g, 1].set(-jnp.flip(U[g:(2*g), 1], axis=0))
+    elif bc_x1[0] == "periodic":
+        U = U.at[:g, :].set(U[(-2*g):(-g), :])
+
+    if bc_x1[1] == "outflow":
+        U = U.at[-g:, :].set(U[-(g+1):-g, :])
+    elif bc_x1[1] == "reflective":
+        U = U.at[-g:, :].set(jnp.flip(U[-(2*g):-g, :], axis=0))
+        # invert x1 momentum
+        U = U.at[-g:, 1].set(-jnp.flip(U[-(2*g):-g, 1], axis=0))
+    elif bc_x1[1] == "periodic":
+        U = U.at[-g:, :].set(U[g:(2*g), :])
+        
     return U
 
 def enthalpy(rho: ArrayLike, p: ArrayLike, e: ArrayLike):

@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from meena import Hydro, Lattice
     
 from ..common.log import Logger
-from ..common.helpers import plot_grid, append_row_csv, create_csv_file, save_to_h5, cartesian_to_polar
+from ..common.helpers import plot_2d_grid, append_row_csv, create_csv_file, save_to_h5, cartesian_to_polar
 from .hd import U_from_prim, get_prims, interface_flux
 
 def gravity_mesh(hydro: Hydro, lattice: Lattice, U: ArrayLike) -> Array:
@@ -49,12 +49,19 @@ def gravity_mesh(hydro: Hydro, lattice: Lattice, U: ArrayLike) -> Array:
     ]).transpose((1, 2, 0))
 
 def cartesian_timestep(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> float:
-    prims = get_prims(hydro, U, lattice.X1, lattice.X2, t)
-    c_s = hydro.c_s(prims, lattice.X1, lattice.X2, t)
-    u, v = prims[..., 1], prims[..., 2]
-    dt1 = jnp.min(lattice.dX1 / (jnp.abs(u) + c_s))
-    dt2 = jnp.min(lattice.dX2 / (jnp.abs(v) + c_s))
-    return hydro.cfl() * jnp.minimum(dt1, dt2)
+    if hydro.dim() == 2:
+        prims = get_prims(hydro, U, lattice.X1, lattice.X2, t)
+        c_s = hydro.c_s(prims, lattice.X1, lattice.X2, t)
+        u, v = prims[..., 1], prims[..., 2]
+        dt1 = jnp.min(lattice.dX1 / (jnp.abs(u) + c_s))
+        dt2 = jnp.min(lattice.dX2 / (jnp.abs(v) + c_s))
+        return hydro.cfl() * jnp.minimum(dt1, dt2)
+    else:
+        prims = get_prims(hydro, U, lattice.X1, t)
+        c_s = hydro.c_s(prims, lattice.X1, t)
+        u = prims[..., 1]
+        dt = jnp.min(lattice.dX1 / (jnp.abs(u) + c_s))
+        return hydro.cfl() * dt
 
 
 def polar_timestep(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> float:
@@ -73,10 +80,16 @@ def compute_timestep(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> 
 
 
 def solve_cartesian(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> tuple[Array, Array, Array, Array]:
-    F_l, F_r, G_l, G_r = interface_flux(hydro, lattice, U, t)
-    L = - ((F_r - F_l) / lattice.dX1[..., jnp.newaxis]) - \
-        ((G_r - G_l) / lattice.dX2[..., jnp.newaxis])
-    flux = F_l, F_r, G_l, G_r
+    if hydro.dim() == 2:
+        F_l, F_r, G_l, G_r = interface_flux(hydro, lattice, U, t)
+        L = - ((F_r - F_l) / lattice.dX1[..., jnp.newaxis]) - \
+            ((G_r - G_l) / lattice.dX2[..., jnp.newaxis])
+        flux = F_l, F_r, G_l, G_r
+    else:
+        F_l, F_r = interface_flux(hydro, lattice, U, t)
+        L = - ((F_r - F_l) / lattice.dX1[..., jnp.newaxis])
+        flux = F_l, F_r
+        
     return L, flux
 
 
@@ -117,13 +130,13 @@ def step(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> tuple[Array,
         dt = compute_timestep(hydro, lattice, U, t)
 
     L1, flux = solve(hydro, lattice, U, t)
-    S1 = hydro.source(U, lattice.X1, lattice.X2, t)
+    S1 = hydro.source(U, lattice, t)
     if hydro.time_order() == 1: # forward Euler
         U = U + L1 * dt + S1 * dt
     elif hydro.time_order() == 2: # RK2
         U2 = U + (L1 * dt / 2) + (S1 * dt / 2)
         L2, flux = solve(hydro, lattice, U2, t + (dt / 2))
-        S2 = hydro.source(U2, lattice.X1, lattice.X2, t + (dt / 2))
+        S2 = hydro.source(U2, lattice, t + (dt / 2))
         U = U + L2 * dt + S2 * dt
     return U, flux, dt
 
@@ -172,7 +185,11 @@ def run(hydro, lattice, prims, t=0, T=1, N=None, plot=None, save_plots=False, pl
             headers.extend([name for name, _ in diagnostics])
             create_csv_file(diag_file, headers)
 
-    U = U_from_prim(hydro, prims, lattice.X1, lattice.X2, t)
+    if hydro.dim() == 2:
+        U = U_from_prim(hydro, prims, lattice.X1, lattice.X2, t)
+    else:
+        U = U_from_prim(hydro, prims, lattice.X1, t)
+        
     if plot:
         matrix = get_matrix_to_plot(hydro, lattice, U, t, plot)
         fig, ax, c, cb = plot_grid(
@@ -195,7 +212,10 @@ def run(hydro, lattice, prims, t=0, T=1, N=None, plot=None, save_plots=False, pl
     
             # at each checkpoint, save the conserved variables in every zone
             if saving and t >= next_checkpoint:
-                prims = get_prims(hydro, U, lattice.X1, lattice.X2, t)
+                if hydro.dim() == 2:
+                    prims = get_prims(hydro, U, lattice.X1, lattice.X2, t)
+                else:
+                    prims = get_prims(hydro, U, lattice.X1, t)
                 save_to_h5(out, t, prims, hydro, lattice, save_plots)
                 next_checkpoint += save_interval
 

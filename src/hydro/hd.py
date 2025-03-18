@@ -2,39 +2,67 @@ import jax.numpy as jnp
 from jax import Array
 from jax import debug
 from jax.typing import ArrayLike
-from ..common.helpers import add_ghost_cells, apply_bcs, minmod, enthalpy
+from ..common.helpers import add_ghost_cells, apply_bcs_1d, apply_bcs_2d, minmod, enthalpy
 
 def get_prims(hydro, U, *args):
-    rho = U[..., 0]
-    u, v = U[..., 1] / rho, U[..., 2] / rho
-    p = hydro.P(U, *args)
-    return jnp.array([
-        rho,
-        u,
-        v,
-        p
-    ]).transpose((1, 2, 0))
+    if hydro.dim() == 2:
+        rho = U[..., 0]
+        u, v = U[..., 1] / rho, U[..., 2] / rho
+        p = hydro.P(U, *args)
+        return jnp.array([
+            rho,
+            u,
+            v,
+            p
+        ]).transpose((1, 2, 0))
+    else:
+        rho = U[..., 0]
+        u = U[..., 1] / rho
+        p = hydro.P(U, *args)
+        return jnp.array([
+            rho,
+            u,
+            p
+        ]).transpose((1, 0))
 
 def U_from_prim(hydro, prims, *args):
-    rho, u, v = prims[..., 0], prims[..., 1], prims[..., 2]
-    e = hydro.E(prims, *args)
-    return jnp.array([
-        rho,
-        rho * u,
-        rho * v,
-        e
-    ]).transpose((1, 2, 0))
+    if hydro.dim() == 2:
+        rho, u, v = prims[..., 0], prims[..., 1], prims[..., 2]
+        e = hydro.E(prims, *args)
+        return jnp.array([
+            rho,
+            rho * u,
+            rho * v,
+            e
+        ]).transpose((1, 2, 0))
+    else:
+        rho, u = prims[..., 0], prims[..., 1]
+        e = hydro.E(prims, *args)
+        return jnp.array([
+            rho,
+            rho * u,
+            e
+        ]).transpose((1, 0))
 
 
 def F_from_prim(hydro, prims, *args):
-    rho, u, v, p = prims[..., 0], prims[..., 1], prims[..., 2], prims[..., 3]
-    e = hydro.E(prims, *args)
-    return jnp.array([
-        rho * u,
-        rho * (u ** 2) + p,
-        rho * u * v,
-        (e + p) * u
-    ]).transpose((1, 2, 0))
+    if hydro.dim() == 2:
+        rho, u, v, p = prims[..., 0], prims[..., 1], prims[..., 2], prims[..., 3]
+        e = hydro.E(prims, *args)
+        return jnp.array([
+            rho * u,
+            rho * (u ** 2) + p,
+            rho * u * v,
+            (e + p) * u
+        ]).transpose((1, 2, 0))
+    else:
+        rho, u, p = prims[..., 0], prims[..., 1], prims[..., 2]
+        e = hydro.E(prims, *args)
+        return jnp.array([
+            rho * u,
+            rho * (u ** 2) + p,
+            (e + p) * u
+        ]).transpose((1, 0))
 
 
 def G_from_prim(hydro, prims, *args):
@@ -132,7 +160,7 @@ def hllc_flux_x1(hydro, prims_L: ArrayLike, prims_R: ArrayLike, *args) -> Array:
     c_s_L, c_s_R = hydro.c_s(prims_L, *args), hydro.c_s(prims_R, *args)
     
     U_L, U_R = U_from_prim(hydro, prims_L, *args), U_from_prim(hydro, prims_R, *args)
-    e_L, e_R = U_L[..., 3], U_R[..., 3]
+    e_L, e_R = U_L[..., -1], U_R[..., -1]
     
     F_L, F_R = F_from_prim(hydro, prims_L, *args), F_from_prim(hydro, prims_R, *args)
 
@@ -175,7 +203,7 @@ def hllc_flux_x2(hydro, prims_L: ArrayLike, prims_R: ArrayLike, *args) -> Array:
     c_s_L, c_s_R = hydro.c_s(prims_L, *args), hydro.c_s(prims_R, *args)
     
     U_L, U_R = U_from_prim(hydro, prims_L, *args), U_from_prim(hydro, prims_R, *args)
-    e_L, e_R = U_L[..., 3], U_R[..., 3]
+    e_L, e_R = U_L[..., -1], U_R[..., -1]
     
     G_L, G_R = G_from_prim(hydro, prims_L, *args), G_from_prim(hydro, prims_R, *args)
 
@@ -218,8 +246,77 @@ def shear_strain(gx, gy, dx, dy):
     
     return jnp.array([sxx, sxy, syx, syy])
 
+def flux_1d(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array]:
+    g = lattice.num_g
+    x1 = lattice.x1
 
-def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array, Array, Array]:
+    x1_left = x1[0] - (x1[1] - x1[0]) * jnp.arange(g, 0, -1)
+    x1_right = x1[-1] + (x1[-1] - x1[-2]) * jnp.arange(1, g + 1)
+    x1_g = jnp.concatenate([x1_left, x1, x1_right])
+    
+    X1 = x1_g
+    
+    prims = get_prims(hydro, U, lattice.X1, t)
+    prims = add_ghost_cells(prims, g, axis=0)
+    prims = apply_bcs_1d(lattice, prims)
+
+    if hydro.PLM():
+        X1_L = X1[(g-1):-(g+1)]
+        X1_C = X1[g:-g]
+        X1_R = X1[(g+1):-(g-1)]
+        
+        theta = hydro.theta_PLM()
+
+        prims_cc = prims[g:-g]
+        prims_ki = prims[:-(g+2)]
+        prims_li = prims[(g-1):-(g+1)]
+        prims_ri = prims[(g+1):-(g-1)]
+        prims_ti = prims[(g+2):]
+        
+        # left cell interface (i-1/2)
+        # left-biased state
+        gxli = plm_grad(prims_ki, prims_li, prims_cc, theta)
+        prims_lim = prims_li + 0.5 * gxli
+        # right-biased state
+        gxcc = plm_grad(prims_li, prims_cc, prims_ri, theta)
+        prims_lip = prims_cc - 0.5 * gxcc
+        
+        # right cell interface (i+1/2)
+        # left-biased state
+        prims_rim = prims_cc + 0.5 * gxcc
+        
+        # right-biased state
+        gxri = plm_grad(prims_cc, prims_ri, prims_ti, theta)
+        prims_rip = prims_ri - 0.5 * gxri
+
+        if hydro.solver() == "hll":
+            F_l, F_r = hll_flux_x1(hydro, prims_lim, prims_lip, X1_L, t), hll_flux_x1(hydro, prims_rim, prims_rip, X1_R, t)
+        elif hydro.solver() == "hllc":
+            F_l, F_r = hllc_flux_x1(hydro, prims_lim, prims_lip, X1_L, t), hllc_flux_x1(hydro, prims_rim, prims_rip, X1_R, t)
+
+    else:
+        X1_L = X1[(g-1):-(g+1)]
+        X1_C = X1[g:-g]
+        X1_R = X1[(g+1):]
+        
+        prims_cc = prims[g:-g]
+        prims_li = prims[(g-1):-(g+1)]
+        prims_ri = prims[(g+1):]
+
+        if hydro.solver() == "hll":
+            F_l = hll_flux_x1(hydro, prims_li, prims_cc, X1_L, t)
+            F_r = hll_flux_x1(hydro, prims_cc, prims_ri, X1_R, t)
+        elif hydro.solver() == "hllc":
+            F_l = hllc_flux_x1(hydro, prims_li, prims_cc, X1_L, t)
+            F_r = hllc_flux_x1(hydro, prims_cc, prims_ri, X1_R, t)
+        elif hydro.solver() == "finite-difference":
+            F_l = F_from_prim(hydro, prims_li, X1_C, t) / 2
+            F_r = F_from_prim(hydro, prims_ri, X1_R, t) / 2
+        
+    return F_l, F_r
+
+
+def flux_2d(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array, Array, Array]:
     g = lattice.num_g
     x1, x2 = lattice.x1, lattice.x2
 
@@ -236,7 +333,7 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
     prims = get_prims(hydro, U, lattice.X1, lattice.X2, t)
     prims = add_ghost_cells(prims, g, axis=1)
     prims = add_ghost_cells(prims, g, axis=0)
-    prims = apply_bcs(lattice, prims)
+    prims = apply_bcs_2d(lattice, prims)
 
     if hydro.PLM():
         X1_L = X1[(g-1):-(g+1), g:-g]
@@ -384,3 +481,9 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
     G_r = G_r.at[..., 3].add(-0.5 * nu * (prims_cc[..., 0] * scc[3] * prims_cc[..., 2] + prims_rj[..., 0] * srj[3] * prims_rj[..., 2]))
 
     return F_l, F_r, G_l, G_r
+
+def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[tuple[Array, Array], tuple[Array, Array, Array, Array]]:
+    if hydro.dim() == 2:
+        return flux_2d(hydro, lattice, U, t)
+    else:
+        return flux_1d(hydro, lattice, U, t)

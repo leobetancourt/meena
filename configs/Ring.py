@@ -10,18 +10,65 @@ from src.common.helpers import cartesian_to_polar
 
 
 @partial(jit, static_argnames=["hydro", "lattice"])
-def get_accr_rate(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
+def get_m_dot_1(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
     dA = lattice.dX1 * lattice.dX2
-    x_1, y_1, x_2, y_2 = hydro.get_bh_positions(t)
-    u_1, v_1, u_2, v_2 = hydro.get_bh_positions(t)
-    sink_source = hydro.BH_sink(U, lattice.X1, lattice.X2, x_1, y_1, u_1, v_1) + \
-            hydro.BH_sink(U, lattice.X1, lattice.X2, x_2, y_2, u_2, v_2)
+    x, y, _, _ = hydro.get_bh_positions(t)
+    u, v, _, _ = hydro.get_bh_velocities(t)
+    sink_source = hydro.BH_sink(U, lattice.X1, lattice.X2, x, y, u, v)
     m_dot = (-sink_source[..., 0] * dA)
     return jnp.sum(m_dot)
 
+@partial(jit, static_argnames=["hydro", "lattice"])
+def get_m_dot_2(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
+    dA = lattice.dX1 * lattice.dX2
+    _, _, x, y = hydro.get_bh_positions(t)
+    _, _, u, v = hydro.get_bh_velocities(t)
+    sink_source = hydro.BH_sink(U, lattice.X1, lattice.X2, x, y, u, v)
+    m_dot = (-sink_source[..., 0] * dA)
+    return jnp.sum(m_dot)
 
 @partial(jit, static_argnames=["hydro", "lattice"])
-def get_torque1(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
+def get_L_dot_1(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
+    dA = lattice.dX1 * lattice.dX2
+    x, y, _, _ = hydro.get_bh_positions(t)
+    u, v, _, _ = hydro.get_bh_velocities(t)
+    sink_source = hydro.BH_sink(U, lattice.X1, lattice.X2, x, y, u, v)
+    m_dot_density = -sink_source[..., 0]  # mass accretion rate density
+    
+    rho = U[..., 0]
+    v_x = U[..., 1] / rho
+    v_y = U[..., 2] / rho
+    dx = lattice.X1 - x
+    dy = lattice.X2 - y
+
+    specific_L = dx * v_y - dy * v_x
+    L_dot_density = specific_L * m_dot_density
+    L_dot = jnp.sum(L_dot_density * dA)
+    
+    return L_dot
+
+@partial(jit, static_argnames=["hydro", "lattice"])
+def get_L_dot_2(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
+    dA = lattice.dX1 * lattice.dX2
+    _, _, x, y = hydro.get_bh_positions(t)
+    _, _, u, v = hydro.get_bh_velocities(t)
+    sink_source = hydro.BH_sink(U, lattice.X1, lattice.X2, x, y, u, v)
+    m_dot_density = -sink_source[..., 0]  # mass accretion rate density
+    
+    rho = U[..., 0]
+    v_x = U[..., 1] / rho
+    v_y = U[..., 2] / rho
+    dx = lattice.X1 - x
+    dy = lattice.X2 - y
+
+    specific_L = dx * v_y - dy * v_x
+    L_dot_density = specific_L * m_dot_density
+    L_dot = jnp.sum(L_dot_density * dA)
+    
+    return L_dot
+
+@partial(jit, static_argnames=["hydro", "lattice"])
+def get_torque_1(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
     x1_1, x2_1, x1_2, x2_2 = hydro.get_bh_positions(t)
     rho = U[..., 0]
     x_bh, y_bh = x1_1, x2_1
@@ -40,7 +87,7 @@ def get_torque1(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayL
 
 
 @partial(jit, static_argnames=["hydro", "lattice"])
-def get_torque2(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
+def get_torque_2(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float) -> float:
     x1_1, x2_1, x1_2, x2_2 = hydro.get_bh_positions(t)
     rho = U[..., 0]
     x_bh, y_bh = x1_2, x2_2
@@ -62,30 +109,33 @@ class Ring(Hydro):
     M: float = 1
     mach: float = 10
     a: float = 1
-    Sigma_0: float = 1
     eps: float = 0.05 * a
     omega_B: float = 1
     t_sink: float = 1 / (10 * omega_B)
     sink_rate: float = 10 * omega_B
     sink_prescription: str = "torque-free"
     R_0: float = 1 * a
-    sigma: float = 0.1 * a
     retrograde: bool = 0
     
     CFL_num: float = 0.1
     size: float = 20
     res: int = 2000
+    density_floor: float = 1e-6
 
     def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
         t = 0
         r, theta = cartesian_to_polar(X1, X2)
+        dA = (X1[1, 0] - X1[0, 0]) * (X2[0, 1] - X2[0, 0])
 
-        # surface density
-        gaussian = self.Sigma_0 * jnp.exp(- ((r - self.R_0) ** 2) / (2 * (self.sigma ** 2)))
-        floor = 1e-4
-        rho = jnp.maximum(floor, gaussian)
 
-        v_r = jnp.zeros_like(rho)
+        # surface density (normalized so that M_ring = 1)
+        sigma = self.R_0 / 10
+        ring = jnp.exp(- ((r - self.R_0) ** 2) / (2 * (sigma ** 2)))
+        M_ring = jnp.sum(ring * dA)
+        Sigma = ring / M_ring
+        Sigma = jnp.maximum(self.density_floor, Sigma)
+
+        v_r = jnp.zeros_like(Sigma)
         v_theta = jnp.sqrt(self.G() * self.M / r) # keplerian velocity
         if self.retrograde:
             v_theta *= -1
@@ -93,10 +143,10 @@ class Ring(Hydro):
         v = v_r * jnp.sin(theta) + v_theta * jnp.cos(theta)
 
         return jnp.array([
-            rho,
-            rho * u,
-            rho * v,
-            rho * (self.c_s(None, X1, X2, 0) ** 2)
+            Sigma,
+            Sigma * u,
+            Sigma * v,
+            Sigma * (self.c_s(None, X1, X2, 0) ** 2)
         ]).transpose((1, 2, 0))
 
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
@@ -159,6 +209,23 @@ class Ring(Hydro):
     def P(self, cons: Conservatives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
         rho = cons[..., 0]
         return rho * (self.c_s(cons, X1, X2, t) ** 2)
+
+    # def check_U(self, lattice: Lattice, U: ArrayLike, t: float) -> Array:
+    #     rho = U[..., 0]
+    #     apply_floor = rho < self.density_floor
+
+    #     rho_new = jnp.where(apply_floor, self.density_floor, rho)
+
+    #     # scale momenta to preserve velocity: p_new = v * rho_new = p_old * (rho_new / rho_old)
+    #     factor = jnp.where(apply_floor, rho_new / rho, 1.0)
+    #     mom_x_new = U[..., 1] * factor
+    #     mom_y_new = U[..., 2] * factor
+
+    #     U_new = U.at[..., 0].set(rho_new)
+    #     U_new = U_new.at[..., 1].set(mom_x_new)
+    #     U_new = U_new.at[..., 2].set(mom_y_new)
+        
+    #     return U_new
 
     def BH_gravity(self, U, x, y, x_bh, y_bh):
         dx, dy = x - x_bh, y - y_bh
@@ -229,7 +296,7 @@ class Ring(Hydro):
         x, y = X1, X2
         r, _ = cartesian_to_polar(x, y)
 
-        surface_density = jnp.ones_like(x) * 1e-4
+        surface_density = jnp.ones_like(x) * self.density_floor
         driving_rate = 100
         outer_radius = self.size / 2
         onset_width = 1
@@ -275,9 +342,12 @@ class Ring(Hydro):
 
     def diagnostics(self):
         diagnostics = []
-        diagnostics.append(("m_dot", get_accr_rate))
-        diagnostics.append(("torque_1", get_torque1))
-        diagnostics.append(("torque_2", get_torque2))
+        diagnostics.append(("m_dot_1", get_m_dot_1))
+        diagnostics.append(("m_dot_2", get_m_dot_2))
+        diagnostics.append(("L_dot_1", get_L_dot_1))
+        diagnostics.append(("L_dot_2", get_L_dot_2))
+        diagnostics.append(("torque_1", get_torque_1))
+        diagnostics.append(("torque_2", get_torque_2))
         return diagnostics
 
     def save_interval(self):

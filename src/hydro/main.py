@@ -125,6 +125,8 @@ def step(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> tuple[Array,
         L2, flux = solve(hydro, lattice, U2, t + (dt / 2))
         S2 = hydro.source(U2, lattice.X1, lattice.X2, t + (dt / 2))
         U = U + L2 * dt + S2 * dt
+    
+    U = hydro.check_U(lattice, U, t)
     return U, flux, dt
 
 

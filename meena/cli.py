@@ -1,3 +1,4 @@
+import os
 import click
 import h5py
 import numpy as np
@@ -6,6 +7,8 @@ import matplotlib.pyplot as plt
 from . import run_config, load_config
 from .tools import generate_movie
 from src.common.helpers import plot_grid, plot_matrix, find_latest_checkpoint
+
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 @click.group()
 def cli():

@@ -105,7 +105,7 @@ def get_torque_2(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[Array
     return T
 
 @dataclass(frozen=True)
-class Ring(Hydro):
+class BinaryRing(Hydro):
     M: float = 1
     mach: float = 10
     a: float = 1
@@ -127,7 +127,6 @@ class Ring(Hydro):
         r, theta = cartesian_to_polar(X1, X2)
         dA = (X1[1, 0] - X1[0, 0]) * (X2[0, 1] - X2[0, 0])
 
-
         # surface density (normalized so that M_ring = 1)
         sigma = self.R_0 / 10
         ring = jnp.exp(- ((r - self.R_0) ** 2) / (2 * (sigma ** 2)))
@@ -141,12 +140,13 @@ class Ring(Hydro):
             v_theta *= -1
         u = v_r * jnp.cos(theta) - v_theta * jnp.sin(theta)
         v = v_r * jnp.sin(theta) + v_theta * jnp.cos(theta)
+        p = Sigma * (self.c_s(None, X1, X2, 0) ** 2)
 
         return jnp.array([
             Sigma,
-            Sigma * u,
-            Sigma * v,
-            Sigma * (self.c_s(None, X1, X2, 0) ** 2)
+            u,
+            v,
+            p,
         ]).transpose((1, 2, 0))
 
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
@@ -210,22 +210,22 @@ class Ring(Hydro):
         rho = cons[..., 0]
         return rho * (self.c_s(cons, X1, X2, t) ** 2)
 
-    # def check_U(self, lattice: Lattice, U: ArrayLike, t: float) -> Array:
-    #     rho = U[..., 0]
-    #     apply_floor = rho < self.density_floor
+    def check_U(self, lattice: Lattice, U: ArrayLike, t: float) -> Array:
+        rho = U[..., 0]
+        apply_floor = rho < self.density_floor
 
-    #     rho_new = jnp.where(apply_floor, self.density_floor, rho)
+        rho_new = jnp.where(apply_floor, self.density_floor, rho)
 
-    #     # scale momenta to preserve velocity: p_new = v * rho_new = p_old * (rho_new / rho_old)
-    #     factor = jnp.where(apply_floor, rho_new / rho, 1.0)
-    #     mom_x_new = U[..., 1] * factor
-    #     mom_y_new = U[..., 2] * factor
+        # scale momenta to preserve velocity: p_new = v * rho_new = p_old * (rho_new / rho_old)
+        factor = jnp.where(apply_floor, rho_new / rho, 1.0)
+        mom_x_new = U[..., 1] * factor
+        mom_y_new = U[..., 2] * factor
 
-    #     U_new = U.at[..., 0].set(rho_new)
-    #     U_new = U_new.at[..., 1].set(mom_x_new)
-    #     U_new = U_new.at[..., 2].set(mom_y_new)
+        U_new = U.at[..., 0].set(rho_new)
+        U_new = U_new.at[..., 1].set(mom_x_new)
+        U_new = U_new.at[..., 2].set(mom_y_new)
         
-    #     return U_new
+        return U_new
 
     def BH_gravity(self, U, x, y, x_bh, y_bh):
         dx, dy = x - x_bh, y - y_bh

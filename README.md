@@ -31,4 +31,4 @@ Command line arguments `nx` and `gamma-ad` are dynamically parsed from the confi
 
 ## Notes
 
-This code was adapted from Weiqun Zhang's [How To Write A Hydrodynamics Code](http://duffell.org/media/hydro.pdf). 
+This code was adapted from Weiqun Zhang's <em>How To Write A Hydrodynamics Code</em>. 

@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 from . import run_config, load_config
 from .tools import generate_movie
-from src.common.helpers import plot_grid, plot_matrix, find_latest_checkpoint
+from src.common.helpers import plot_grid, plot_matrix, find_latest_checkpoint, load_U
 
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
@@ -61,11 +61,18 @@ def run(config_file, checkpoint, plot, save_plots, plot_range, output_dir, resum
 @click.option("--c-range", type=(float, float))
 @click.option("--t-factor", type=float, default=1)
 @click.option("--t-units", type=str, default="")
-def plot(checkpoint_file, var, log, range, title, dpi, cmap, c_range, t_factor, t_units):
+@click.option("--normalize", is_flag=True, default=False)
+def plot(checkpoint_file, var, log, range, title, dpi, cmap, c_range, t_factor, t_units, normalize):
     labels = {"density": r"$\rho$", "u": r"$u$", "v": r"$v$", "pressure": r"$P$", "dt": r"$dt$"}
     vmin, vmax = None, None
     if c_range:
         vmin, vmax = c_range
+    
+    rho_0 = 1
+    if normalize:
+        prims_0, _, _, _ = load_U(f"{os.path.dirname(checkpoint_file)}/out_0.0000.h5")
+        rho = prims_0[..., 0]
+        rho_0 = np.max(rho)
     
     with h5py.File(checkpoint_file, 'r') as f:
         t = f.attrs["t"]
@@ -75,7 +82,7 @@ def plot(checkpoint_file, var, log, range, title, dpi, cmap, c_range, t_factor, 
         rho, u, v, p = np.array(f["rho"]), np.array(f["u"]), np.array(f["v"]), np.array(f["p"])
         
         if var == "density":
-            matrix = rho
+            matrix = rho / rho_0
         elif var == "u":
             matrix = u
         elif var == "v":
@@ -131,13 +138,14 @@ def plot(checkpoint_file, var, log, range, title, dpi, cmap, c_range, t_factor, 
 @click.option("--c-range", type=(float, float))
 @click.option("--t-factor", type=float, default=1)
 @click.option("--t-units", type=str, default="")
-def movie(checkpoint_path, t_range, var, range, title, fps, dpi, bitrate, cmap, c_range, t_factor, t_units):
+@click.option("--normalize", is_flag=True, default=False)
+def movie(checkpoint_path, t_range, var, range, title, fps, dpi, bitrate, cmap, c_range, t_factor, t_units, normalize):
     vmin, vmax = None, None
     if c_range:
         vmin, vmax = c_range
     t_min, t_max = t_range
         
-    generate_movie(checkpoint_path, t_min, t_max, var, range, title, fps, vmin, vmax, dpi, bitrate, cmap, t_factor, t_units)
+    generate_movie(checkpoint_path, t_min, t_max, var, range, title, fps, vmin, vmax, dpi, bitrate, cmap, t_factor, t_units, normalize)
 
 cli.add_command(run)
 cli.add_command(plot)

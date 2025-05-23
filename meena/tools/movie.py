@@ -8,6 +8,7 @@ from scipy.special import iv
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
+from src.common.helpers import load_U
 
 def get_h5_files_in_range(directory, t_min, t_max):
     files_in_range = []
@@ -27,7 +28,13 @@ def get_h5_files_in_range(directory, t_min, t_max):
     return sorted(files_in_range, key=lambda x: float(re.match(pattern, os.path.basename(x)).group(1)))
 
 
-def generate_movie(checkpoint_path, t_min, t_max, var, grid_range, title, fps, vmin, vmax, dpi, bitrate, cmap, t_factor, t_units):
+def generate_movie(checkpoint_path, t_min, t_max, var, grid_range, title, fps, vmin, vmax, dpi, bitrate, cmap, t_factor, t_units, normalize):
+    rho_0 = 1
+    if normalize:
+        prims_0, _, _, _ = load_U(f"{checkpoint_path}/out_0.0000.h5")
+        rho = prims_0[..., 0]
+        rho_0 = np.max(rho)
+    
     file_list = get_h5_files_in_range(checkpoint_path, t_min, t_max)
     labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma / \Sigma_0$",
               "u": r"$u$", "v": r"$v$", "pressure": r"$P$"}
@@ -39,9 +46,9 @@ def generate_movie(checkpoint_path, t_min, t_max, var, grid_range, title, fps, v
         rho, u, v, p = np.array(f["rho"]), np.array(
             f["u"]), np.array(f["v"]), np.array(f["p"])
         if var == "density":
-            matrix = rho
+            matrix = rho / rho_0
         elif var == "log density":
-            matrix = np.log10(rho)
+            matrix = np.log10(rho / rho_0)
         elif var == "u":
             matrix = u
         elif var == "v":
@@ -80,9 +87,9 @@ def generate_movie(checkpoint_path, t_min, t_max, var, grid_range, title, fps, v
                 t = f.attrs["t"]
                 rho, u, v, p = np.array(f["rho"]), np.array(f["u"]), np.array(f["v"]), np.array(f["p"])
                 if var == "density":
-                    matrix = rho
+                    matrix = rho / rho_0
                 elif var == "log density":
-                    matrix = np.log10(rho)
+                    matrix = np.log10(rho / rho_0)
                 elif var == "u":
                     matrix = u
                 elif var == "v":

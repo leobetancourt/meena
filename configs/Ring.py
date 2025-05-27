@@ -116,8 +116,9 @@ class BinaryRing(Hydro):
     sink_prescription: str = "torque-free"
     R_0: float = 1 * a
     retrograde: bool = 0
+    T: float = 1000
     
-    CFL_num: float = 0.1
+    CFL_num: float = 0.2
     size: float = 20
     res: int = 2000
     density_floor: float = 1e-6
@@ -156,7 +157,7 @@ class BinaryRing(Hydro):
         return (self.res, self.res)
 
     def t_end(self) -> float:
-        return 1000 * (2 * jnp.pi)
+        return self.T * (2 * jnp.pi)
     
     def PLM(self) -> bool:
         return True
@@ -165,7 +166,7 @@ class BinaryRing(Hydro):
         return 1.5
     
     def time_order(self) -> int:
-        return 1
+        return 2
     
     def cfl(self) -> float:
         return self.CFL_num

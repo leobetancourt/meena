@@ -104,6 +104,111 @@ def get_torque_2(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[Array
     T = jnp.sum((hydro.a / 2) * Fg_theta)
     return T
 
+# cavity eccentricity calculation from Duffel et al. 2024
+def get_cavity_eccentricity(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
+    x, y = lattice.X1, lattice.X2
+    r = jnp.sqrt(x ** 2 + y ** 2)
+
+    rho = U[..., 0]
+    u, v = U[..., 1] / rho, U[..., 2] / rho
+    j = x * v - y * u
+    e_x = (j * v / (hydro.G() * hydro.M)) - (x / r)
+    e_y = -(j * u / (hydro.G() * hydro.M)) - (y / r)
+    dA = lattice.dX1 * lattice.dX2
+
+    bounds = jnp.logical_and(r >= hydro.a, r <= 6 * hydro.a)
+    # note: i removed the normalization constant for now
+    ec_x = jnp.where(bounds, e_x * rho * dA, 0).sum()
+    ec_y = jnp.where(bounds, e_y * rho * dA, 0).sum() 
+    return ec_x, ec_y
+
+
+@partial(jit, static_argnames=["hydro", "lattice"])
+def get_cavity_eccentricity_x(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
+    return get_cavity_eccentricity(hydro, lattice, U, flux, t)[0]
+
+
+@partial(jit, static_argnames=["hydro", "lattice"])
+def get_cavity_eccentricity_y(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
+    return get_cavity_eccentricity(hydro, lattice, U, flux, t)[1]
+
+# work on binary components
+@partial(jit, static_argnames=["hydro", "lattice"])
+def get_E_dot_1(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
+    rho = U[..., 0]
+    dA = lattice.dX1 * lattice.dX2
+    
+    # BH position and velocity
+    x, y, _, _ = hydro.get_bh_positions(t)
+    u, v, _, _ = hydro.get_bh_velocities(t)
+
+    # gravitational force by gas on BH
+    dx = lattice.X1 - x
+    dy = lattice.X2 - y
+    dist = jnp.sqrt(dx**2 + dy**2 + hydro.eps**2)
+    Fg_mag = hydro.G() * (hydro.M / 2) * rho * dA / dist**2
+    Fg_x = Fg_mag * dx / dist
+    Fg_y = Fg_mag * dy / dist
+    
+    # dot product F * v gives the rate of work done
+    E_dot = jnp.sum(Fg_x*u + Fg_y*v)
+    
+    return E_dot
+
+@partial(jit, static_argnames=["hydro", "lattice"])
+def get_E_dot_2(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
+    rho = U[..., 0]
+    dA = lattice.dX1 * lattice.dX2
+    
+    # BH position and velocity
+    _, _, x, y = hydro.get_bh_positions(t)
+    _, _, u, v = hydro.get_bh_velocities(t)
+
+    # gravitational force by gas on BH
+    dx = lattice.X1 - x
+    dy = lattice.X2 - y
+    dist = jnp.sqrt(dx**2 + dy**2 + hydro.eps**2)
+    Fg_mag = hydro.G() * (hydro.M / 2) * rho * dA / dist**2
+    Fg_x = Fg_mag * dx / dist
+    Fg_y = Fg_mag * dy / dist
+    
+    # dot product F * v gives the rate of work done
+    E_dot = jnp.sum(Fg_x*u + Fg_y*v)
+    
+    return E_dot
+
+@partial(jit, static_argnames=["hydro", "lattice"])
+def get_E_dot_accr_1(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
+    dA = lattice.dX1 * lattice.dX2
+    x, y, _, _ = hydro.get_bh_positions(t)
+    u, v, _, _ = hydro.get_bh_velocities(t)
+    sink_source = hydro.BH_sink(U, lattice.X1, lattice.X2, x, y, u, v)
+    m_dot_density = -sink_source[..., 0]  # mass accretion rate density
+    
+    rho = U[..., 0]
+    v_x = U[..., 1] / rho
+    v_y = U[..., 2] / rho
+    
+    # dot product of BH velocity with local fluid velocity
+    dot_v = u*v_x + v*v_y
+    return jnp.sum(m_dot_density * dot_v * dA)
+
+@partial(jit, static_argnames=["hydro", "lattice"])
+def get_E_dot_accr_2(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
+    dA = lattice.dX1 * lattice.dX2
+    _, _, x, y = hydro.get_bh_positions(t)
+    _, _, u, v = hydro.get_bh_velocities(t)
+    sink_source = hydro.BH_sink(U, lattice.X1, lattice.X2, x, y, u, v)
+    m_dot_density = -sink_source[..., 0]  # mass accretion rate density
+    
+    rho = U[..., 0]
+    v_x = U[..., 1] / rho
+    v_y = U[..., 2] / rho
+    
+    # dot product of BH velocity with local fluid velocity
+    dot_v = u*v_x + v*v_y
+    return jnp.sum(m_dot_density * dot_v * dA)
+
 @dataclass(frozen=True)
 class BinaryRing(Hydro):
     M: float = 1
@@ -349,6 +454,13 @@ class BinaryRing(Hydro):
         diagnostics.append(("L_dot_2", get_L_dot_2))
         diagnostics.append(("torque_1", get_torque_1))
         diagnostics.append(("torque_2", get_torque_2))
+        diagnostics.append(("e_cav_x", get_cavity_eccentricity_x))
+        diagnostics.append(("e_cav_y", get_cavity_eccentricity_y))
+        diagnostics.append(("E_dot_1", get_E_dot_1))
+        diagnostics.append(("E_dot_2", get_E_dot_2))
+        diagnostics.append(("E_dot_accr_1", get_E_dot_accr_1))
+        diagnostics.append(("E_dot_accr_2", get_E_dot_accr_2))
+
         return diagnostics
 
     def save_interval(self):

@@ -29,85 +29,131 @@ def get_h5_files_in_range(directory, t_min, t_max):
 
 def generate_movie(checkpoint_path, t_min, t_max, var, grid_range, title, fps, vmin, vmax, dpi, bitrate, cmap, t_factor, t_units):
     file_list = get_h5_files_in_range(checkpoint_path, t_min, t_max)
-    labels = {"density": r"$\rho$", "log density": r"$\log_{10} \Sigma / \Sigma_0$",
-              "u": r"$u$", "v": r"$v$", "pressure": r"$P$"}
-    with h5py.File(file_list[0], 'r') as f:
-        coords = f.attrs["coords"]
-        x1 = f.attrs["x1"]
-        x2 = f.attrs["x2"]
-        t = f.attrs["t"]
-        rho, u, v, p = np.array(f["rho"]), np.array(
-            f["u"]), np.array(f["v"]), np.array(f["p"])
-        if var == "density":
-            matrix = rho
-        elif var == "log density":
-            matrix = np.log10(rho)
-        elif var == "u":
-            matrix = u
-        elif var == "v":
-            matrix = v
-        elif var == "pressure":
-            matrix = p
+    
+    # Preload all data
+    rho_list, u_list, p_list, p_rad_list = [], [], [], []
+    times = []
+    radiation = False
 
-        if grid_range:
-            x1_min, x1_max = grid_range[0], grid_range[1]
-            x2_min, x2_max = grid_range[2], grid_range[3]
-            x1_min_i = np.searchsorted(x1, x1_min, side="left")
-            x1_max_i = np.searchsorted(x1, x1_max, side="right") - 1
-            x2_min_i = np.searchsorted(x2, x2_min, side="left")
-            x2_max_i = np.searchsorted(x2, x2_max, side="right") - 1
+    for file in file_list:
+        with h5py.File(file, 'r') as f:
+            times.append(f.attrs["t"])
+            rho = np.array(f["rho"])
+            u = np.array(f["u"])
+            p = np.array(f["p"])
+            rho_list.append(rho)
+            u_list.append(u)
+            p_list.append(p)
 
-            matrix = matrix[x1_min_i:x1_max_i+1, x2_min_i:x2_max_i+1]
-            x1, x2 = x1[(x1 >= x1_min) & (x1 <= x1_max)], x2[(x2 >= x2_min) & (x2 <= x2_max)]
+            if "p_rad" in f:
+                p_rad = np.array(f["p_rad"])
+                p_rad_list.append(p_rad)
+                radiation = True
 
-    fig, ax, c, cb = plot_matrix(
-        matrix, labels[var], coords, x1, x2, vmin, vmax, cmap)
-    if title == "":
-        ax.set_title(f"t = {(t*t_factor):.2f} {t_units}")
+            # Read grid only once (assuming constant across files)
+            if len(rho_list) == 1:
+                coords = f.attrs["coords"]
+                x1 = f.attrs["x1"]
+                x2 = f.attrs.get("x2", None)
+
+    # Apply grid range once (assuming same grid across time)
+    if grid_range:
+        x1_min, x1_max = grid_range[0], grid_range[1]
+        x2_min, x2_max = grid_range[2], grid_range[3]
+        x1_min_i = np.searchsorted(x1, x1_min, side="left")
+        x1_max_i = np.searchsorted(x1, x1_max, side="right") - 1
+        x2_min_i = np.searchsorted(x2, x2_min, side="left")
+        x2_max_i = np.searchsorted(x2, x2_max, side="right") - 1
+        x1 = x1[x1_min_i:x1_max_i+1]
+        x2 = x2[x2_min_i:x2_max_i+1] if x2 is not None else None
     else:
-        ax.set_title(title + f", t = {(t*t_factor):.2f} {t_units}")
+        x1_min_i = x2_min_i = 0
+        x1_max_i = len(x1) - 1
+        x2_max_i = len(x2) - 1 if x2 is not None else 0
+
+    # Clip all arrays to grid range
+    def clip(arr):
+        return arr[x1_min_i:x1_max_i+1, x2_min_i:x2_max_i+1] if x2 is not None else arr[x1_min_i:x1_max_i+1]
+
+    rho_list = [clip(r) for r in rho_list]
+    u_list = [clip(u) for u in u_list]
+    p_list = [clip(p) for p in p_list]
+    if radiation:
+        p_rad_list = [clip(pr) for pr in p_rad_list]
+
+    # Compute dynamic ylims
+    def get_min_max(lst):
+        data = np.stack(lst)
+        return np.min(data), np.max(data)
+
+    rho_min, rho_max = get_min_max(rho_list)
+    u_min, u_max = get_min_max(u_list)
+    p_min, p_max = get_min_max(p_list)
+    if radiation:
+        pr_min, pr_max = get_min_max(p_rad_list)
+
+    ylims = [(rho_min, rho_max), (u_min, u_max), (p_min, p_max)]
+    if radiation:
+        ylims.append((pr_min, pr_max))
+
+    # Set labels
+    if radiation:
+        matrices = [rho_list[0], u_list[0], p_list[0], p_rad_list[0]]
+        labels = [r"$\rho$", r"$u$", r"$p$", r"$p_{\mathrm{rad}}$"]
+    else:
+        matrices = [rho_list[0], u_list[0], p_list[0]]
+        labels = [r"$\rho$", r"$u$", r"$p$"]
+
+    # Plotting
+    def plot_grid_1d(matrices, labels, x1, x2=None):
+        fig, axs = plt.subplots(2, 2, figsize=(12, 10))
+        axs = axs.flatten()
+        for i, (matrix, label) in enumerate(zip(matrices, labels)):
+            ax = axs[i]
+            if x2 is None:
+                ax.plot(x1, matrix)
+            else:
+                im = ax.imshow(matrix, extent=[x1.min(), x1.max(), x2.min(), x2.max()],
+                               origin='lower', cmap=cmap, vmin=vmin, vmax=vmax)
+                fig.colorbar(im, ax=ax)
+            ax.set_xlabel(r"$x$")
+            ax.set_ylabel(label)
+            ax.set_ylim(ylims[i][0], ylims[i][1])
+        return fig, axs
+
+    fig, axs = plot_grid_1d(matrices, labels, x1, x2)
+    fig.suptitle(f"t = {times[0] * t_factor:.2f} {t_units}", fontsize=16)
+
     FFMpegWriter = animation.writers['ffmpeg']
     writer = FFMpegWriter(fps=fps, bitrate=bitrate)
     PATH = checkpoint_path.split("checkpoints/")[0]
     if not os.path.exists(PATH):
         os.makedirs(PATH)
+
     cm = writer.saving(fig, f"{PATH}/movie.mp4", dpi)
 
     with cm:
         for i in range(len(file_list)):
-            file_path = file_list[i]
-            with h5py.File(file_path, 'r') as f:
-                t = f.attrs["t"]
-                rho, u, v, p = np.array(f["rho"]), np.array(f["u"]), np.array(f["v"]), np.array(f["p"])
-                if var == "density":
-                    matrix = rho
-                elif var == "log density":
-                    matrix = np.log10(rho)
-                elif var == "u":
-                    matrix = u
-                elif var == "v":
-                    matrix = v
-                elif var == "pressure":
-                    matrix = p
+            matrices = [rho_list[i], u_list[i], p_list[i]]
+            if radiation:
+                matrices.append(p_rad_list[i])
 
-                if grid_range:
-                    matrix = matrix[x1_min_i:x1_max_i+1, x2_min_i:x2_max_i+1]
-                
-                if coords == "polar":
-                    c.set_array(matrix.ravel())
-                elif coords == "cartesian":
-                    c.set_data(np.transpose(matrix))
-                cb.update_normal(c)
-                if title == "":
-                    ax.set_title(f"t = {(t*t_factor):.2f} {t_units}")
+            for j, (matrix, label) in enumerate(zip(matrices, labels)):
+                axs[j].cla()
+                if x2 is None:
+                    axs[j].plot(x1, matrix)
                 else:
-                    ax.set_title(title + f", t = {(t*t_factor):.2f} {t_units}")
-                fig.canvas.draw()
-                plt.tight_layout()
-                writer.grab_frame()
+                    im = axs[j].imshow(matrix, extent=[x1.min(), x1.max(), x2.min(), x2.max()],
+                                       origin='lower', cmap=cmap, vmin=vmin, vmax=vmax)
+                    fig.colorbar(im, ax=axs[j])
+                axs[j].set_xlabel(r"$x$")
+                axs[j].set_ylabel(label)
+                axs[j].set_ylim(ylims[j][0], ylims[j][1])
 
-                print_progress_bar(i, len(file_list),
-                                   suffix="complete", length=25)
+            fig.suptitle((title + ", " if title else "") + f"t = {times[i] * t_factor:.2f} {t_units}", fontsize=16)
+            fig.canvas.draw()
+            writer.grab_frame()
+            print_progress_bar(i, len(file_list), suffix="complete", length=25)
 
 # def analytic_sigma(x, tau, m, R_0):
 #     x = np.maximum(x, 1e-10)

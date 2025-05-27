@@ -16,14 +16,26 @@ def get_prims(hydro, U, *args):
             p
         ]).transpose((1, 2, 0))
     else:
-        rho = U[..., 0]
-        u = U[..., 1] / rho
-        p = hydro.P(U, *args)
-        return jnp.array([
-            rho,
-            u,
-            p
-        ]).transpose((1, 0))
+        if hydro.radiation():
+            rho = U[..., 0]
+            u = U[..., 1] / rho
+            p = hydro.P(U, *args)
+            e_rad = U[..., 3]
+            return jnp.array([
+                rho,
+                u,
+                p,
+                e_rad / 3
+            ]).transpose((1, 0))
+        else:
+            rho = U[..., 0]
+            u = U[..., 1] / rho
+            p = hydro.P(U, *args)
+            return jnp.array([
+                rho,
+                u,
+                p
+            ]).transpose((1, 0))
 
 def U_from_prim(hydro, prims, *args):
     if hydro.dim() == 2:
@@ -36,17 +48,45 @@ def U_from_prim(hydro, prims, *args):
             e
         ]).transpose((1, 2, 0))
     else:
-        rho, u = prims[..., 0], prims[..., 1]
-        e = hydro.E(prims, *args)
-        return jnp.array([
-            rho,
-            rho * u,
-            e
-        ]).transpose((1, 0))
-
+        if hydro.radiation():
+            rho, u = prims[..., 0], prims[..., 1]
+            E = hydro.E(prims, *args)
+            p_rad = prims[..., 3]
+            return jnp.array([
+                rho,
+                rho * u,
+                E,
+                p_rad * 3
+            ]).transpose((1, 0))
+        else:
+            rho, u = prims[..., 0], prims[..., 1]
+            e = hydro.E(prims, *args)
+            return jnp.array([
+                rho,
+                rho * u,
+                e
+            ]).transpose((1, 0))
 
 def F_from_prim(hydro, prims, *args):
-    if hydro.dim() == 2:
+    if hydro.dim() == 1:
+        if hydro.radiation():
+            rho, u, p, p_rad = prims[..., 0], prims[..., 1], prims[..., 2], prims[..., 3]
+            e = hydro.E(prims, *args)
+            return jnp.array([
+                rho * u,
+                rho * (u**2) + p + p_rad,
+                (e + p + p_rad) * u,
+                jnp.zeros_like(rho)
+            ]).transpose((1, 0))
+        else:
+            rho, u, p = prims[..., 0], prims[..., 1], prims[..., 2]
+            e = hydro.E(prims, *args)
+            return jnp.array([
+                rho * u,
+                rho * (u ** 2) + p,
+                (e + p) * u,
+            ]).transpose((1, 0))
+    else:
         rho, u, v, p = prims[..., 0], prims[..., 1], prims[..., 2], prims[..., 3]
         e = hydro.E(prims, *args)
         return jnp.array([
@@ -55,15 +95,6 @@ def F_from_prim(hydro, prims, *args):
             rho * u * v,
             (e + p) * u
         ]).transpose((1, 2, 0))
-    else:
-        rho, u, p = prims[..., 0], prims[..., 1], prims[..., 2]
-        e = hydro.E(prims, *args)
-        return jnp.array([
-            rho * u,
-            rho * (u ** 2) + p,
-            (e + p) * u
-        ]).transpose((1, 0))
-
 
 def G_from_prim(hydro, prims, *args):
     rho, u, v, p = prims[..., 0], prims[..., 1], prims[..., 2], prims[..., 3]
@@ -88,7 +119,7 @@ def alphas(v_L: ArrayLike, v_R: ArrayLike, c_s_L: ArrayLike, c_s_R: ArrayLike) -
     return alpha_p, alpha_m
 
 
-def hll_flux_x1(hydro, prims_L: ArrayLike, prims_R: ArrayLike, *args) -> Array:
+def hll_flux_x1(hydro, prims_L: ArrayLike, prims_R: ArrayLike, F_rad: ArrayLike, *args) -> Array:
     v_L, v_R = prims_L[..., 1], prims_R[..., 1]
     c_s_L, c_s_R = hydro.c_s(prims_L, *args), hydro.c_s(prims_R, *args)
 
@@ -98,7 +129,9 @@ def hll_flux_x1(hydro, prims_L: ArrayLike, prims_R: ArrayLike, *args) -> Array:
     F_L, F_R = F_from_prim(hydro, prims_L, *args), F_from_prim(hydro, prims_R, *args)
     U_L, U_R = U_from_prim(hydro, prims_L, *args), U_from_prim(hydro, prims_R, *args)
 
-    return (a_p * F_L - a_m * F_R - a_p * a_m * (U_L - U_R)) / (a_p - a_m)
+    hll_flux = (a_p * F_L - a_m * F_R - a_p * a_m * (U_L - U_R)) / (a_p - a_m)
+    hll_flux = hll_flux.at[:, 3].set(F_rad)
+    return hll_flux
 
 
 def hll_flux_x2(hydro, prims_L: ArrayLike, prims_R: ArrayLike, *args) -> Array:
@@ -259,6 +292,20 @@ def flux_1d(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array]:
     prims = get_prims(hydro, U, lattice.X1, t)
     prims = add_ghost_cells(prims, g, axis=0)
     prims = apply_bcs_1d(lattice, prims)
+    
+    if hydro.radiation():
+        rho = prims[..., 0]
+        e_rad = prims[..., 3] * 3
+        dx = x1[1] - x1[0]
+        # diffusion coefficient at cell interfaces
+        rho_face = 0.5 * (rho[1:] + rho[:-1])
+        e_rad_face = 0.5 * (e_rad[1:] + e_rad[:-1])
+        # gradient of e_rad using finite difference
+        grad_e_rad = (e_rad[1:] - e_rad[:-1]) / dx
+
+        D = hydro.c() / (3.0 * rho_face * hydro.kappa())
+
+        F_rad = -D * grad_e_rad
 
     if hydro.PLM():
         X1_L = X1[(g-1):-(g+1)]
@@ -293,25 +340,40 @@ def flux_1d(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array]:
             F_l, F_r = hll_flux_x1(hydro, prims_lim, prims_lip, X1_L, t), hll_flux_x1(hydro, prims_rim, prims_rip, X1_R, t)
         elif hydro.solver() == "hllc":
             F_l, F_r = hllc_flux_x1(hydro, prims_lim, prims_lip, X1_L, t), hllc_flux_x1(hydro, prims_rim, prims_rip, X1_R, t)
-
     else:
         X1_L = X1[(g-1):-(g+1)]
         X1_C = X1[g:-g]
-        X1_R = X1[(g+1):]
+        X1_R = X1[(g+1):-(g-1)]
         
         prims_cc = prims[g:-g]
         prims_li = prims[(g-1):-(g+1)]
-        prims_ri = prims[(g+1):]
+        prims_ri = prims[(g+1):-(g-1)]
 
         if hydro.solver() == "hll":
-            F_l = hll_flux_x1(hydro, prims_li, prims_cc, X1_L, t)
-            F_r = hll_flux_x1(hydro, prims_cc, prims_ri, X1_R, t)
+            F_l = hll_flux_x1(hydro, prims_li, prims_cc, F_rad[1:-2], X1_L, t)
+            F_r = hll_flux_x1(hydro, prims_cc, prims_ri, F_rad[2:-1], X1_R, t)
         elif hydro.solver() == "hllc":
             F_l = hllc_flux_x1(hydro, prims_li, prims_cc, X1_L, t)
             F_r = hllc_flux_x1(hydro, prims_cc, prims_ri, X1_R, t)
         elif hydro.solver() == "finite-difference":
-            F_l = F_from_prim(hydro, prims_li, X1_C, t) / 2
-            F_r = F_from_prim(hydro, prims_ri, X1_R, t) / 2
+            def F_radiation(hydro, prims, F_rad, *args):
+                rho, u, p, p_rad = prims[..., 0], prims[..., 1], prims[..., 2], prims[..., 3]
+                e = hydro.E(prims, *args)
+                
+                return jnp.array([
+                    rho * u,
+                    rho * (u**2) + p + p_rad,
+                    (e + p + p_rad) * u,
+                    F_rad
+                ]).transpose((1, 0))
+            
+            # # forward differencing
+            # F_l = F_radiation(hydro, prims_cc, F_rad[1:-2], X1_C, t)
+            # F_r = F_radiation(hydro, prims_ri, F_rad[2:-1], X1_R, t)
+            
+            # central differencing
+            F_l = F_radiation(hydro, prims_li, F_rad[1:-2], X1_C, t) / 2
+            F_r = F_radiation(hydro, prims_ri, F_rad[2:-1], X1_R, t) / 2
         
     return F_l, F_r
 

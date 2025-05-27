@@ -61,6 +61,7 @@ def run(config_file, checkpoint, plot, save_plots, plot_range, output_dir, resum
 def plot(checkpoint_file, var, log, range, title, dpi, cmap, c_range, t_factor, t_units):
     labels = {"density": r"$\rho$", "u": r"$u$", "v": r"$v$", "pressure": r"$P$", "dt": r"$dt$"}
     vmin, vmax = None, None
+    radiation = False
     if c_range:
         vmin, vmax = c_range
     
@@ -73,6 +74,9 @@ def plot(checkpoint_file, var, log, range, title, dpi, cmap, c_range, t_factor, 
         rho, u, p = np.array(f["rho"]), np.array(f["u"]), np.array(f["p"])
         if "v" in f:
             v = np.array(f["v"])
+        if "e_rad" in f:
+            radiation = True
+            e_rad = np.array(f["e_rad"])
         
         dim = len(rho.shape)
         
@@ -84,6 +88,8 @@ def plot(checkpoint_file, var, log, range, title, dpi, cmap, c_range, t_factor, 
             matrix = v
         elif var == "pressure":
             matrix = p
+        elif var == "e_rad":
+            matrix = e_rad
         elif var == "dt":
             gamma = 5 / 3
             dx, dy = x1[1] - x1[0], x2[1] - x2[0]
@@ -105,7 +111,13 @@ def plot(checkpoint_file, var, log, range, title, dpi, cmap, c_range, t_factor, 
     
         if var is None:
             if dim == 1:
-                fig, _ = plot_1d_grid((rho, u, p), x1)
+                if radiation:
+                    matrices = (rho, u, p, e_rad)
+                    labels = [r"$\rho$", r"$u$", r"$p$", r"$E_{\mathrm{rad}}$"]
+                else:
+                    matrices = (rho, u, p)
+                    labels = [r"$\rho$", r"$u$", r"$p$"]
+                fig, _ = plot_1d_grid(matrices, labels, x1)
             else:
                 fig, _ = plot_2d_grid((rho, u, v, p), x1, x2, cmap)
         else: 
@@ -123,13 +135,13 @@ def plot(checkpoint_file, var, log, range, title, dpi, cmap, c_range, t_factor, 
         else:
             fig.suptitle(title + f", t = {(t*t_factor):.2f} {t_units}", fontsize=16)
         PATH = checkpoint_file.split("checkpoints/")[0]
-        plt.savefig(f"{PATH}/t={t:.2f}.png", bbox_inches="tight", dpi=dpi)
+        plt.savefig(f"{PATH}/t={t:.2f}.png", dpi=dpi)
         plt.show()
         
 @click.command()
 @click.argument("checkpoint_path", type=click.Path(exists=True))
 @click.option("-t", "--t-range", type=(float, float))
-@click.option("-v", "--var", type=click.Choice(["density", "log density", "u", "v", "pressure"]), default="density")
+@click.option("-v", "--var", type=click.Choice(["density", "log density", "u", "v", "pressure"]), default=None)
 @click.option("-r", "--range", type=(float, float, float, float), default=None)
 @click.option("--title", type=str, default="")
 @click.option("--fps", type=int, default=24)

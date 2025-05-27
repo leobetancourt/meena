@@ -88,12 +88,15 @@ class Hydro(ABC):
 
     def regime(self) -> str:
         return "HD"
+    
+    def radiation(self) -> bool:
+        return False
 
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
         return ((0, 1), (0, 1))
 
     def num_g(self) -> int:
-        return 2 if self.PLM() else 1
+        return 2 if self.PLM() or self.radiation() else 1
 
     def log_x1(self) -> bool:
         return False
@@ -146,7 +149,7 @@ class Hydro(ABC):
         rho, mom_x, mom_y, e = cons[..., 0], cons[..., 1], cons[..., 2], cons[..., 3]
         u, v = mom_x / rho, mom_y / rho
         return (self.gamma() - 1) * (e - (0.5 * rho * (u ** 2 + v ** 2)))
-
+    
     def source(self, prims: ArrayLike, lattice: Lattice, t: float = None) -> Array:
         return jnp.zeros_like(prims)
     

@@ -88,24 +88,40 @@ def save_to_h5(out, t, prims, hydro, lattice, save_plots):
             fig.suptitle(f"t = {t:.2f}", fontsize=16)
             plt.savefig(f"{out}/plots/t={t:.2f}.png", bbox_inches="tight", dpi=300) 
     else:
-        rho, u, p = prims[..., 0], prims[..., 1], prims[..., 2]
-        filename = f"{out}/checkpoints/out_{t:.4f}.h5"
-        with h5py.File(filename, "w") as f:
-            # metadata
-            f.attrs["coords"] = lattice.coords
-            f.attrs["gamma"] = hydro.gamma()
-            f.attrs["x1"] = lattice.x1
-            f.attrs["t"] = t
+        if hydro.radiation():
+            rho, u, p, p_rad = prims[..., 0], prims[..., 1], prims[..., 2], prims[..., 3]
+            filename = f"{out}/checkpoints/out_{t:.4f}.h5"
+            with h5py.File(filename, "w") as f:
+                # metadata
+                f.attrs["coords"] = lattice.coords
+                f.attrs["gamma"] = hydro.gamma()
+                f.attrs["x1"] = lattice.x1
+                f.attrs["t"] = t
 
-            # create h5 datasets for conserved variables
-            f.create_dataset("rho", data=rho, dtype="float64")
-            f.create_dataset("u", data=u, dtype="float64")
-            f.create_dataset("p", data=p, dtype="float64")
-        
-        if save_plots:
-            fig, _ = plot_grid((rho, u, p), lattice.x1)
-            fig.suptitle(f"t = {t:.2f}", fontsize=16)
-            plt.savefig(f"{out}/plots/t={t:.2f}.png", bbox_inches="tight", dpi=300) 
+                # create h5 datasets for conserved variables
+                f.create_dataset("rho", data=rho, dtype="float64")
+                f.create_dataset("u", data=u, dtype="float64")
+                f.create_dataset("p", data=p, dtype="float64")
+                f.create_dataset("p_rad", data=p_rad, dtype="float64")
+        else:
+            rho, u, p = prims[..., 0], prims[..., 1], prims[..., 2]
+            filename = f"{out}/checkpoints/out_{t:.4f}.h5"
+            with h5py.File(filename, "w") as f:
+                # metadata
+                f.attrs["coords"] = lattice.coords
+                f.attrs["gamma"] = hydro.gamma()
+                f.attrs["x1"] = lattice.x1
+                f.attrs["t"] = t
+
+                # create h5 datasets for conserved variables
+                f.create_dataset("rho", data=rho, dtype="float64")
+                f.create_dataset("u", data=u, dtype="float64")
+                f.create_dataset("p", data=p, dtype="float64")
+            
+            if save_plots:
+                fig, _ = plot_grid((rho, u, p), lattice.x1)
+                fig.suptitle(f"t = {t:.2f}", fontsize=16)
+                plt.savefig(f"{out}/plots/t={t:.2f}.png", bbox_inches="tight", dpi=300) 
 
 
 def create_csv_file(filename, headers):
@@ -218,22 +234,15 @@ def plot_1d(data, label, x1):
     ax.set_ylabel(label)
     return fig, ax
 
-def plot_1d_grid(matrices, x1):
-    rho, u, p = matrices
+def plot_1d_grid(matrices, labels, x1):
     fig, axs = plt.subplots(2, 2, figsize=(10, 8))
-    
-    axs[0, 0].plot(x1, rho)
-    axs[0, 0].set_xlabel(r"$x$")
-    axs[0, 0].set_ylabel(r"$\rho$")
-    
-    axs[0, 1].plot(x1, u)
-    axs[0, 1].set_xlabel(r"$x$")
-    axs[0, 1].set_ylabel(r"$u$")
-    
-    axs[1, 0].plot(x1, p)
-    axs[1, 0].set_xlabel(r"$x$")
-    axs[1, 0].set_ylabel(r"$p$")
-    
+    axs = axs.flatten()
+
+    for i, (var, label) in enumerate(zip(matrices, labels)):
+        axs[i].plot(x1, var)
+        axs[i].set_xlabel(r"$x$")
+        axs[i].set_ylabel(label)
+
     return fig, axs
 
 def plot_2d_grid(matrices, x1, x2, cmap="magma"):

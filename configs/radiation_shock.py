@@ -7,50 +7,57 @@ from jax.typing import ArrayLike
 from meena import Hydro, BoundaryCondition, Primitives, Conservatives
 
 @dataclass(frozen=True)
-class PressureGaussian(Hydro):    
+class RadiationShock(Hydro):    
     def initialize(self, X1: ArrayLike) -> Array:
         x = X1
         
-        density = jnp.ones_like(x)
-        velocity = jnp.zeros_like(x)
-        pressure = jnp.exp(-(x) ** 2 / (2 * 0.1 ** 2))
-        pressure = jnp.maximum(pressure, 1e-4)
+        left_state = jnp.array([1, 0, 1, 1])
+        right_state = jnp.array([0.125, 0, 0.1, 0.5])
         
-        return jnp.array([density, velocity, pressure]).T
+        return jnp.where(x[:, None] < 0.5, left_state, right_state)
     
     def dim(self) -> int:
         return 1
     
+    def radiation(self) -> bool:
+        return True
+    
+    def c(self) -> float:
+        return 1
+    
+    def kappa(self) -> float:
+        return 1e2
+    
     def E(self, prims: Primitives, X1: ArrayLike, t: float) -> Array:
-        rho, u, p = prims[..., 0], prims[..., 1], prims[..., 2]
-        return p / (self.gamma() - 1) + 0.5 * rho * (u ** 2)
+        rho, u, p, p_rad = prims[..., 0], prims[..., 1], prims[..., 2], prims[..., 3]
+        return p / (self.gamma() - 1) + 0.5 * rho * (u ** 2) + (3 * p_rad)
 
     def c_s(self, prims: Primitives, X1: ArrayLike, t: float) -> Array:
         rho, p = prims[..., 0], prims[..., 2]
         return jnp.sqrt(self.gamma() * p / rho)
 
     def P(self, cons: Conservatives, X1: ArrayLike, t: float) -> Array:
-        rho, mom_x, e = cons[..., 0], cons[..., 1], cons[..., 2]
+        rho, mom_x, E, e_rad = cons[..., 0], cons[..., 1], cons[..., 2], cons[..., 3]
         u = mom_x / rho
-        return (self.gamma() - 1) * (e - (0.5 * rho * (u ** 2)))
+        return (self.gamma() - 1) * (E - 0.5 * rho * (u ** 2) - (e_rad / 3))
     
     def cfl(self) -> float:
         return 0.01
     
     def t_end(self) -> float:
-        return 1
+        return 5
     
     def gamma(self) -> float:
-        return 1.4
+        return 2
     
     def PLM(self) -> float:
         return False
     
     def time_order(self) -> int:
-        return 2
+        return 1
     
     def solver(self) -> float:
-        return "finite-difference"
+        return "hll"
     
     def coords(self) -> str:
         return "cartesian"
@@ -62,10 +69,7 @@ class PressureGaussian(Hydro):
         return (0, 1)
         
     def resolution(self) -> int:
-        return 600
-    
-    def cfl(self) -> float:
-        return 0.01
+        return 100
     
     def bc_x1(self) -> BoundaryCondition:
-        return ("reflective", "outflow")
+        return ("outflow", "outflow")

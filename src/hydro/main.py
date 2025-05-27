@@ -56,6 +56,16 @@ def cartesian_timestep(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -
         dt1 = jnp.min(lattice.dX1 / (jnp.abs(u) + c_s))
         dt2 = jnp.min(lattice.dX2 / (jnp.abs(v) + c_s))
         return hydro.cfl() * jnp.minimum(dt1, dt2)
+    elif hydro.radiation():
+        prims = get_prims(hydro, U, lattice.X1, t)
+        rho = prims[..., 0]
+        u = prims[..., 1]
+        c_s = hydro.c_s(prims, lattice.X1, t)
+        D = hydro.c() / (3 * rho * hydro.kappa())
+        dt_diff = jnp.min(lattice.dX1**2 / (4*D))
+        dt_hydro = jnp.min(lattice.dX1 / (jnp.abs(u) + c_s))
+        dt = hydro.cfl() * jnp.minimum(dt_diff, dt_hydro)
+        return dt
     else:
         prims = get_prims(hydro, U, lattice.X1, t)
         c_s = hydro.c_s(prims, lattice.X1, t)

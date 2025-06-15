@@ -223,6 +223,7 @@ class BinaryRing(Hydro):
     retrograde: bool = 0
     T: float = 1000
     
+    cadence: float = 10
     CFL_num: float = 0.2
     size: float = 20
     res: int = 2000
@@ -464,4 +465,4 @@ class BinaryRing(Hydro):
         return diagnostics
 
     def save_interval(self):
-        return 1
+        return self.cadence * (2 * jnp.pi)

@@ -58,8 +58,9 @@ def cartesian_timestep(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -
 
 
 def polar_timestep(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> float:
-    rho, u, v, p = get_prims(hydro, U, lattice.X1, lattice.X2, t)
-    c_s = hydro.c_s((rho, u, v, p), lattice.X1, lattice.X2, t)
+    prims = get_prims(hydro, U, lattice.X1, lattice.X2, t)
+    c_s = hydro.c_s(prims, lattice.X1, lattice.X2, t)
+    u, v = prims[..., 1], prims[..., 2]
     dt1 = jnp.min(lattice.dX1 / (jnp.abs(u) + c_s))
     dt2 = jnp.min(lattice.X1 * lattice.dX2 / (jnp.abs(v) + c_s))
     return hydro.cfl() * jnp.minimum(dt1, dt2)
@@ -82,7 +83,8 @@ def solve_cartesian(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> t
 
 def solve_polar(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> tuple[Array, Array, Array, Array]:
     F_l, F_r, G_l, G_r = interface_flux(hydro, lattice, U, t)
-    rho, u, v, p = get_prims(hydro, U, lattice.X1, lattice.X2, t)
+    prims = get_prims(hydro, U, lattice.X1, lattice.X2, t)
+    rho, u, v, p = prims[..., 0], prims[..., 1], prims[..., 2], prims[..., 3]
 
     S = jnp.array([
         jnp.zeros_like(rho),

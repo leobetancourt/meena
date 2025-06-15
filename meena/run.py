@@ -1,6 +1,8 @@
 import sys
 import importlib
 import inspect
+import jax.numpy as jnp
+
 from pathlib import Path
 from .detail import Hydro, Lattice
 from src.common.helpers import load_U
@@ -38,9 +40,15 @@ def run_config(config_file, checkpoint, plot, save_plots, plot_range, output_dir
 
     if checkpoint:  # user specifies a checkpoint file to run from
         prims, _, _, t = load_U(checkpoint)
+        # If any invalid values (NaNs), fall back to initialized values for those
+        prims_init = hydro.initialize(lattice)
+        bad_mask = jnp.any(jnp.isnan(prims), axis=-1)  # shape (NX1, NX2)
+
+        # Replace bad cells with initialized values
+        prims = jnp.where(bad_mask[..., None], prims_init, prims)
     else:
         prims, t = hydro.initialize(
-            lattice.X1, lattice.X2), hydro.t_start()
+            lattice), hydro.t_start()
 
     out = output_dir if output_dir else f"./output/{Path(config_file).stem}"
 

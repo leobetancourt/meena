@@ -44,7 +44,7 @@ def get_torque1(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayL
     delta_theta = theta - theta_bh
     dist = jnp.sqrt(r ** 2 + r_bh ** 2 - 2 * r *
                     r_bh * jnp.cos(delta_theta))
-    Fg = hydro.G * (hydro.M / 2) * rho * dA / \
+    Fg = hydro.G() * (hydro.M / 2) * rho * dA / \
         (dist ** 2 + hydro.eps ** 2)
     Fg_theta = Fg * (r * jnp.sin(delta_theta)) / dist
     T = jnp.sum((hydro.a / 2) * Fg_theta)
@@ -66,7 +66,7 @@ def get_torque2(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayL
     delta_theta = theta - theta_bh
     dist = jnp.sqrt(r ** 2 + r_bh ** 2 - 2 * r *
                     r_bh * jnp.cos(delta_theta))
-    Fg = hydro.G * (hydro.M / 2) * rho * dA / \
+    Fg = hydro.G() * (hydro.M / 2) * rho * dA / \
         (dist ** 2 + hydro.eps ** 2)
     Fg_theta = Fg * (r * jnp.sin(delta_theta)) / dist
     T = jnp.sum((hydro.a / 2) * Fg_theta)
@@ -82,16 +82,14 @@ def get_eccentricity(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[A
     dx1 = x1_r - x1_l
     dx2 = lattice.x2[1] - lattice.x2[0]
     dA = r * dx1 * dx2
-    e_x = (r * vr * vtheta / (hydro.G * hydro.M)) * jnp.sin(theta) + \
-        (((r * vtheta ** 2) / (hydro.G * hydro.M)) - 1) * jnp.cos(theta)
-    e_y = -(r * vr * vtheta / (hydro.G * hydro.M)) * jnp.cos(theta) + \
-        (((r * vtheta ** 2) / (hydro.G * hydro.M)) - 1) * jnp.sin(theta)
+    e_x = (r * vr * vtheta / (hydro.G() * hydro.M)) * jnp.sin(theta) + \
+        (((r * vtheta ** 2) / (hydro.G() * hydro.M)) - 1) * jnp.cos(theta)
+    e_y = -(r * vr * vtheta / (hydro.G() * hydro.M)) * jnp.cos(theta) + \
+        (((r * vtheta ** 2) / (hydro.G() * hydro.M)) - 1) * jnp.sin(theta)
 
     bounds = jnp.logical_and(r >= hydro.a, r <= 6 * hydro.a)
-    ec_x = jnp.where(bounds, e_x * rho * dA, 0).sum() / \
-        (35 * jnp.pi * hydro.Sigma_0 * (hydro.a ** 2))
-    ec_y = jnp.where(bounds, e_y * rho * dA, 0).sum() / \
-        (35 * jnp.pi * hydro.Sigma_0 * (hydro.a ** 2))
+    ec_x = jnp.where(bounds, e_x * rho * dA, 0).sum()
+    ec_y = jnp.where(bounds, e_y * rho * dA, 0).sum()
     return (ec_x, ec_y)
 
 
@@ -107,58 +105,70 @@ def get_eccentricity_y(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple
 
 @dataclass(frozen=True)
 class ExcisedRing(Hydro):
-    G: float = 1
     M: float = 1
     mach: float = 10
     a: float = 1
-    Sigma_0: float = 1
     eps: float = 0.05 * a
     omega_B: float = 1
     R_0: float = 4 * a
-    sigma: float = 0.2 * a
-    CFL_num: float = 0.4
+    retrograde: bool = 0
+    
+    cadence: float = 1
+    T: float = 1000
+    CFL_num: float = 0.3
+    size: float = 30
+    res: int = 1000
+    density_floor: float = 1e-6
 
-    def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
+    def initialize(self, lattice) -> Array:
         t = 0
-        r, theta = X1, X2
+        r, theta = lattice.X1, lattice.X2
+        dA = lattice.X1 * lattice.dX1 * lattice.dX2
 
         # surface density
-        gaussian = self.Sigma_0 * jnp.exp(- ((r - self.R_0) ** 2) / (2 * (self.sigma ** 2)))
-        floor = 0.01
-        rho = jnp.maximum(floor, gaussian)
+        sigma = self.R_0 / 10
+        ring = jnp.exp(- ((r - self.R_0) ** 2) / (2 * (sigma ** 2)))
+        M_ring = jnp.sum(ring * dA)
+        Sigma = ring / M_ring
+        Sigma = jnp.maximum(self.density_floor, Sigma)
 
-        v_r = jnp.zeros_like(rho)
-        # keplerian velocity
-        v_theta = jnp.sqrt(self.G * self.M / r)
+        v_r = jnp.zeros_like(Sigma)
+        v_theta = jnp.sqrt(self.G() * self.M / r) # keplerian velocity
+        if self.retrograde:
+            v_theta *= -1
         
+        p = Sigma * (self.c_s(None, r, theta, 0) ** 2)
+
         return jnp.array([
-            rho,
-            rho * v_r,
-            rho * v_theta,
-            self.E((rho, v_r, v_theta, jnp.zeros_like(rho)), X1, X2, t)
+            Sigma,
+            v_r,
+            v_theta,
+            p,
         ]).transpose((1, 2, 0))
                 
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
-        return ((0.6 * self.a, 10), (0, 2 * jnp.pi))
+        return ((1 * self.a, 30), (0, 2 * jnp.pi))
 
     def log_x1(self) -> bool:
         return True
 
     def resolution(self) -> tuple[int, int]:
-        return (100, 600)
+        return (self.res, self.res * 6)
 
     def t_end(self) -> float:
-        tau_end = 10
-        return tau_end / (12 * self.nu()) * (self.R_0 ** 2)
+        return self.T * 2 * jnp.pi
     
     def PLM(self) -> bool:
         return True
     
+    def theta_PLM(self):
+        return 1.5
+    
+    def time_order(self):
+        return self.T * 2 * jnp.pi
+    
     def cfl(self) -> float:
         return self.CFL_num
-    
-    def timestep(self) -> str:
-        return 5e-5
     
     def nu(self) -> float:
         return 1e-3
@@ -170,10 +180,10 @@ class ExcisedRing(Hydro):
         return ("outflow", "outflow")
 
     def bc_x2(self) -> BoundaryCondition:
-        return ("periodic", "periodic")
+        return ("outflow", "outflow")
 
     def E(self, prims: Primitives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
-        rho, u, v, p = prims
+        rho, u, v = prims[..., 0], prims[..., 1], prims[..., 2]
         e_internal = rho * (self.c_s(prims, X1, X2, t) ** 2)
         e_kinetic = 0.5 * rho * (u ** 2 + v ** 2)
         return e_internal + e_kinetic
@@ -189,19 +199,22 @@ class ExcisedRing(Hydro):
         dist2 = jnp.sqrt(r ** 2 + r2 ** 2 - 2 * r *
                          r2 * jnp.cos(theta - theta2))
 
-        cs = jnp.sqrt(((self.G * (self.M / 2) / jnp.sqrt(dist1 ** 2 + self.eps ** 2)) +
-                       (self.G * (self.M / 2) / jnp.sqrt(dist2 ** 2 + self.eps ** 2))) / (self.mach ** 2))
+        cs = jnp.sqrt(((self.G() * (self.M / 2) / jnp.sqrt(dist1 ** 2 + self.eps ** 2)) +
+                       (self.G() * (self.M / 2) / jnp.sqrt(dist2 ** 2 + self.eps ** 2))) / (self.mach ** 2))
         return cs
 
     def P(self, cons: Conservatives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
-        rho, _, _, _ = cons
-        return rho * self.c_s(cons, X1, X2, t) ** 2
+        rho = cons[..., 0]
+        return rho * (self.c_s(cons, X1, X2, t) ** 2)
+    
+    def G(self) -> float:
+        return 1
 
     def BH_gravity(self, U, r, theta, r_bh, theta_bh):
         delta_theta = theta - theta_bh
         dist = jnp.sqrt(r ** 2 + r_bh ** 2 - 2 * r *
                         r_bh * jnp.cos(delta_theta))
-        g_acc = -self.G * (self.M / 2) / (dist ** 2)
+        g_acc = -self.G() * (self.M / 2) / (dist ** 2)
 
         g_r = g_acc * (r - r_bh * jnp.cos(delta_theta)) / dist
         g_theta = g_acc * (r_bh * jnp.sin(delta_theta)) / dist
@@ -233,12 +246,29 @@ class ExcisedRing(Hydro):
 
     # assumes U with ghost cells
     def check_U(self, lattice: Lattice, U: ArrayLike, t: float) -> Array:
+        # inflow 
         g = lattice.num_g
-        rho = U[:, :, 0]
-        vr = U[:, :, 1] / rho
+        rho = U[..., 0]
+        vr = U[..., 1] / rho
         vr = vr.at[:g, :].set(jnp.minimum(vr[:g, :], 0))
         U = U.at[:g, :, 1].set(rho[:g, :] * vr[:g, :])
-        return U
+        
+        # density floow
+        rho = U[..., 0]
+        apply_floor = rho < self.density_floor
+
+        rho_new = jnp.where(apply_floor, self.density_floor, rho)
+
+        # scale momenta to preserve velocity: p_new = v * rho_new = p_old * (rho_new / rho_old)
+        factor = jnp.where(apply_floor, rho_new / rho, 1.0)
+        mom_x_new = U[..., 1] * factor
+        mom_y_new = U[..., 2] * factor
+
+        U_new = U.at[..., 0].set(rho_new)
+        U_new = U_new.at[..., 1].set(mom_x_new)
+        U_new = U_new.at[..., 2].set(mom_y_new)
+        
+        return U_new
 
     def diagnostics(self):
         diagnostics = []
@@ -251,4 +281,4 @@ class ExcisedRing(Hydro):
         return diagnostics
 
     def save_interval(self):
-        return 1
+        return self.cadence * (2 * jnp.pi)

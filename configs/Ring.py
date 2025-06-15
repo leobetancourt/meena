@@ -229,8 +229,9 @@ class BinaryRing(Hydro):
     res: int = 2000
     density_floor: float = 1e-6
 
-    def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
+    def initialize(self, lattice) -> Array:
         t = 0
+        X1, X2 = lattice.X1, lattice.X2
         r, theta = cartesian_to_polar(X1, X2)
         dA = (X1[1, 0] - X1[0, 0]) * (X2[0, 1] - X2[0, 0])
 

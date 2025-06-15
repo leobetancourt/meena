@@ -210,13 +210,41 @@ def hllc_flux_x2(hydro, prims_L: ArrayLike, prims_R: ArrayLike, *args) -> Array:
 def plm_grad(yl, y0, yr, theta):
     return minmod(theta * (y0 - yl), 0.5 * (yr - yl), theta * (yr - y0))
 
-def shear_strain(gx, gy, dx, dy):
+def shear_strain_cartesian(gx, gy, dx, dy):
     sxx = 4.0 / 3.0 * gx[..., 1] / dx - 2.0 / 3.0 * gy[..., 2] / dy
     syy =-2.0 / 3.0 * gx[..., 1] / dx + 4.0 / 3.0 * gy[..., 2] / dy
     sxy = 1.0 / 1.0 * gx[..., 2] / dx + 1.0 / 1.0 * gy[..., 1] / dy
     syx = sxy
     
     return jnp.array([sxx, sxy, syx, syy])
+
+def shear_strain_polar(gx, gy, dx, dy, r):
+    """
+    gx: ∂(v_r, v_θ)/∂r → shape (..., 3)
+    gy: ∂(v_r, v_θ)/∂θ → shape (..., 3)
+    dx: dr
+    dy: dθ (note: dimensionless, actual arc length is r * dθ)
+    r: radial coordinate (broadcastable to gx.shape[:-1])
+    """
+    # Unpack gradient components
+    dv_r_dr   = gx[..., 1]
+    dv_theta_dr   = gx[..., 2]
+    dv_r_dθ   = gy[..., 1]
+    dv_theta_dθ   = gy[..., 2]
+
+    v_r = gx[..., 0]
+    v_θ = gy[..., 0]
+
+    # Actual derivatives with metric
+    dvr_dθ = dv_r_dθ / r
+    dvθ_dθ = dv_theta_dθ / r
+
+    s_rr = (4.0 / 3.0) * dv_r_dr - (2.0 / 3.0) * (dvθ_dθ + v_r / r)
+    s_θθ = (4.0 / 3.0) * (dvθ_dθ + v_r / r) - (2.0 / 3.0) * dv_r_dr
+    s_rθ = dvr_dθ + dv_theta_dr - v_θ / r
+    s_θr = s_rθ
+
+    return jnp.array([s_rr, s_rθ, s_θr, s_θθ])
 
 
 def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array, Array, Array]:
@@ -359,13 +387,23 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
     nu = hydro.nu()
 
     if nu:
-        dx, dy = x1[1] - x1[0], x2[1] - x2[0]
-        
-        sli = shear_strain(gxli, gyli, dx, dy)
-        sri = shear_strain(gxri, gyri, dx, dy)
-        slj = shear_strain(gxlj, gylj, dx, dy)
-        srj = shear_strain(gxrj, gyrj, dx, dy)
-        scc = shear_strain(gxcc, gycc, dx, dy)
+        if lattice.coords == "cartesian":
+            dx, dy = x1[1] - x1[0], x2[1] - x2[0]
+            
+            sli = shear_strain_cartesian(gxli, gyli, dx, dy)
+            sri = shear_strain_cartesian(gxri, gyri, dx, dy)
+            slj = shear_strain_cartesian(gxlj, gylj, dx, dy)
+            srj = shear_strain_cartesian(gxrj, gyrj, dx, dy)
+            scc = shear_strain_cartesian(gxcc, gycc, dx, dy)
+        elif lattice.coords == "polar":
+            dr, dtheta = x1[1] - x1[0], x2[1] - x2[0]
+            r = X1_C
+            sli = shear_strain_polar(gxli, gyli, dr, dtheta, r)
+            sri = shear_strain_polar(gxri, gyri, dr, dtheta, r)
+            slj = shear_strain_polar(gxlj, gylj, dr, dtheta, r)
+            srj = shear_strain_polar(gxrj, gyrj, dr, dtheta, r)
+            scc = shear_strain_polar(gxcc, gycc, dr, dtheta, r)
+            
         F_l = F_l.at[..., 1].add(-0.5 * nu * (prims_li[..., 0] * sli[0] + prims_cc[..., 0] * scc[0]))
         F_l = F_l.at[..., 2].add(-0.5 * nu * (prims_li[..., 0] * sli[1] + prims_cc[..., 0] * scc[1]))
         F_r = F_r.at[..., 1].add(-0.5 * nu * (prims_cc[..., 0] * scc[0] + prims_ri[..., 0] * sri[0]))

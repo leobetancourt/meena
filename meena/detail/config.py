@@ -116,6 +116,9 @@ class Hydro(ABC):
 
     def bc_x2(self) -> BoundaryCondition:
         return (Boundary.OUTFLOW, Boundary.OUTFLOW)
+    
+    def inflow(self) -> bool:
+        return False
 
     def gamma(self) -> float:
         return 5.0 / 3.0

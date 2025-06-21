@@ -116,7 +116,8 @@ class ExcisedRing(Hydro):
     cadence: float = 1
     T: float = 1000
     CFL_num: float = 0.3
-    size: float = 30
+    r_min: float = 0.8
+    r_max: float = 30 * a
     res: int = 1000
     density_floor: float = 1e-6
 
@@ -147,7 +148,7 @@ class ExcisedRing(Hydro):
         ]).transpose((1, 2, 0))
                 
     def range(self) -> tuple[tuple[float, float], tuple[float, float]]:
-        return ((1 * self.a, 30), (0, 2 * jnp.pi))
+        return ((self.r_min, self.r_max), (0, 2 * jnp.pi))
 
     def log_x1(self) -> bool:
         return True
@@ -165,7 +166,7 @@ class ExcisedRing(Hydro):
         return 1.5
     
     def time_order(self):
-        return self.T * 2 * jnp.pi
+        return 2
     
     def cfl(self) -> float:
         return self.CFL_num
@@ -180,7 +181,10 @@ class ExcisedRing(Hydro):
         return ("outflow", "outflow")
 
     def bc_x2(self) -> BoundaryCondition:
-        return ("outflow", "outflow")
+        return ("periodic", "periodic")
+    
+    def inflow(self) -> bool:
+        return True
 
     def E(self, prims: Primitives, X1: ArrayLike, X2: ArrayLike, t: float) -> Array:
         rho, u, v = prims[..., 0], prims[..., 1], prims[..., 2]
@@ -244,16 +248,9 @@ class ExcisedRing(Hydro):
 
         return x1_1, x2_1, x1_2, x2_2
 
-    # assumes U with ghost cells
+    # assumes prims with ghost cells
     def check_U(self, lattice: Lattice, U: ArrayLike, t: float) -> Array:
-        # inflow 
-        g = lattice.num_g
-        rho = U[..., 0]
-        vr = U[..., 1] / rho
-        vr = vr.at[:g, :].set(jnp.minimum(vr[:g, :], 0))
-        U = U.at[:g, :, 1].set(rho[:g, :] * vr[:g, :])
-        
-        # density floow
+        # density floor
         rho = U[..., 0]
         apply_floor = rho < self.density_floor
 
@@ -261,12 +258,12 @@ class ExcisedRing(Hydro):
 
         # scale momenta to preserve velocity: p_new = v * rho_new = p_old * (rho_new / rho_old)
         factor = jnp.where(apply_floor, rho_new / rho, 1.0)
-        mom_x_new = U[..., 1] * factor
-        mom_y_new = U[..., 2] * factor
+        mom_r_new = U[..., 1] * factor
+        mom_theta_new = U[..., 2] * factor
 
         U_new = U.at[..., 0].set(rho_new)
-        U_new = U_new.at[..., 1].set(mom_x_new)
-        U_new = U_new.at[..., 2].set(mom_y_new)
+        U_new = U_new.at[..., 1].set(mom_r_new)
+        U_new = U_new.at[..., 2].set(mom_theta_new)
         
         return U_new
 

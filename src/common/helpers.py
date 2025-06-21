@@ -165,12 +165,14 @@ def plot_matrix(matrix, label, coords, x1, x2, vmin=None, vmax=None, cmap="magma
         ax.grid(False)
         ax.set_xticks([])
         ax.set_yticks([])
-        ax.set_ylim(0, 20)
+        ymax = 30
+        ax.set_ylim(0, ymax)
         ax.set_facecolor("black")
         circle_r = jnp.min(x1) - (x1[1] - x1[0]) / 2
         circle = Circle((0, 0), radius=circle_r, transform=ax.transData._b,
-                        color='blue', fill=False, linewidth=1)
+                        color='blue', fill=False, linewidth=ymax / 20)
         ax.add_patch(circle)
+        
         R, Theta = jnp.meshgrid(x1, x2, indexing="ij")
         c = ax.pcolormesh(Theta, R, matrix, shading='auto',
                           cmap=cmap, vmin=vmin, vmax=vmax)

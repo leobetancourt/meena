@@ -23,7 +23,8 @@ def cartesian_to_polar_grid(x1, x2, prims, r_min, r_max, nr, theta_min, theta_ma
     X, Y = np.meshgrid(x1, x2, indexing='ij')
 
     # Target polar grid
-    r = np.linspace(r_min, r_max, nr)
+    r_int = np.logspace(np.log10(r_min), np.log10(r_max), nr + 1)
+    r = (r_int[:-1] + r_int[1:]) / 2
     theta = np.linspace(theta_min, theta_max, ntheta)
     R, Theta = np.meshgrid(r, theta, indexing='ij')
 
@@ -32,9 +33,8 @@ def cartesian_to_polar_grid(x1, x2, prims, r_min, r_max, nr, theta_min, theta_ma
     Yp = R * np.sin(Theta)
 
     # Interpolators (one for each primitive variable)
-    nx, ny, _ = prims.shape
     interpolators = [
-        RegularGridInterpolator((x1, x2), prims[..., i], bounds_error=False, fill_value=None)
+        RegularGridInterpolator((x1, x2), prims[..., i], bounds_error=False, fill_value=np.nan)
         for i in range(4)
     ]
 
@@ -43,6 +43,16 @@ def cartesian_to_polar_grid(x1, x2, prims, r_min, r_max, nr, theta_min, theta_ma
 
     # Interpolate
     polar_prims = np.stack([interp(coords).reshape((nr, ntheta)) for interp in interpolators], axis=-1)
+    rho    = polar_prims[..., 0]
+    u_cart = polar_prims[..., 1]
+    v_cart = polar_prims[..., 2]
+    p      = polar_prims[..., 3]
+
+    # Convert to polar velocities
+    v_r     = u_cart * np.cos(Theta) + v_cart * np.sin(Theta)
+    v_theta = -u_cart * np.sin(Theta) + v_cart * np.cos(Theta)
+
+    polar_prims = np.stack([rho, v_r, v_theta, p], axis=-1)
 
     return r, theta, polar_prims
 

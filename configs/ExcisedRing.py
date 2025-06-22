@@ -73,36 +73,6 @@ def get_torque2(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayL
 
     return T
 
-def get_eccentricity(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
-    rho = U[..., 0]
-    vr, vtheta = U[..., 1] / rho, U[..., 2] / rho
-    r, theta = lattice.X1, lattice.X2
-    R_interf, _ = jnp.meshgrid(lattice.x1_intf, lattice.x2, indexing="ij")
-    x1_l, x1_r = R_interf[:-1, :], R_interf[1:, :]
-    dx1 = x1_r - x1_l
-    dx2 = lattice.x2[1] - lattice.x2[0]
-    dA = r * dx1 * dx2
-    e_x = (r * vr * vtheta / (hydro.G() * hydro.M)) * jnp.sin(theta) + \
-        (((r * vtheta ** 2) / (hydro.G() * hydro.M)) - 1) * jnp.cos(theta)
-    e_y = -(r * vr * vtheta / (hydro.G() * hydro.M)) * jnp.cos(theta) + \
-        (((r * vtheta ** 2) / (hydro.G() * hydro.M)) - 1) * jnp.sin(theta)
-
-    bounds = jnp.logical_and(r >= hydro.a, r <= 6 * hydro.a)
-    ec_x = jnp.where(bounds, e_x * rho * dA, 0).sum()
-    ec_y = jnp.where(bounds, e_y * rho * dA, 0).sum()
-    return (ec_x, ec_y)
-
-
-@partial(jit, static_argnames=["hydro", "lattice"])
-def get_eccentricity_x(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
-    return get_eccentricity(hydro, lattice, U, flux, t)[0]
-
-
-@partial(jit, static_argnames=["hydro", "lattice"])
-def get_eccentricity_y(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
-    return get_eccentricity(hydro, lattice, U, flux, t)[1]
-
-
 @dataclass(frozen=True)
 class ExcisedRing(Hydro):
     M: float = 1
@@ -113,12 +83,12 @@ class ExcisedRing(Hydro):
     R_0: float = 4 * a
     retrograde: bool = 0
     
-    cadence: float = 1
-    T: float = 1000
+    cadence: float = 10
+    T: float = 2000
     CFL_num: float = 0.3
-    r_min: float = 0.8
-    r_max: float = 30 * a
-    res: int = 1000
+    r_min: float = 1
+    r_max: float = 100 * a
+    res: int = 1200
     density_floor: float = 1e-6
 
     def initialize(self, lattice) -> Array:
@@ -273,8 +243,6 @@ class ExcisedRing(Hydro):
         diagnostics.append(("L_dot", get_angular_mom_rate))
         diagnostics.append(("torque_1", get_torque1))
         diagnostics.append(("torque_2", get_torque1))
-        diagnostics.append(("e_x", get_eccentricity_x))
-        diagnostics.append(("e_y", get_eccentricity_y))
         return diagnostics
 
     def save_interval(self):

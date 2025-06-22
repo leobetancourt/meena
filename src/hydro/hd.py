@@ -244,7 +244,7 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
     prims = get_prims(hydro, U, lattice.X1, lattice.X2, t)
     prims = add_ghost_cells(prims, g, axis=1)
     prims = add_ghost_cells(prims, g, axis=0)
-    prims = apply_bcs(lattice, prims)
+    prims = apply_bcs(hydro, lattice, prims)
     
     if hydro.PLM():
         X1_L = X1[(g-1):-(g+1), g:-g]

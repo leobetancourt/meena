@@ -103,10 +103,6 @@ def solve_polar(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> tuple
         ((G_r - G_l) / (X1 * dX2)) + S
     flux = F_l, F_r, G_l, G_r
     
-    if hydro.inflow():
-        F_l = F_l.at[0, :, 0].set(jnp.minimum(F_l[0, :, 0], 0.0))
-        F_l = F_l.at[0, :, 1].set(jnp.minimum(F_l[0, :, 1], 0.0))
-    
     return L, flux
 
 

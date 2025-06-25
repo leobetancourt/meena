@@ -102,16 +102,19 @@ class Binary(Hydro):
     t_sink: float = 1 / (10 * omega_B)
     sink_rate: float = 10 * omega_B
     sink_prescription: str = "torque-free"
+    T: float = 1.1
     
-    cfl_num: float = 0.1
-    size: float = 20
-    res: float = 2000
+    cadence: float = 0.5
+    cfl_num: float = 0.4
+    size: float = 10
+    res: float = 1000
     plm: bool = 1
     plm_theta: float = 1.5
-    t_order: int = 1
+    t_order: int = 2
     buff: bool = 1
 
-    def initialize(self, X1: ArrayLike, X2: ArrayLike) -> Array:
+    def initialize(self, lattice) -> Array:
+        X1, X2 = lattice.X1, lattice.X2
         r, theta = cartesian_to_polar(X1, X2)
 
         def f(r):
@@ -148,7 +151,7 @@ class Binary(Hydro):
         return (self.res, self.res)
 
     def t_end(self) -> float:
-        return 1000 * 2 * jnp.pi
+        return self.T * 2 * jnp.pi
     
     def PLM(self) -> bool:
         return self.plm
@@ -321,4 +324,4 @@ class Binary(Hydro):
         return diagnostics
 
     def save_interval(self):
-        return 1
+        return self.cadence * 2 * jnp.pi

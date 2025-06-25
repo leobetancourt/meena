@@ -225,11 +225,11 @@ def apply_bcs(hydro, lattice, U):
     if bc_x1[0] == "outflow":
         U = U.at[:g, :, :].set(U[g:(g+1), :, :])
         
-        if hydro.inflow():
-            # Enforce inflow in radial momentum (conserved form)
-            mom_r = U[g:(g+1), :, 1]
-            mom_r = jnp.minimum(mom_r, 0.0)
-            U = U.at[:g, :, 1].set(mom_r)
+        # if hydro.inflow():
+        #     # Enforce inflow in radial momentum (conserved form)
+        #     mom_r = U[g:(g+1), :, 1]
+        #     mom_r = jnp.minimum(mom_r, 0.0)
+        #     U = U.at[:g, :, 1].set(mom_r)
     elif bc_x1[0] == "reflective":
         U = U.at[:g, :, :].set(jnp.flip(U[g:(2*g), :, :], axis=0))
         # invert x1 momentum

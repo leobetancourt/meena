@@ -402,4 +402,10 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
         G_l = G_l.at[..., 3].add(-0.5 * nu * (prims_lj[..., 0] * slj[3] * prims_lj[..., 2] + prims_cc[..., 0] * scc[3] * prims_cc[..., 2]))
         G_r = G_r.at[..., 3].add(-0.5 * nu * (prims_cc[..., 0] * scc[3] * prims_cc[..., 2] + prims_rj[..., 0] * srj[3] * prims_rj[..., 2]))
 
+    if hydro.inflow():
+        density_flux = F_l[0, :, 0]
+        density_flux = density_flux[..., jnp.newaxis]
+        
+        F_l = F_l.at[0].set(jnp.where(density_flux > 0, 0.0, F_l[0]))
+
     return F_l, F_r, G_l, G_r

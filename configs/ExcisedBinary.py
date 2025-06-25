@@ -84,12 +84,12 @@ class ExcisedBinary(Hydro):
     R_cav: float = 2.5 * a
     delta_0: float = 1e-5
     
-    cadence: float = 10
-    T: float = 2000
-    CFL_num: float = 0.3
+    cadence: float = 0.5
+    T: float = 11
+    CFL_num: float = 0.4
     r_min: float = 1 * a
-    r_max: float = 30 * a
-    res: int = 500
+    r_max: float = 5 * a
+    res: int = 100
     density_floor: float = 1e-6
     
     def initialize(self, lattice) -> Array:
@@ -135,7 +135,7 @@ class ExcisedBinary(Hydro):
         return self.T * 2 * jnp.pi
     
     def PLM(self) -> bool:
-        return True
+        return False
     
     def theta_PLM(self):
         return 1.5

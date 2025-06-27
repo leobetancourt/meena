@@ -165,7 +165,7 @@ def plot_matrix(matrix, label, coords, x1, x2, vmin=None, vmax=None, cmap="magma
         ax.grid(False)
         ax.set_xticks([])
         ax.set_yticks([])
-        ymax = 5
+        ymax = 100
         ax.set_ylim(0, ymax)
         ax.set_facecolor("black")
         circle_r = jnp.min(x1) - (x1[1] - x1[0]) / 2

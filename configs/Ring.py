@@ -209,6 +209,14 @@ def get_E_dot_accr_2(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[A
     dot_v = u*v_x + v*v_y
     return jnp.sum(m_dot_density * dot_v * dA)
 
+@partial(jit, static_argnames=["hydro", "lattice"])
+def get_m_dot_buffer(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
+    X1, X2 = lattice.X1, lattice.X2
+    S_buffer = hydro.buffer(U, X1, X2, t) # buffer source term
+    rho_dot = S_buffer[..., 0] # rate at which density is removed by buffer
+    dA = lattice.dX1 * lattice.dX2
+    return jnp.sum(rho_dot * dA) # m_dot_buffer
+
 @dataclass(frozen=True)
 class BinaryRing(Hydro):
     M: float = 1
@@ -223,9 +231,9 @@ class BinaryRing(Hydro):
     retrograde: bool = 0
     T: float = 1000
     
-    cadence: float = 10
-    CFL_num: float = 0.2
-    size: float = 20
+    cadence: float = 1
+    CFL_num: float = 0.3
+    size: float = 40
     res: int = 2000
     density_floor: float = 1e-6
 
@@ -462,6 +470,7 @@ class BinaryRing(Hydro):
         diagnostics.append(("E_dot_2", get_E_dot_2))
         diagnostics.append(("E_dot_accr_1", get_E_dot_accr_1))
         diagnostics.append(("E_dot_accr_2", get_E_dot_accr_2))
+        diagnostics.append(("m_dot_buffer", get_m_dot_buffer))
 
         return diagnostics
 

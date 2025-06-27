@@ -85,6 +85,7 @@ class ExcisedRing(Hydro):
     
     cadence: float = 10
     T: float = 2000
+    t_order: int = 2
     CFL_num: float = 0.3
     r_min: float = 1
     r_max: float = 100 * a
@@ -136,7 +137,7 @@ class ExcisedRing(Hydro):
         return 1.5
     
     def time_order(self):
-        return 2
+        return self.t_order
     
     def cfl(self) -> float:
         return self.CFL_num

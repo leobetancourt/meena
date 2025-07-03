@@ -217,6 +217,21 @@ def get_m_dot_buffer(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[A
     dA = lattice.dX1 * lattice.dX2
     return jnp.sum(rho_dot * dA) # m_dot_buffer
 
+@partial(jit, static_argnames=["hydro", "lattice"])
+def get_L_dot_buffer(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayLike, ArrayLike, ArrayLike, ArrayLike], t: float):
+    X1, X2 = lattice.X1, lattice.X2
+    S_buffer = hydro.buffer(U, X1, X2, t)  # shape (Nx, Ny, 4)
+
+    px = S_buffer[..., 1]
+    py = S_buffer[..., 2]
+    x = X1
+    y = X2
+
+    L_dot = x * py - y * px  # angular momentum density removal rate
+    dA = lattice.dX1 * lattice.dX2
+
+    return jnp.sum(L_dot * dA)
+
 @dataclass(frozen=True)
 class BinaryRing(Hydro):
     M: float = 1
@@ -471,7 +486,8 @@ class BinaryRing(Hydro):
         diagnostics.append(("E_dot_accr_1", get_E_dot_accr_1))
         diagnostics.append(("E_dot_accr_2", get_E_dot_accr_2))
         diagnostics.append(("m_dot_buffer", get_m_dot_buffer))
-
+        diagnostics.append(("L_dot_buffer", get_L_dot_buffer))
+        
         return diagnostics
 
     def save_interval(self):

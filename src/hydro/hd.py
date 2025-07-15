@@ -384,7 +384,7 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
         gxlj = (prims_rl - prims_ll) / 2
         gxrj = (prims_rr - prims_lr) / 2
             
-    nu = hydro.nu()
+    nu = hydro.nu(prims_cc, X1_C, X2_C, t)
 
     if nu:
         if lattice.coords == "cartesian":

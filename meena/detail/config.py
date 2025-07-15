@@ -120,7 +120,7 @@ class Hydro(ABC):
     def gamma(self) -> float:
         return 5.0 / 3.0
 
-    def nu(self) -> float:
+    def nu(self, prims: Primitives, X1: ArrayLike = None, X2: ArrayLike = None, t: float = None) -> float:
         return None
 
     def E(self, prims: Primitives, X1: ArrayLike = None, X2: ArrayLike = None, t: float = None) -> Array:

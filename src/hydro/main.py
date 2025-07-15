@@ -91,7 +91,7 @@ def solve_polar(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> tuple
         (p / lattice.X1) + (rho * v ** 2) / lattice.X1,
         - rho * u * v / lattice.X1,
         jnp.zeros_like(rho)
-    ]).transpose(1, 2, 0)
+    ]).transpose((1, 2, 0))
 
     dX1 = lattice.dX1[..., jnp.newaxis]
     dX2 = lattice.dX2[..., jnp.newaxis]
@@ -102,6 +102,7 @@ def solve_polar(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> tuple
     L = - ((X1_r * F_r - X1_l * F_l) / (X1 * dX1)) - \
         ((G_r - G_l) / (X1 * dX2)) + S
     flux = F_l, F_r, G_l, G_r
+    
     return L, flux
 
 
@@ -127,8 +128,9 @@ def step(hydro: Hydro, lattice: Lattice, U: ArrayLike, t: float) -> tuple[Array,
         L2, flux = solve(hydro, lattice, U2, t + (dt / 2))
         S2 = hydro.source(U2, lattice.X1, lattice.X2, t + (dt / 2))
         U = U + L2 * dt + S2 * dt
-    
+        
     U = hydro.check_U(lattice, U, t)
+
     return U, flux, dt
 
 

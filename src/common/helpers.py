@@ -165,12 +165,14 @@ def plot_matrix(matrix, label, coords, x1, x2, vmin=None, vmax=None, cmap="magma
         ax.grid(False)
         ax.set_xticks([])
         ax.set_yticks([])
-        ax.set_ylim(0, 20)
+        ymax = 100
+        ax.set_ylim(0, ymax)
         ax.set_facecolor("black")
         circle_r = jnp.min(x1) - (x1[1] - x1[0]) / 2
         circle = Circle((0, 0), radius=circle_r, transform=ax.transData._b,
-                        color='blue', fill=False, linewidth=1)
+                        color='blue', fill=False, linewidth=ymax / 20)
         ax.add_patch(circle)
+        
         R, Theta = jnp.meshgrid(x1, x2, indexing="ij")
         c = ax.pcolormesh(Theta, R, matrix, shading='auto',
                           cmap=cmap, vmin=vmin, vmax=vmax)
@@ -217,11 +219,17 @@ def add_ghost_cells(arr, num_g, axis=0):
             arr[:, -1:, :], num_g, axis)))
 
 
-def apply_bcs(lattice, U):
+def apply_bcs(hydro, lattice, U):
     g = lattice.num_g
     bc_x1, bc_x2 = lattice.bc_x1, lattice.bc_x2
     if bc_x1[0] == "outflow":
         U = U.at[:g, :, :].set(U[g:(g+1), :, :])
+        
+        # if hydro.inflow():
+        #     # Enforce inflow in radial momentum (conserved form)
+        #     mom_r = U[g:(g+1), :, 1]
+        #     mom_r = jnp.minimum(mom_r, 0.0)
+        #     U = U.at[:g, :, 1].set(mom_r)
     elif bc_x1[0] == "reflective":
         U = U.at[:g, :, :].set(jnp.flip(U[g:(2*g), :, :], axis=0))
         # invert x1 momentum

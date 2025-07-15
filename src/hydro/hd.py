@@ -218,34 +218,14 @@ def shear_strain_cartesian(gx, gy, dx, dy):
     
     return jnp.array([sxx, sxy, syx, syy])
 
-def shear_strain_polar(gx, gy, dx, dy, r):
-    """
-    gx: ∂(v_r, v_θ)/∂r → shape (..., 3)
-    gy: ∂(v_r, v_θ)/∂θ → shape (..., 3)
-    dx: dr
-    dy: dθ (note: dimensionless, actual arc length is r * dθ)
-    r: radial coordinate (broadcastable to gx.shape[:-1])
-    """
-    # Unpack gradient components
-    dv_r_dr   = gx[..., 1]
-    dv_theta_dr   = gx[..., 2]
-    dv_r_dθ   = gy[..., 1]
-    dv_theta_dθ   = gy[..., 2]
-
-    v_r = gx[..., 0]
-    v_θ = gy[..., 0]
-
-    # Actual derivatives with metric
-    dvr_dθ = dv_r_dθ / r
-    dvθ_dθ = dv_theta_dθ / r
-
-    s_rr = (4.0 / 3.0) * dv_r_dr - (2.0 / 3.0) * (dvθ_dθ + v_r / r)
-    s_θθ = (4.0 / 3.0) * (dvθ_dθ + v_r / r) - (2.0 / 3.0) * dv_r_dr
-    s_rθ = dvr_dθ + dv_theta_dr - v_θ / r
-    s_θr = s_rθ
-
-    return jnp.array([s_rr, s_rθ, s_θr, s_θθ])
-
+def shear_strain_cylindrical(gx, gy, r, dr, dtheta):
+    # Assuming gx is d/dr and gy is d/dtheta
+    srr = 4.0/3.0 * gx[..., 1] / dr - 2.0/3.0 * (gy[..., 2] / (r * dtheta) + gx[..., 1] / dr)
+    stt = -2.0/3.0 * gx[..., 1] / dr + 4.0/3.0 * (gy[..., 2] / (r * dtheta) + gx[..., 1] / dr)  
+    srt = gy[..., 1] / (r * dtheta) + gx[..., 2] / dr - gy[..., 2] / r
+    str = srt
+    
+    return jnp.array([srr, srt, str, stt])
 
 def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array, Array, Array]:
     g = lattice.num_g
@@ -260,12 +240,12 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
     x2_g = jnp.concatenate([x2_left, x2, x2_right])
 
     X1, X2 = jnp.meshgrid(x1_g, x2_g, indexing="ij")
-    
+        
     prims = get_prims(hydro, U, lattice.X1, lattice.X2, t)
     prims = add_ghost_cells(prims, g, axis=1)
     prims = add_ghost_cells(prims, g, axis=0)
-    prims = apply_bcs(lattice, prims)
-
+    prims = apply_bcs(hydro, lattice, prims)
+    
     if hydro.PLM():
         X1_L = X1[(g-1):-(g+1), g:-g]
         X1_C = X1[g:-g, g:-g]
@@ -389,20 +369,20 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
     if nu:
         if lattice.coords == "cartesian":
             dx, dy = x1[1] - x1[0], x2[1] - x2[0]
-            
             sli = shear_strain_cartesian(gxli, gyli, dx, dy)
             sri = shear_strain_cartesian(gxri, gyri, dx, dy)
             slj = shear_strain_cartesian(gxlj, gylj, dx, dy)
             srj = shear_strain_cartesian(gxrj, gyrj, dx, dy)
             scc = shear_strain_cartesian(gxcc, gycc, dx, dy)
         elif lattice.coords == "polar":
-            dr, dtheta = x1[1] - x1[0], x2[1] - x2[0]
             r = X1_C
-            sli = shear_strain_polar(gxli, gyli, dr, dtheta, r)
-            sri = shear_strain_polar(gxri, gyri, dr, dtheta, r)
-            slj = shear_strain_polar(gxlj, gylj, dr, dtheta, r)
-            srj = shear_strain_polar(gxrj, gyrj, dr, dtheta, r)
-            scc = shear_strain_polar(gxcc, gycc, dr, dtheta, r)
+            dr = lattice.dX1
+            dtheta = x2[1] - x2[0]
+            sli = shear_strain_cylindrical(gxli, gyli, r, dr, dtheta)
+            sri = shear_strain_cylindrical(gxri, gyri, r, dr, dtheta)
+            slj = shear_strain_cylindrical(gxlj, gylj, r, dr, dtheta)
+            srj = shear_strain_cylindrical(gxrj, gyrj, r, dr, dtheta)
+            scc = shear_strain_cylindrical(gxcc, gycc, r, dr, dtheta)
             
         F_l = F_l.at[..., 1].add(-0.5 * nu * (prims_li[..., 0] * sli[0] + prims_cc[..., 0] * scc[0]))
         F_l = F_l.at[..., 2].add(-0.5 * nu * (prims_li[..., 0] * sli[1] + prims_cc[..., 0] * scc[1]))
@@ -421,5 +401,11 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
         G_r = G_r.at[..., 3].add(-0.5 * nu * (prims_cc[..., 0] * scc[2] * prims_cc[..., 1] + prims_rj[..., 0] * srj[2] * prims_rj[..., 1]))
         G_l = G_l.at[..., 3].add(-0.5 * nu * (prims_lj[..., 0] * slj[3] * prims_lj[..., 2] + prims_cc[..., 0] * scc[3] * prims_cc[..., 2]))
         G_r = G_r.at[..., 3].add(-0.5 * nu * (prims_cc[..., 0] * scc[3] * prims_cc[..., 2] + prims_rj[..., 0] * srj[3] * prims_rj[..., 2]))
+
+    if hydro.inflow():
+        density_flux = F_l[0, :, 0]
+        density_flux = density_flux[..., jnp.newaxis]
+        
+        F_l = F_l.at[0].set(jnp.where(density_flux > 0, 0.0, F_l[0]))
 
     return F_l, F_r, G_l, G_r

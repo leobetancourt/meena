@@ -219,7 +219,6 @@ class ChrisDisk(Hydro):
     sink_rate: float = 10 * Omega_b
     sink_prescription: str = "torque-free"
     viscosity_prescription: str = "alpha"
-    R_0: float = 1 * a
     T: float = 5000
     
     cadence: float = 10
@@ -244,7 +243,7 @@ class ChrisDisk(Hydro):
         v_r = v_naught * jnp.sin(theta) * (r / self.a) * \
             jnp.exp(-(r / (3.5 * self.a)) ** 6)
         # angular frequency of gas in the disk
-        Omega_0 = jnp.sqrt((self.G * self.M / (r ** 3))
+        Omega_0 = jnp.sqrt((self.G() * self.M / (r ** 3))
                                 * (1 - (1 / (self.mach ** 2))))
         omega = ((Omega_0 ** -4) + (self.Omega_b ** -4)) ** (-1/4)
         v_theta = omega * r
@@ -277,7 +276,7 @@ class ChrisDisk(Hydro):
         return 1.5
     
     def time_order(self) -> int:
-        return 2
+        return 1
     
     def cfl(self) -> float:
         return self.CFL_num

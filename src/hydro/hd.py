@@ -366,7 +366,7 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
             
     nu = hydro.nu(prims_cc, X1_C, X2_C, t)
 
-    if nu:
+    if nu is not None:
         if lattice.coords == "cartesian":
             dx, dy = x1[1] - x1[0], x2[1] - x2[0]
             sli = shear_strain_cartesian(gxli, gyli, dx, dy)

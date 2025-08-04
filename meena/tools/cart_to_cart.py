@@ -60,6 +60,9 @@ def main():
     parser.add_argument("--y-max", type=float, required=True)
     parser.add_argument("--ny", type=int, default=256)
     args = parser.parse_args()
+    
+    # Create output directory if it doesn't exist
+    os.makedirs(os.path.dirname(args.output), exist_ok=True)
 
     t, x1, x2, prims = load_cartesian_checkpoint(args.input)
     x_new, y_new, new_prims = regrid_cartesian_to_cartesian(

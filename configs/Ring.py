@@ -238,16 +238,18 @@ class BinaryRing(Hydro):
     mach: float = 10
     a: float = 1
     eps: float = 0.05 * a
-    omega_B: float = 1
-    t_sink: float = 1 / (10 * omega_B)
-    sink_rate: float = 10 * omega_B
+    Omega_b: float = 1
+    t_sink: float = 1 / (10 * Omega_b)
+    sink_rate: float = 10 * Omega_b
     sink_prescription: str = "torque-free"
     R_0: float = 1 * a
+    viscosity_prescription: str = "constant"
+    viscosity: float = 1e-3
     retrograde: bool = 0
     T: float = 1000
     
     cadence: float = 1
-    CFL_num: float = 0.3
+    CFL_num: float = 0.4
     size: float = 40
     res: int = 2000
     density_floor: float = 1e-6
@@ -310,9 +312,14 @@ class BinaryRing(Hydro):
     def bc_x2(self) -> BoundaryCondition:
         return ("outflow", "outflow")
 
-    def nu(self) -> float:
-        return 1e-3 * (self.a ** 2) * self.omega_B
-    
+    def nu(self, prims: Primitives, X1: ArrayLike, X2: ArrayLike, t: float) -> float:
+        if self.viscosity_prescription == "alpha":
+            # alpha viscosity prescription
+            r = jnp.sqrt(X1 ** 2 + X2 ** 2)
+            return self.viscosity * jnp.sqrt(self.G() * self.M * r)
+        else:
+            return self.viscosity * self.a ** 2 * self.Omega_b
+
     def G(self) -> float:
         return 1
 
@@ -457,18 +464,18 @@ class BinaryRing(Hydro):
 
     def get_bh_positions(self, t):
         delta = jnp.pi
-        x1_1, x2_1 = (self.a / 2) * jnp.cos(self.omega_B * t), \
-                     (self.a / 2) * jnp.sin(self.omega_B * t)
-        x1_2, x2_2 = (self.a / 2) * jnp.cos(self.omega_B * t + delta), \
-                     (self.a / 2) * jnp.sin(self.omega_B * t + delta)
+        x1_1, x2_1 = (self.a / 2) * jnp.cos(self.Omega_b * t), \
+                     (self.a / 2) * jnp.sin(self.Omega_b * t)
+        x1_2, x2_2 = (self.a / 2) * jnp.cos(self.Omega_b * t + delta), \
+                     (self.a / 2) * jnp.sin(self.Omega_b * t + delta)
         return x1_1, x2_1, x1_2, x2_2
 
     def get_bh_velocities(self, t):
         delta = jnp.pi
-        u_1, v_1 = -(self.a / 2) * self.omega_B * jnp.sin(self.omega_B * t), \
-                    (self.a / 2) * self.omega_B * jnp.cos(self.omega_B * t)
-        u_2, v_2 = -(self.a / 2) * self.omega_B * jnp.sin(self.omega_B * t + delta), \
-                    (self.a / 2) * self.omega_B * jnp.cos(self.omega_B * t + delta)
+        u_1, v_1 = -(self.a / 2) * self.Omega_b * jnp.sin(self.Omega_b * t), \
+                    (self.a / 2) * self.Omega_b * jnp.cos(self.Omega_b * t)
+        u_2, v_2 = -(self.a / 2) * self.Omega_b * jnp.sin(self.Omega_b * t + delta), \
+                    (self.a / 2) * self.Omega_b * jnp.cos(self.Omega_b * t + delta)
         return u_1, v_1, u_2, v_2
 
     def diagnostics(self):

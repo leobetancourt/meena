@@ -219,6 +219,7 @@ class ChrisDisk(Hydro):
     sink_rate: float = 10 * Omega_b
     sink_prescription: str = "torque-free"
     viscosity_prescription: str = "alpha"
+    viscosity: float = 1e-4
     T: float = 5000
     
     cadence: float = 10
@@ -276,7 +277,7 @@ class ChrisDisk(Hydro):
         return 1.5
     
     def time_order(self) -> int:
-        return 1
+        return 2
     
     def cfl(self) -> float:
         return self.CFL_num
@@ -293,11 +294,10 @@ class ChrisDisk(Hydro):
     def nu(self, prims: Primitives, X1: ArrayLike, X2: ArrayLike, t: float) -> float:
         if self.viscosity_prescription == "alpha":
             # alpha viscosity prescription
-            nu_bar = 1e-4
             r = jnp.sqrt(X1 ** 2 + X2 ** 2)
-            return nu_bar * jnp.sqrt(self.G() * self.M * r)
+            return self.viscosity * jnp.sqrt(self.G() * self.M * r)
         else:
-            return 1e-3 * self.a ** 2 * self.Omega_b
+            return self.viscosity * self.a ** 2 * self.Omega_b
     
     def G(self) -> float:
         return 1

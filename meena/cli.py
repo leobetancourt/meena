@@ -73,7 +73,7 @@ def plot(checkpoint_file, var, log, range, title, dpi, cmap, c_range, t_factor, 
         prims_0, _, _, _ = load_U(f"{os.path.dirname(checkpoint_file)}/out_0.0000.h5")
         rho = prims_0[..., 0]
         rho_0 = np.max(rho)
-    
+
     with h5py.File(checkpoint_file, 'r') as f:
         t = f.attrs["t"]
         coords = f.attrs["coords"]

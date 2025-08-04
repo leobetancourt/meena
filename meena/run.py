@@ -1,6 +1,7 @@
 import sys
 import importlib
 import inspect
+import os
 import jax.numpy as jnp
 
 from pathlib import Path
@@ -37,6 +38,9 @@ def run_config(config_file, checkpoint, plot, save_plots, plot_range, output_dir
         log_x1=hydro.log_x1(),
         log_x2=hydro.log_x2()
     )
+    
+    out = output_dir if output_dir else f"./output/{Path(config_file).stem}"
+    os.makedirs(out, exist_ok=True)
 
     if checkpoint:  # user specifies a checkpoint file to run from
         prims, _, _, t = load_U(checkpoint)
@@ -50,7 +54,9 @@ def run_config(config_file, checkpoint, plot, save_plots, plot_range, output_dir
         prims, t = hydro.initialize(
             lattice), hydro.t_start()
 
-    out = output_dir if output_dir else f"./output/{Path(config_file).stem}"
+        with open(Path(out) / "setup.txt", "w") as f:
+            for key, value in vars(hydro).items():
+                f.write(f"{key} = {value}\n")
 
     run(
         hydro,

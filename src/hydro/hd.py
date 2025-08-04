@@ -364,9 +364,14 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
         gxlj = (prims_rl - prims_ll) / 2
         gxrj = (prims_rr - prims_lr) / 2
             
-    nu = hydro.nu(prims_cc, X1_C, X2_C, t)
+    nu_cc = hydro.nu(prims_cc, X1_C, X2_C, t)
 
-    if nu is not None:
+    if nu_cc is not None:
+        nu_li = hydro.nu(prims_li, X1_L, X2_C, t)
+        nu_ri = hydro.nu(prims_ri, X1_R, X2_C, t)
+        nu_lj = hydro.nu(prims_lj, X1_C, X2_L, t)
+        nu_rj = hydro.nu(prims_rj, X1_C, X2_R, t)
+        
         if lattice.coords == "cartesian":
             dx, dy = x1[1] - x1[0], x2[1] - x2[0]
             sli = shear_strain_cartesian(gxli, gyli, dx, dy)
@@ -384,23 +389,23 @@ def interface_flux(hydro, lattice, U: ArrayLike, t: float) -> tuple[Array, Array
             srj = shear_strain_cylindrical(gxrj, gyrj, r, dr, dtheta)
             scc = shear_strain_cylindrical(gxcc, gycc, r, dr, dtheta)
             
-        F_l = F_l.at[..., 1].add(-0.5 * nu * (prims_li[..., 0] * sli[0] + prims_cc[..., 0] * scc[0]))
-        F_l = F_l.at[..., 2].add(-0.5 * nu * (prims_li[..., 0] * sli[1] + prims_cc[..., 0] * scc[1]))
-        F_r = F_r.at[..., 1].add(-0.5 * nu * (prims_cc[..., 0] * scc[0] + prims_ri[..., 0] * sri[0]))
-        F_r = F_r.at[..., 2].add(-0.5 * nu * (prims_cc[..., 0] * scc[1] + prims_ri[..., 0] * sri[1]))
-        G_l = G_l.at[..., 1].add(-0.5 * nu * (prims_lj[..., 0] * slj[2] + prims_cc[..., 0] * scc[2]))
-        G_l = G_l.at[..., 2].add(-0.5 * nu * (prims_lj[..., 0] * slj[3] + prims_cc[..., 0] * scc[3]))
-        G_r = G_r.at[..., 1].add(-0.5 * nu * (prims_cc[..., 0] * scc[2] + prims_rj[..., 0] * srj[2]))
-        G_r = G_r.at[..., 2].add(-0.5 * nu * (prims_cc[..., 0] * scc[3] + prims_rj[..., 0] * srj[3]))
+        F_l = F_l.at[..., 1].add(-0.5 * nu_li * (prims_li[..., 0] * sli[0] + prims_cc[..., 0] * scc[0]))
+        F_l = F_l.at[..., 2].add(-0.5 * nu_li * (prims_li[..., 0] * sli[1] + prims_cc[..., 0] * scc[1]))
+        F_r = F_r.at[..., 1].add(-0.5 * nu_ri * (prims_cc[..., 0] * scc[0] + prims_ri[..., 0] * sri[0]))
+        F_r = F_r.at[..., 2].add(-0.5 * nu_ri * (prims_cc[..., 0] * scc[1] + prims_ri[..., 0] * sri[1]))
+        G_l = G_l.at[..., 1].add(-0.5 * nu_lj * (prims_lj[..., 0] * slj[2] + prims_cc[..., 0] * scc[2]))
+        G_l = G_l.at[..., 2].add(-0.5 * nu_lj * (prims_lj[..., 0] * slj[3] + prims_cc[..., 0] * scc[3]))
+        G_r = G_r.at[..., 1].add(-0.5 * nu_rj * (prims_cc[..., 0] * scc[2] + prims_rj[..., 0] * srj[2]))
+        G_r = G_r.at[..., 2].add(-0.5 * nu_rj * (prims_cc[..., 0] * scc[3] + prims_rj[..., 0] * srj[3]))
         
-        F_l = F_l.at[..., 3].add(-0.5 * nu * (prims_li[..., 0] * sli[0] * prims_li[..., 1] + prims_cc[..., 0] * scc[0] * prims_cc[..., 1]))
-        F_r = F_r.at[..., 3].add(-0.5 * nu * (prims_cc[..., 0] * scc[0] * prims_cc[..., 1] + prims_ri[..., 0] * sri[0] * prims_ri[..., 1]))
-        F_l = F_l.at[..., 3].add(-0.5 * nu * (prims_li[..., 0] * sli[1] * prims_li[..., 2] + prims_cc[..., 0] * scc[1] * prims_cc[..., 2]))
-        F_r = F_r.at[..., 3].add(-0.5 * nu * (prims_cc[..., 0] * scc[1] * prims_cc[..., 2] + prims_ri[..., 0] * sri[1] * prims_ri[..., 2]))
-        G_l = G_l.at[..., 3].add(-0.5 * nu * (prims_lj[..., 0] * slj[2] * prims_lj[..., 1] + prims_cc[..., 0] * scc[2] * prims_cc[..., 1]))
-        G_r = G_r.at[..., 3].add(-0.5 * nu * (prims_cc[..., 0] * scc[2] * prims_cc[..., 1] + prims_rj[..., 0] * srj[2] * prims_rj[..., 1]))
-        G_l = G_l.at[..., 3].add(-0.5 * nu * (prims_lj[..., 0] * slj[3] * prims_lj[..., 2] + prims_cc[..., 0] * scc[3] * prims_cc[..., 2]))
-        G_r = G_r.at[..., 3].add(-0.5 * nu * (prims_cc[..., 0] * scc[3] * prims_cc[..., 2] + prims_rj[..., 0] * srj[3] * prims_rj[..., 2]))
+        F_l = F_l.at[..., 3].add(-0.5 * nu_li * (prims_li[..., 0] * sli[0] * prims_li[..., 1] + prims_cc[..., 0] * scc[0] * prims_cc[..., 1]))
+        F_r = F_r.at[..., 3].add(-0.5 * nu_ri * (prims_cc[..., 0] * scc[0] * prims_cc[..., 1] + prims_ri[..., 0] * sri[0] * prims_ri[..., 1]))
+        F_l = F_l.at[..., 3].add(-0.5 * nu_li * (prims_li[..., 0] * sli[1] * prims_li[..., 2] + prims_cc[..., 0] * scc[1] * prims_cc[..., 2]))
+        F_r = F_r.at[..., 3].add(-0.5 * nu_ri * (prims_cc[..., 0] * scc[1] * prims_cc[..., 2] + prims_ri[..., 0] * sri[1] * prims_ri[..., 2]))
+        G_l = G_l.at[..., 3].add(-0.5 * nu_lj * (prims_lj[..., 0] * slj[2] * prims_lj[..., 1] + prims_cc[..., 0] * scc[2] * prims_cc[..., 1]))
+        G_r = G_r.at[..., 3].add(-0.5 * nu_rj * (prims_cc[..., 0] * scc[2] * prims_cc[..., 1] + prims_rj[..., 0] * srj[2] * prims_rj[..., 1]))
+        G_l = G_l.at[..., 3].add(-0.5 * nu_lj * (prims_lj[..., 0] * slj[3] * prims_lj[..., 2] + prims_cc[..., 0] * scc[3] * prims_cc[..., 2]))
+        G_r = G_r.at[..., 3].add(-0.5 * nu_rj * (prims_cc[..., 0] * scc[3] * prims_cc[..., 2] + prims_rj[..., 0] * srj[3] * prims_rj[..., 2]))
 
     if hydro.inflow():
         density_flux = F_l[0, :, 0]

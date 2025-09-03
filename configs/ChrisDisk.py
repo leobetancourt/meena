@@ -222,7 +222,7 @@ class ChrisDisk(Hydro):
     viscosity: float = 1e-4
     T: float = 5000
     
-    cadence: float = 10
+    cadence: float = 10.0
     CFL_num: float = 0.3
     size: float = 24
     res: int = 2400

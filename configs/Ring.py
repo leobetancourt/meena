@@ -38,10 +38,8 @@ def get_L_dot_1(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayL
     rho = U[..., 0]
     v_x = U[..., 1] / rho
     v_y = U[..., 2] / rho
-    dx = lattice.X1 - x
-    dy = lattice.X2 - y
 
-    specific_L = dx * v_y - dy * v_x
+    specific_L = lattice.X1 * v_y - lattice.X2 * v_x
     L_dot_density = specific_L * m_dot_density
     L_dot = jnp.sum(L_dot_density * dA)
     
@@ -58,10 +56,8 @@ def get_L_dot_2(hydro: Hydro, lattice: Lattice, U: ArrayLike, flux: tuple[ArrayL
     rho = U[..., 0]
     v_x = U[..., 1] / rho
     v_y = U[..., 2] / rho
-    dx = lattice.X1 - x
-    dy = lattice.X2 - y
-
-    specific_L = dx * v_y - dy * v_x
+    
+    specific_L = lattice.X1 * v_y - lattice.X2 * v_x
     L_dot_density = specific_L * m_dot_density
     L_dot = jnp.sum(L_dot_density * dA)
     
@@ -248,7 +244,7 @@ class BinaryRing(Hydro):
     retrograde: bool = 0
     T: float = 1000
     
-    cadence: float = 1
+    cadence: float = 1.0
     CFL_num: float = 0.4
     size: float = 40
     res: int = 2000

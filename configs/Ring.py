@@ -248,7 +248,7 @@ class BinaryRing(Hydro):
     CFL_num: float = 0.4
     size: float = 40
     res: int = 2000
-    density_floor: float = 1e-6
+    density_floor: float = 1e-10
 
     def initialize(self, lattice) -> Array:
         t = 0
